@@ -1,3 +1,5 @@
+[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
+
 # Enterprise PKI Web Enrollment Portal (AD CS Modern Gateway)
 
 Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostituire l'obsoleto e deprecato **Microsoft Web Enrollment (`certsrv`)**, eliminando qualsiasi dipendenza da ActiveX/Internet Explorer e mitigando i rischi di sicurezza NTLM Relay (ESC8).
