@@ -40,13 +40,9 @@ Modern web portal built with **HTML5** and **ASP.NET Core 8 (C#)**, designed to 
 ```text
 Portal/
 ├── Models/
-│   ├── AdminConfig.cs           # Configurazione autorizzativa amministratori
-│   ├── HeldCertificateRequest.cs# Modello e stati delle richieste trattenute
 │   ├── PortalConfig.cs          # CA and template configuration models
 │   └── EnrollmentDto.cs         # DTOs for requests/responses and CSR parsing
 ├── Services/
-│   ├── IHeldRequestStore.cs     # Interfaccia archivio richieste trattenute
-│   ├── HeldRequestStore.cs      # Store thread-safe con persistenza JSON
 │   ├── IAdcsService.cs          # AD CS connector interface
 │   ├── AdcsService.cs           # COM CCertRequest engine + certreq.exe + Simulator
 │   └── CsrParserService.cs      # X.509 CSR parsing service
@@ -57,8 +53,7 @@ Portal/
 │   │   ├── crypto-helper.js     # Client-side key and PFX generation
 │   │   └── app.js               # Application controller and form handling
 │   └── index.html               # HTML5 graphical interface
-├── appsettings.json             # CA, template, modalità e ACL amministratori
-├── held-requests.json           # Persistenza delle richieste trattenute
+├── appsettings.json             # CA, template, and Hub/Standalone configuration
 ├── Program.cs                   # Entry point and Minimal API
 ├── web.config                   # IIS configuration (ASP.NET Core Module V2)
 ├── Install-PkiPortal.ps1        # IIS installation script (alongside certsrv)
@@ -269,3 +264,75 @@ Then open a browser at:
 - **Service Account**: The IIS Application Pool must run under an account that has *Request Certificates* (Enroll) permissions on the desired AD CS templates. For Standalone Mode within the forest, `NetworkService` or a Managed Service Account is sufficient.
 - **ESC8 Hardening**: This portal does not expose the traditional `certsrv` endpoint. **Important note:** the default installation responds over plain HTTP with Windows Authentication (NTLM may be negotiated in cleartext across the network, creating a relay risk), and the installation script now requires explicit confirmation for the HTTP path. In production, **always** install with `-UseHttps -CertThumbprint` and enable Extended Protection for Authentication (EPA/EPAL) to mitigate relay attacks.
 - **Separation from certsrv**: The portal uses a completely separate IIS website and Application Pool, ensuring that an issue with the portal does not affect certsrv, and vice versa.
+
+## 🛡️ Administrative panel and approval workflow
+
+The portal includes `/admin.html`, protected by Windows Authentication and an authorization ACL configured in the `AdminConfig` section of `appsettings.json`. Access can be granted to groups through `AllowedGroups` or to individual accounts through `AllowedUsers`. Any other user receives `HTTP 403 Forbidden` when accessing the administrative page or `/api/admin/*` endpoints.
+
+```json
+{
+  "AdminConfig": {
+    "AllowedGroups": [
+      "BUILTIN\\Administrators",
+      "VD\\Domain Admins"
+    ],
+    "AllowedUsers": [
+      "vd\\tanino-t1"
+    ]
+  }
+}
+```
+
+### Manual approval workflow
+
+When a certificate template has `RequiresApproval: true`:
+
+1. The user submits a certificate request through Web Crypto or an existing CSR.
+2. AD CS processes the request and technically issues the certificate.
+3. The portal intercepts the issued certificate, stores it in `held-requests.json`, and marks the request as `PendingApproval`.
+4. The user receives a unique Hold ID and is informed that the request is awaiting administrator approval.
+5. The certificate cannot be downloaded until an authorized administrator approves it.
+
+After approval, the certificate becomes available to the original requester through the certificate retrieval section. Administrators can also reject a request and optionally record a reason.
+
+### Hold request states
+
+| State | Description | Available action |
+|---|---|---|
+| `PendingApproval` | Certificate held pending administrator authorization. | Approve and release, or reject. |
+| `Approved` | Request approved by an administrator. | Certificate download is enabled for the requester. |
+| `Issued` | Certificate issued directly without portal approval. | Certificate can be retrieved. |
+| `UnderSubmission` | Request is pending approval directly in AD CS. | View request details. |
+| `Rejected` | Request rejected by an administrator. | View rejection reason. |
+
+### Administrative features
+
+- **Certificate requests**: filter by status and view Hold ID, submission date, requester, template, CN, SAN, target CA, AD CS Request ID, notes, review information, and rejection reason.
+- **Portal and CA configuration**: manage portal title, Standalone or Hub mode, default CA, CA connections, authentication mode, credential targets, templates, allowed key types, validity, key usages, and manual approval settings.
+- **Template discovery**: use “Discover from CA” to query published templates through DCOM or `certutil`.
+- **Hot reload**: saving the configuration updates the files and reloads the in-memory provider without restarting the IIS Application Pool.
+
+### Administrative REST endpoints
+
+| Method | Endpoint | Description | Permission |
+|---|---|---|---|
+| GET | `/api/admin/check` | Checks whether the current user is a portal administrator. | Authenticated user |
+| GET | `/api/admin/config` | Returns the complete portal configuration. | Administrator |
+| PUT | `/api/admin/config` | Saves the configuration and reloads it in memory. | Administrator |
+| POST | `/api/admin/templates/discover` | Queries a CA for published certificate templates. | Administrator |
+| GET | `/api/admin/held-requests?status={filter}` | Lists held requests: `pending`, `approved`, `rejected`, or `all`. | Administrator |
+| GET | `/api/admin/held-requests/{holdId}` | Returns the details of a held request and its archived certificate. | Administrator |
+| POST | `/api/admin/held-requests/{holdId}/approve` | Approves the request and authorizes certificate release. | Administrator |
+| POST | `/api/admin/held-requests/{holdId}/reject` | Rejects the request, optionally recording a reason. | Administrator |
+
+## 🔎 Template discovery and validity
+
+The “Discover from CA” function reads the template definition from Active Directory and retrieves the `pKIDefaultLifetime` attribute. The value is converted from 100-nanosecond units to days, saved in `appsettings.json`, and shown as read-only information in the administration interface.
+
+In Hub mode, the LDAP query uses the credentials configured for the destination forest. If Active Directory is unavailable, the portal falls back to:
+
+```powershell
+certutil -config "server\CA" -template TemplateName
+```
+
+For simulator CAs, validity is taken from the mock template definitions.
