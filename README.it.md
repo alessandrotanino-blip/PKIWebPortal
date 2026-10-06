@@ -40,9 +40,13 @@ Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostit
 ```
 Portale/
 ├── Models/
+│   ├── AdminConfig.cs           # Configurazione autorizzativa amministratori
+│   ├── HeldCertificateRequest.cs# Modello e stati delle richieste trattenute
 │   ├── PortalConfig.cs          # Modelli di configurazione CA e Template
 │   └── EnrollmentDto.cs         # DTO per richieste/risposte e parsing CSR
 ├── Services/
+│   ├── IHeldRequestStore.cs     # Interfaccia archivio richieste trattenute
+│   ├── HeldRequestStore.cs      # Store thread-safe con persistenza JSON
 │   ├── IAdcsService.cs          # Interfaccia connettore AD CS
 │   ├── AdcsService.cs           # Motore COM CCertRequest + certreq.exe + Simulatore
 │   └── CsrParserService.cs      # Servizio di parsing CSR X.509
@@ -52,7 +56,8 @@ Portale/
 │   │   ├── vendor/forge.min.js  # Libreria crittografica per PFX/ASN.1
 │   │   ├── crypto-helper.js     # Generazione chiavi e PFX client-side
 │   │   └── app.js               # Controller applicativo e gestione form
-│   └── index.html               # Interfaccia grafica HTML5
+│   ├── index.html               # Portale utente HTML5/SPA
+│   └── admin.html               # Pannello amministrativo
 ├── appsettings.json             # Configurazione CA, Template e modalità Hub/Standalone
 ├── Program.cs                   # Entry point e Minimal API
 ├── web.config                   # Configurazione IIS (ASP.NET Core Module V2)
@@ -255,3 +260,39 @@ Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 - **Service Account**: L'Application Pool di IIS deve eseguire con un account che abbia i permessi *Request Certificates* (Enroll) sui template ADCS desiderati. Per la modalità Standalone all'interno della foresta, `NetworkService` o un Managed Service Account è sufficiente.
 - **Hardening ESC8**: Questo portale non espone l'endpoint `certsrv` tradizionale. **Nota importante:** il default di installazione risponde su HTTP in chiaro con Windows Authentication (NTLM negoziabile in chiaro sulla rete, rischio relay) e lo script di installazione richiede ora conferma esplicita per il percorso HTTP. In produzione installare **sempre** con `-UseHttps -CertThumbprint` e abilitare Extended Protection for Authentication (EAAL/EPAL) per mitigare il relay.
 - **Separazione da certsrv**: Il portale utilizza un sito IIS e un Application Pool completamente separati, garantendo che un problema sul portale non impatti certsrv e viceversa.
+
+
+---
+
+## 🛡️ Pannello amministrativo e richieste in approvazione
+
+Il portale include `/admin.html`, protetto da Windows Authentication e da una ACL configurabile nella sezione `AdminConfig` di `appsettings.json`. Gli utenti autorizzati sono definiti tramite `AllowedGroups` e `AllowedUsers`; gli altri ricevono `HTTP 403 Forbidden`.
+
+```json
+{
+  "AdminConfig": {
+    "AllowedGroups": ["BUILTIN\\Administrators", "VD\\Domain Admins"],
+    "AllowedUsers": ["vd\\tanino-t1"]
+  }
+}
+```
+
+Per i template con `RequiresApproval: true`, il certificato emesso dalla CA viene trattenuto in `held-requests.json` e rilasciato solo dopo l'approvazione amministrativa. Gli stati gestiti sono `PendingApproval`, `Approved`, `Issued`, `UnderSubmission` e `Rejected`.
+
+### Endpoint amministrativi
+
+| Metodo | Endpoint | Descrizione |
+|---|---|---|
+| GET | `/api/admin/check` | Verifica l'abilitazione dell'utente corrente |
+| GET | `/api/admin/config` | Legge la configurazione completa |
+| PUT | `/api/admin/config` | Salva la configurazione e ricarica il provider |
+| POST | `/api/admin/templates/discover` | Scopre i template pubblicati sulla CA |
+| GET | `/api/admin/held-requests?status={filter}` | Elenca le richieste trattenute |
+| GET | `/api/admin/held-requests/{holdId}` | Mostra il dettaglio di una richiesta |
+| POST | `/api/admin/held-requests/{holdId}/approve` | Approva e abilita il rilascio |
+| POST | `/api/admin/held-requests/{holdId}/reject` | Rifiuta la richiesta con motivazione opzionale |
+```
+
+## 🔎 Scoperta dei template e validità
+
+La funzione di discovery legge dalla definizione del template AD CS l'attributo `pKIDefaultLifetime` tramite Active Directory e converte il valore in giorni. In modalità Hub, la query usa le credenziali della foresta di destinazione; se LDAP non è disponibile, viene usato il fallback `certutil -config "server\CA" -template NomeTemplate`. La validità viene salvata in `appsettings.json` e mostrata in sola lettura all'amministratore.

@@ -40,9 +40,13 @@ Modern web portal built with **HTML5** and **ASP.NET Core 8 (C#)**, designed to 
 ```text
 Portal/
 ├── Models/
+│   ├── AdminConfig.cs           # Configurazione autorizzativa amministratori
+│   ├── HeldCertificateRequest.cs# Modello e stati delle richieste trattenute
 │   ├── PortalConfig.cs          # CA and template configuration models
 │   └── EnrollmentDto.cs         # DTOs for requests/responses and CSR parsing
 ├── Services/
+│   ├── IHeldRequestStore.cs     # Interfaccia archivio richieste trattenute
+│   ├── HeldRequestStore.cs      # Store thread-safe con persistenza JSON
 │   ├── IAdcsService.cs          # AD CS connector interface
 │   ├── AdcsService.cs           # COM CCertRequest engine + certreq.exe + Simulator
 │   └── CsrParserService.cs      # X.509 CSR parsing service
@@ -53,7 +57,8 @@ Portal/
 │   │   ├── crypto-helper.js     # Client-side key and PFX generation
 │   │   └── app.js               # Application controller and form handling
 │   └── index.html               # HTML5 graphical interface
-├── appsettings.json             # CA, template, and Hub/Standalone configuration
+├── appsettings.json             # CA, template, modalità e ACL amministratori
+├── held-requests.json           # Persistenza delle richieste trattenute
 ├── Program.cs                   # Entry point and Minimal API
 ├── web.config                   # IIS configuration (ASP.NET Core Module V2)
 ├── Install-PkiPortal.ps1        # IIS installation script (alongside certsrv)
