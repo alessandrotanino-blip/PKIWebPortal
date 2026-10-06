@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "dgSpecHash": "sNcDLa4aMhU=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\tanino\\Documents\\SSL\\PortalePKI.v2.02\\PkiPortal.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\tanino\\.nuget\\packages\\microsoft.aspnetcore.authentication.negotiate\\8.0.31\\microsoft.aspnetcore.authentication.negotiate.8.0.31.nupkg.sha512",
+    "C:\\Users\\tanino\\.nuget\\packages\\microsoft.aspnetcore.connections.abstractions\\8.0.31\\microsoft.aspnetcore.connections.abstractions.8.0.31.nupkg.sha512",
+    "C:\\Users\\tanino\\.nuget\\packages\\microsoft.extensions.caching.abstractions\\8.0.0\\microsoft.extensions.caching.abstractions.8.0.0.nupkg.sha512",
+    "C:\\Users\\tanino\\.nuget\\packages\\microsoft.extensions.caching.memory\\8.0.1\\microsoft.extensions.caching.memory.8.0.1.nupkg.sha512",
+    "C:\\Users\\tanino\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.2\\microsoft.extensions.dependencyinjection.abstractions.8.0.2.nupkg.sha512",
+    "C:\\Users\\tanino\\.nuget\\packages\\microsoft.extensions.features\\8.0.31\\microsoft.extensions.features.8.0.31.nupkg.sha512",
+    "C:\\Users\\tanino\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\8.0.2\\microsoft.extensions.logging.abstractions.8.0.2.nupkg.sha512",
+    "C:\\Users\\tanino\\.nuget\\packages\\microsoft.extensions.options\\8.0.2\\microsoft.extensions.options.8.0.2.nupkg.sha512",
+    "C:\\Users\\tanino\\.nuget\\packages\\microsoft.extensions.primitives\\8.0.0\\microsoft.extensions.primitives.8.0.0.nupkg.sha512",
+    "C:\\Users\\tanino\\.nuget\\packages\\system.directoryservices.protocols\\8.0.2\\system.directoryservices.protocols.8.0.2.nupkg.sha512",
+    "C:\\Users\\tanino\\.nuget\\packages\\system.io.pipelines\\8.0.0\\system.io.pipelines.8.0.0.nupkg.sha512"
+  ],
+  "logs": [
+    {
+      "code": "NU1900",
+      "level": "Warning",
+      "warningLevel": 1,
+      "message": "Si è verificato un errore durante il recupero dei dati sulla vulnerabilità del pacchetto: Non è possibile caricare l'indice del servizio per l'origine https://api.nuget.org/v3/index.json."
+    }
+  ]
+}

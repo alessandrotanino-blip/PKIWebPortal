@@ -1,0 +1,53 @@
+{
+  "Files": [
+    {
+      "Id": "C:\\Users\\tanino\\Documents\\SSL\\PortalePKI.v2.02\\wwwroot\\admin.html",
+      "PackagePath": "staticwebassets\\admin.html"
+    },
+    {
+      "Id": "C:\\Users\\tanino\\Documents\\SSL\\PortalePKI.v2.02\\wwwroot\\css\\styles.css",
+      "PackagePath": "staticwebassets\\css\\styles.css"
+    },
+    {
+      "Id": "C:\\Users\\tanino\\Documents\\SSL\\PortalePKI.v2.02\\wwwroot\\index.html",
+      "PackagePath": "staticwebassets\\index.html"
+    },
+    {
+      "Id": "C:\\Users\\tanino\\Documents\\SSL\\PortalePKI.v2.02\\wwwroot\\js\\app.js",
+      "PackagePath": "staticwebassets\\js\\app.js"
+    },
+    {
+      "Id": "C:\\Users\\tanino\\Documents\\SSL\\PortalePKI.v2.02\\wwwroot\\js\\crypto-helper.js",
+      "PackagePath": "staticwebassets\\js\\crypto-helper.js"
+    },
+    {
+      "Id": "C:\\Users\\tanino\\Documents\\SSL\\PortalePKI.v2.02\\wwwroot\\js\\i18n.js",
+      "PackagePath": "staticwebassets\\js\\i18n.js"
+    },
+    {
+      "Id": "C:\\Users\\tanino\\Documents\\SSL\\PortalePKI.v2.02\\wwwroot\\js\\vendor\\forge.min.js",
+      "PackagePath": "staticwebassets\\js\\vendor\\forge.min.js"
+    },
+    {
+      "Id": "C:\\Users\\tanino\\Documents\\SSL\\PortalePKI.v2.02\\wwwroot\\logo.png",
+      "PackagePath": "staticwebassets\\logo.png"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.PkiPortal.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.build.PkiPortal.props",
+      "PackagePath": "build\\PkiPortal.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildMultiTargeting.PkiPortal.props",
+      "PackagePath": "buildMultiTargeting\\PkiPortal.props"
+    },
+    {
+      "Id": "obj\\Debug\\net8.0\\staticwebassets\\msbuild.buildTransitive.PkiPortal.props",
+      "PackagePath": "buildTransitive\\PkiPortal.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

@@ -1,0 +1,31 @@
+# Segreti e configurazioni locali
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+*.p12
+secrets/
+credentials/
+config.local.*
+appsettings.json
+
+# File temporanei
+*.log
+*.tmp
+*.temp
+*.bak
+
+# Directory comuni
+.vscode/
+.idea/
+node_modules/
+__pycache__/
+.venv/
+dist/
+build/
+AppData/
+
+# File del sistema operativo
+.DS_Store
+Thumbs.db

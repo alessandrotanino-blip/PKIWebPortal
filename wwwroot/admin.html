@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PKI Portal - Configurazione Amministratore</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .admin-container { max-width: 1000px; margin: 2rem auto; padding: 0 1.5rem; }
+    .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .admin-header h2 { font-size: 1.3rem; color: var(--gray-900); }
+    .user-badge { font-size: 0.85rem; color: var(--gray-600); background: var(--gray-100); padding: 0.4rem 0.8rem; border-radius: var(--radius); border: 1px solid var(--gray-200); }
+    .section-title { font-size: 1.1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+    .ca-card { border: 1px solid var(--gray-200); border-radius: var(--radius); margin-bottom: 1rem; overflow: hidden; background: white; }
+    [data-theme="dark"] .ca-card { background: var(--gray-100); }
+    .ca-card-header { padding: 1rem 1.25rem; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+    [data-theme="dark"] .ca-card-header { background: var(--gray-50); }
+    .ca-card-header h4 { font-size: 0.95rem; color: var(--gray-900); }
+    .ca-card-body { padding: 1.25rem; display: none; }
+    .ca-card-body.open { display: block; }
+    .field-row { display: grid; grid-template-columns: 180px 1fr; gap: 0.75rem; align-items: center; margin-bottom: 0.75rem; }
+    .field-row label { font-size: 0.85rem; font-weight: 600; color: var(--gray-700); }
+    .field-row .form-control { margin: 0; }
+    .template-item { background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 1rem; margin-bottom: 0.75rem; }
+    [data-theme="dark"] .template-item { background: var(--gray-50); }
+    .template-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    .template-item-header h5 { font-size: 0.9rem; color: var(--gray-800); }
+    .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--gray-300); transition: 0.3s; border-radius: 24px; }
+    .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
+    input:checked + .toggle-slider { background-color: var(--primary); }
+    input:checked + .toggle-slider:before { transform: translateX(20px); }
+    .btn-danger { background-color: var(--danger); color: white; }
+    .btn-danger:hover { background-color: #dc2626; }
+    .toast { position: fixed; bottom: 2rem; right: 2rem; padding: 1rem 1.5rem; border-radius: var(--radius); color: white; font-weight: 600; font-size: 0.9rem; box-shadow: var(--shadow-lg); z-index: 200; transform: translateY(100px); opacity: 0; transition: all 0.3s ease; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { background: var(--success); }
+    .toast.error { background: var(--danger); }
+    .back-link { text-decoration: none; font-size: 0.85rem; font-weight: 600; color: var(--primary); display: flex; align-items: center; gap: 0.3rem; }
+    .back-link:hover { text-decoration: underline; }
+    .access-denied { text-align: center; padding: 4rem 2rem; }
+    .access-denied h2 { color: var(--danger); margin-bottom: 1rem; }
+    .access-denied p { color: var(--gray-600); margin-bottom: 1.5rem; }
+    .chevron { transition: transform 0.2s; display: inline-block; }
+    .chevron.open { transform: rotate(90deg); }
+    .template-add-bar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+    .template-add-bar select { flex: 1; }
+    .template-add-bar .btn { white-space: nowrap; }
+    .btn-discover { background: var(--gray-100); border: 1px solid var(--gray-300); color: var(--gray-700); }
+    .btn-discover:hover { background: var(--gray-200); }
+    .spinner-sm { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--gray-300); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Tabs & Approval UI */
+    .tabs-nav { display: flex; gap: 0.5rem; border-bottom: 2px solid var(--gray-200); margin-bottom: 1.5rem; }
+    .tab-btn { padding: 0.75rem 1.25rem; font-size: 0.95rem; font-weight: 600; color: var(--gray-600); background: transparent; border: none; border-bottom: 3px solid transparent; margin-bottom: -2px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s; }
+    .tab-btn:hover { color: var(--primary); }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .tab-badge { background: var(--warning); color: white; border-radius: 12px; padding: 0.15rem 0.5rem; font-size: 0.75rem; font-weight: 700; }
+    .tab-badge.zero { background: var(--gray-300); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+    .held-card { border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; background: white; transition: box-shadow 0.2s; }
+    [data-theme="dark"] .held-card { background: var(--gray-100); }
+    .held-card:hover { box-shadow: var(--shadow); }
+    .held-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem; }
+    .held-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.6rem; font-size: 0.85rem; color: var(--gray-700); margin-bottom: 1rem; }
+    .held-details strong { color: var(--gray-900); }
+    .held-actions { display: flex; gap: 0.5rem; justify-content: flex-end; align-items: center; }
+    .status-badge { display: inline-block; padding: 0.25rem 0.65rem; border-radius: 12px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+    .status-pending { background: #fef3c7; color: #92400e; }
+    .status-approved { background: #d1fae5; color: #065f46; }
+    .status-rejected { background: #fee2e2; color: #991b1b; }
+    .cert-view-box { margin-top: 1rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 0.75rem; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; display: none; }
+  </style>
+  <script src="/js/i18n.js?v=2.0.6"></script>
+</head>
+<body>
+  <header class="navbar">
+    <div class="brand">
+      <div class="brand-icon">PKI</div>
+      <div class="brand-text">
+        <h1 data-i18n="admin_panel_title">Configurazione Portale PKI</h1>
+        <p><span data-i18n="admin_panel_sub">Pannello di Amministrazione</span> <span class="brand-version">v2.0.6</span></p>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <button id="lang-toggle" class="lang-toggle-btn" data-i18n-title="lang_toggle_title" title="Switch to English" style="margin-right: 0.75rem;">
+        🌐 <span class="lang-label">EN</span>
+      </button>
+      <a href="/" class="back-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        <span data-i18n="back_to_portal">Torna al Portale</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Access Denied screen (hidden by default) -->
+  <div id="access-denied" class="access-denied" style="display:none;">
+    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.5" style="margin-bottom:1rem;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    <h2 data-i18n="access_denied_title">Accesso Negato</h2>
+    <p data-i18n="access_denied_text" data-i18n-html="true">Non disponi dei permessi necessari per accedere a questa sezione.<br>Contatta un amministratore del server.</p>
+    <p id="denied-user" style="font-size:0.85rem; color:var(--gray-400);"></p>
+    <a href="/" class="btn btn-primary" data-i18n="back_to_portal">Torna al Portale</a>
+  </div>
+
+  <!-- Admin Panel (hidden until auth check) -->
+  <div id="admin-panel" class="admin-container" style="display:none;">
+    <div class="admin-header">
+      <h2 data-i18n="admin_header_title">Pannello Amministrazione Portale PKI</h2>
+      <span class="user-badge" id="admin-user-badge">Utente: ...</span>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <nav class="tabs-nav">
+      <button type="button" class="tab-btn active" id="tab-btn-requests" data-tab="pane-requests">
+        <span data-i18n="tab_requests">📋 Richieste Certificato</span>
+        <span class="tab-badge" id="badge-pending-count">0</span>
+      </button>
+      <button type="button" class="tab-btn" id="tab-btn-config" data-tab="pane-config">
+        <span data-i18n="tab_config">⚙️ Configurazione Portale &amp; CA</span>
+      </button>
+    </nav>
+
+    <!-- PANE 1: Richieste Certificato in Attesa / Storico -->
+    <div class="tab-pane active" id="pane-requests">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <label style="font-size: 0.85rem; font-weight: 600; color: var(--gray-700);" data-i18n="filter_status_label">Filtra per stato:</label>
+          <select id="filter-held-status" class="form-control" style="width: auto; padding: 0.4rem 0.8rem; margin: 0;">
+            <option value="pending" data-i18n="filter_pending" selected>In Attesa di Approvazione</option>
+            <option value="all" data-i18n="filter_all">Tutte le Richieste</option>
+            <option value="approved" data-i18n="filter_approved">Solo Approvate</option>
+            <option value="rejected" data-i18n="filter_rejected">Solo Rifiutate</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-requests" data-i18n="btn_refresh_list">
+          🔄 Aggiorna Lista
+        </button>
+      </div>
+
+      <div id="held-requests-container">
+        <div style="text-align: center; padding: 2rem; color: var(--gray-500);" data-i18n="loading_requests">Caricamento richieste in corso...</div>
+      </div>
+    </div>
+
+    <!-- PANE 2: Configurazione Portale -->
+    <div class="tab-pane" id="pane-config">
+      <!-- Portal General Settings -->
+      <div class="card">
+        <div class="card-title"><span data-i18n="general_settings_title">Impostazioni Generali</span></div>
+        <div class="field-row">
+          <label for="cfg-title" data-i18n="field_portal_title">Titolo Portale</label>
+          <input type="text" id="cfg-title" class="form-control" placeholder="Enterprise PKI Web Enrollment Portal">
+        </div>
+        <div class="field-row">
+          <label for="cfg-mode" data-i18n="field_portal_mode">Modalità Portale</label>
+          <select id="cfg-mode" class="form-control">
+            <option value="Standalone" data-i18n="opt_mode_standalone">Standalone (CA Singola)</option>
+            <option value="Hub" data-i18n="opt_mode_hub">Hub Multi-CA</option>
+          </select>
+        </div>
+        <div class="field-row">
+          <label for="cfg-default-ca" data-i18n="field_default_ca">CA Predefinita (ID)</label>
+          <input type="text" id="cfg-default-ca" class="form-control" placeholder="es. ca-foresta1">
+        </div>
+      </div>
+
+      <!-- CA Configurations -->
+      <div class="card">
+        <div class="card-title">
+          <span data-i18n="ca_section_title">Configurazione Certificate Authorities</span>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-add-ca">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span data-i18n="btn_add_ca">Aggiungi CA</span>
+          </button>
+        </div>
+        <div id="ca-list"></div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex; justify-content:flex-end; gap:1rem; margin-top:1rem; margin-bottom:2rem;">
+        <button type="button" class="btn btn-secondary" onclick="location.reload()" data-i18n="btn_cancel_changes">Annulla Modifiche</button>
+        <button type="button" class="btn btn-primary" id="btn-save-config" style="padding: 0.85rem 2rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          <span data-i18n="btn_save_config">Salva Configurazione</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <footer>
+    <p data-i18n="admin_footer">Enterprise PKI Web Enrollment Gateway &bull; Pannello Amministrativo</p>
+  </footer>
+
+  <script>
+  (function() {
+    'use strict';
+
+    // Apply saved theme
+    const savedTheme = localStorage.getItem('pki-theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+
+    let portalConfig = null;
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    async function init() {
+      // Check admin access
+      try {
+        const resp = await fetch('/api/admin/check');
+        if (resp.status === 401 || resp.status === 403) {
+          showAccessDenied('Autenticazione richiesta.');
+          return;
+        }
+        const data = await resp.json();
+        if (!data.isAdmin) {
+          showAccessDenied(data.userName);
+          return;
+        }
+        document.getElementById('admin-user-badge').textContent = `Utente: ${data.userName}`;
+      } catch (err) {
+        showAccessDenied('Errore di connessione');
+        return;
+      }
+
+      // Load config
+      try {
+        const resp = await fetch('/api/admin/config');
+        if (!resp.ok) {
+          showAccessDenied('Impossibile caricare la configurazione');
+          return;
+        }
+        portalConfig = await resp.json();
+        renderConfig();
+        document.getElementById('admin-panel').style.display = 'block';
+      } catch (err) {
+        showToast('Errore caricamento configurazione: ' + err.message, 'error');
+      }
+
+      // Setup event handlers
+      setupTabs();
+      setupHeldRequestsHandlers();
+      loadHeldRequests();
+
+      // Setup language changed listener
+      window.addEventListener('languageChanged', () => {
+        if (portalConfig) renderConfig();
+        loadHeldRequests();
+      });
+
+      document.getElementById('btn-add-ca').addEventListener('click', addNewCa);
+      document.getElementById('btn-save-config').addEventListener('click', saveConfig);
+    }
+
+    function showAccessDenied(userName) {
+      document.getElementById('admin-panel').style.display = 'none';
+      document.getElementById('access-denied').style.display = 'block';
+      document.getElementById('denied-user').textContent = `Utente: ${userName || 'Sconosciuto'}`;
+    }
+
+    function renderConfig() {
+      document.getElementById('cfg-title').value = portalConfig.portalTitle || portalConfig.PortalTitle || '';
+      document.getElementById('cfg-mode').value = portalConfig.portalMode || portalConfig.PortalMode || 'Standalone';
+      document.getElementById('cfg-default-ca').value = portalConfig.defaultCaId || portalConfig.DefaultCaId || '';
+      renderCaList();
+    }
+
+    function renderCaList() {
+      const container = document.getElementById('ca-list');
+      container.innerHTML = '';
+      const cas = portalConfig.cas || portalConfig.CAs || [];
+      cas.forEach((ca, index) => renderCaCard(container, ca, index));
+    }
+
+    function renderCaCard(container, ca, caIndex) {
+      const card = document.createElement('div');
+      card.className = 'ca-card';
+
+      const isEn = window.I18N && window.I18N.getLanguage() === 'en';
+      const isDefault = ca.isDefault || ca.IsDefault || false;
+      const useSimulator = ca.useSimulator || ca.UseSimulator || false;
+      const displayName = ca.displayName || ca.DisplayName || (isEn ? 'New CA' : 'Nuova CA');
+      const id = ca.id || ca.Id || '';
+      const forestOrDomain = ca.forestOrDomain || ca.ForestOrDomain || '';
+      const configString = ca.configString || ca.ConfigString || '';
+      const description = ca.description || ca.Description || '';
+      const authMode = ca.authMode || ca.AuthMode || 'LocalIdentity';
+      const credentialTarget = ca.credentialTarget || ca.CredentialTarget || '';
+
+      const defaultTag = isDefault ? `<span class="tag tag-success">${isEn ? 'Default' : 'Predefinita'}</span>` : '';
+      const simulatorTag = useSimulator ? `<span class="tag tag-warning">${isEn ? 'Simulator' : 'Simulatore'}</span>` : '';
+
+      card.innerHTML = `
+        <div class="ca-card-header">
+          <h4>
+            <span class="chevron${caIndex === 0 ? ' open' : ''}">▶</span>
+            <span style="color:var(--primary); margin: 0 0.4rem;">#${caIndex + 1}</span>
+            ${esc(displayName)}
+          </h4>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            ${defaultTag}
+            ${simulatorTag}
+            <button type="button" class="btn btn-danger btn-sm btn-remove-ca" data-index="${caIndex}" title="${isEn ? 'Remove CA' : 'Rimuovi CA'}">✕</button>
+          </div>
+        </div>
+        <div class="ca-card-body${caIndex === 0 ? ' open' : ''}">
+          <div class="field-row">
+            <label>ID</label>
+            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="id" value="${esc(id)}">
+          </div>
+          <div class="field-row">
+            <label>${isEn ? 'Display Name' : 'Nome Visualizzato'}</label>
+            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="displayName" value="${esc(displayName)}">
+          </div>
+          <div class="field-row">
+            <label>${isEn ? 'Forest / Domain' : 'Foresta / Dominio'}</label>
+            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="forestOrDomain" value="${esc(forestOrDomain)}">
+          </div>
+          <div class="field-row">
+            <label>Config String</label>
+            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="configString" value="${esc(configString)}" placeholder="server\\CA-Name">
+          </div>
+          <div class="field-row">
+            <label>${isEn ? 'Description' : 'Descrizione'}</label>
+            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="description" value="${esc(description)}">
+          </div>
+          <div class="field-row">
+            <label>${isEn ? 'Auth Mode' : 'Modalità Auth'}</label>
+            <select class="form-control ca-field" data-ca="${caIndex}" data-field="authMode">
+              <option value="LocalIdentity" ${authMode === 'LocalIdentity' ? 'selected' : ''}>LocalIdentity (App Pool)</option>
+              <option value="CredentialManager" ${authMode === 'CredentialManager' ? 'selected' : ''}>CredentialManager (Multi-Foresta)</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label>Credential Target</label>
+            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="credentialTarget" value="${esc(credentialTarget)}" placeholder="es. subca01.foresta1.lan">
+          </div>
+          <div class="field-row">
+            <label>${isEn ? 'Default CA' : 'CA Predefinita'}</label>
+            <label class="toggle-switch">
+              <input type="checkbox" class="ca-toggle" data-ca="${caIndex}" data-field="isDefault" ${isDefault ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="field-row">
+            <label>${isEn ? 'Use Simulator' : 'Usa Simulatore'}</label>
+            <label class="toggle-switch">
+              <input type="checkbox" class="ca-toggle" data-ca="${caIndex}" data-field="useSimulator" ${useSimulator ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          
+          <!-- Templates -->
+          <div style="margin-top:1.25rem;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+              <h4 style="font-size:0.95rem;color:var(--gray-900);">📋 Certificate Templates</h4>
+              <button type="button" class="btn btn-secondary btn-sm btn-add-template-manual" data-ca="${caIndex}">${isEn ? '+ Add Manually' : '+ Aggiungi Manualmente'}</button>
+            </div>
+            <div class="template-add-bar">
+              <button type="button" class="btn btn-discover btn-sm btn-discover-templates" data-ca="${caIndex}" title="${isEn ? 'Query CA to discover published templates' : 'Interroga la CA per scoprire i template pubblicati'}">
+                ${isEn ? '🔍 Discover from CA' : '🔍 Scopri dalla CA'}
+              </button>
+              <select class="form-control discovered-templates-select" data-ca="${caIndex}" disabled>
+                <option value="">— ${isEn ? 'Click "Discover from CA"' : 'Clicca "Scopri dalla CA"'} —</option>
+              </select>
+              <button type="button" class="btn btn-primary btn-sm btn-add-discovered" data-ca="${caIndex}" disabled>${isEn ? '+ Add' : '+ Aggiungi'}</button>
+            </div>
+            <div class="templates-container" data-ca="${caIndex}"></div>
+          </div>
+        </div>
+      `;
+      container.appendChild(card);
+
+      // Collapse/expand handler
+      const header = card.querySelector('.ca-card-header');
+      header.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-remove-ca')) return;
+        const body = card.querySelector('.ca-card-body');
+        const chevron = card.querySelector('.chevron');
+        body.classList.toggle('open');
+        chevron.classList.toggle('open');
+      });
+
+      // Remove CA handler
+      card.querySelector('.btn-remove-ca').addEventListener('click', () => {
+        if (!confirm('Rimuovere questa CA dalla configurazione?')) return;
+        const cas = portalConfig.cas || portalConfig.CAs || [];
+        cas.splice(caIndex, 1);
+        renderCaList();
+      });
+
+      // CA field change handlers
+      card.querySelectorAll('.ca-field').forEach(input => {
+        input.addEventListener('change', (e) => {
+          const ci = parseInt(e.target.dataset.ca);
+          const field = e.target.dataset.field;
+          const cas = portalConfig.cas || portalConfig.CAs || [];
+          cas[ci][field] = e.target.value;
+        });
+      });
+
+      // CA toggle change handlers
+      card.querySelectorAll('.ca-toggle').forEach(input => {
+        input.addEventListener('change', (e) => {
+          const ci = parseInt(e.target.dataset.ca);
+          const field = e.target.dataset.field;
+          const cas = portalConfig.cas || portalConfig.CAs || [];
+          cas[ci][field] = e.target.checked;
+        });
+      });
+
+      // Popola la tendina con i template scoperti precedentemente per questa CA (se presenti)
+      populateDiscoveredDropdown(card, ca, caIndex);
+
+      // Discover templates from CA handler
+      card.querySelector('.btn-discover-templates').addEventListener('click', async (e) => {
+        const btn = e.target.closest('.btn-discover-templates');
+        const ci = parseInt(btn.dataset.ca);
+        const cas = portalConfig.cas || portalConfig.CAs || [];
+        const caObj = cas[ci];
+        const cardEl = btn.closest('.ca-card');
+
+        // Sincronizza i valori correnti presenti nei campi della scheda
+        const idVal = cardEl.querySelector('.ca-field[data-field="id"]')?.value?.trim() || caObj.id || caObj.Id || '';
+        const cfgStrVal = cardEl.querySelector('.ca-field[data-field="configString"]')?.value?.trim() || caObj.configString || caObj.ConfigString || '';
+        const authModeVal = cardEl.querySelector('.ca-field[data-field="authMode"]')?.value || caObj.authMode || caObj.AuthMode || 'LocalIdentity';
+        const credTargetVal = cardEl.querySelector('.ca-field[data-field="credentialTarget"]')?.value?.trim() || caObj.credentialTarget || caObj.CredentialTarget || '';
+        const useSimVal = cardEl.querySelector('.ca-toggle[data-field="useSimulator"]')?.checked ?? (caObj.useSimulator || caObj.UseSimulator || false);
+
+        caObj.id = idVal;
+        caObj.configString = cfgStrVal;
+        caObj.authMode = authModeVal;
+        caObj.credentialTarget = credTargetVal;
+        caObj.useSimulator = useSimVal;
+
+        if (!useSimVal && !cfgStrVal) {
+          showToast('Config String non impostata. Inserisci la stringa di connessione (es. server\\Nome-CA).', 'error');
+          return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-sm"></span> Interrogazione...';
+
+        try {
+          const resp = await fetch('/api/admin/templates/discover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': 'pki-admin' },
+            body: JSON.stringify({
+              caId: idVal,
+              configString: cfgStrVal,
+              authMode: authModeVal,
+              credentialTarget: credTargetVal,
+              useSimulator: useSimVal
+            })
+          });
+
+          if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
+          const result = await resp.json();
+          const templates = Array.isArray(result) ? result : (result.templates || []);
+          const isSuccess = Array.isArray(result) ? templates.length > 0 : (result.success ?? (templates.length > 0));
+          const errorMsg = Array.isArray(result) ? null : result.errorMessage;
+
+          if (!templates || templates.length === 0) {
+            caObj.discoveredTemplates = [];
+            populateDiscoveredDropdown(cardEl, caObj, ci);
+            showToast(errorMsg || 'Nessun template pubblicato trovato sulla CA.', 'error');
+          } else {
+            caObj.discoveredTemplates = templates;
+            populateDiscoveredDropdown(cardEl, caObj, ci);
+            showToast(`${templates.length} template pubblicati trovati sulla CA.`, 'success');
+          }
+        } catch (err) {
+          showToast('Errore durante la scoperta: ' + err.message, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '🔍 Scopri dalla CA';
+        }
+      });
+
+      // Add discovered template handler
+      card.querySelector('.btn-add-discovered').addEventListener('click', () => {
+        const ci = caIndex;
+        const select = card.querySelector(`.discovered-templates-select[data-ca="${ci}"]`);
+        const selectedOpt = select.options[select.selectedIndex];
+        if (!select.value) {
+          showToast('Seleziona un template dalla tendina.', 'error');
+          return;
+        }
+
+        const cas = portalConfig.cas || portalConfig.CAs || [];
+        const templates = cas[ci].templates || cas[ci].Templates || [];
+        // La validità NON viene scelta dall'admin: è letta dalla definizione
+        // AD CS del template (KeyUsagePeriod) durante la scoperta "Scopri dalla CA".
+        const validityDays = parseInt(selectedOpt.dataset.validityDays, 10) || 365;
+        templates.push({
+          name: select.value,
+          displayName: selectedOpt.dataset.displayName || select.value,
+          description: '',
+          requiresApproval: false,
+          validityDays: validityDays,
+          allowedKeyTypes: ['RSA-2048', 'RSA-4096'],
+          keyUsages: ['DigitalSignature', 'KeyEncipherment'],
+          extendedKeyUsages: ['ServerAuthentication'],
+          allowedGroups: []
+        });
+        if (!cas[ci].templates) cas[ci].templates = templates;
+        showToast(`Template "${selectedOpt.dataset.displayName || select.value}" aggiunto (validità ${validityDays} giorni, dalla definizione del template).`, 'success');
+        renderCaList();
+      });
+
+      // Manual add template handler
+      card.querySelector('.btn-add-template-manual').addEventListener('click', () => {
+        const cas = portalConfig.cas || portalConfig.CAs || [];
+        const templates = cas[caIndex].templates || cas[caIndex].Templates || [];
+        templates.push({
+          name: '', displayName: 'Nuovo Template', description: '',
+          requiresApproval: false, validityDays: 365,
+          allowedKeyTypes: ['RSA-2048', 'RSA-4096'],
+          keyUsages: ['DigitalSignature', 'KeyEncipherment'],
+          extendedKeyUsages: ['ServerAuthentication'],
+          allowedGroups: []
+        });
+        if (!cas[caIndex].templates) cas[caIndex].templates = templates;
+        renderCaList();
+      });
+
+      // Render templates
+      const tmplContainer = card.querySelector(`.templates-container[data-ca="${caIndex}"]`);
+      const templates = ca.templates || ca.Templates || [];
+      templates.forEach((tmpl, tIdx) => renderTemplateItem(tmplContainer, tmpl, caIndex, tIdx));
+    }
+
+    function renderTemplateItem(container, tmpl, caIndex, tIdx) {
+      const tmplEl = document.createElement('div');
+      tmplEl.className = 'template-item';
+
+      const name = tmpl.name || tmpl.Name || '';
+      const displayName = tmpl.displayName || tmpl.DisplayName || '';
+      const description = tmpl.description || tmpl.Description || '';
+      const validityDays = tmpl.validityDays || tmpl.ValidityDays || 365;
+      const requiresApproval = tmpl.requiresApproval || tmpl.RequiresApproval || false;
+      const allowedKeyTypes = (tmpl.allowedKeyTypes || tmpl.AllowedKeyTypes || []).join(', ');
+      const keyUsages = (tmpl.keyUsages || tmpl.KeyUsages || []).join(', ');
+      const extendedKeyUsages = (tmpl.extendedKeyUsages || tmpl.ExtendedKeyUsages || []).join(', ');
+      const allowedGroups = (tmpl.allowedGroups || tmpl.AllowedGroups || []).join(', ');
+
+      const isEn = window.I18N && window.I18N.getLanguage() === 'en';
+      tmplEl.innerHTML = `
+        <div class="template-item-header">
+          <h5>${esc(displayName || name || (isEn ? 'New Template' : 'Nuovo Template'))}</h5>
+          <button type="button" class="btn btn-danger btn-sm btn-remove-tmpl" data-ca="${caIndex}" data-tmpl="${tIdx}">✕</button>
+        </div>
+        <div class="field-row">
+          <label>${isEn ? 'System Name' : 'Nome Sistema'}</label>
+          <input type="text" class="form-control tmpl-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="name" value="${esc(name)}">
+        </div>
+        <div class="field-row">
+          <label>${isEn ? 'Display Name' : 'Nome Visualizzato'}</label>
+          <input type="text" class="form-control tmpl-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="displayName" value="${esc(displayName)}">
+        </div>
+        <div class="field-row">
+          <label>${isEn ? 'Description' : 'Descrizione'}</label>
+          <input type="text" class="form-control tmpl-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="description" value="${esc(description)}">
+        </div>
+        <div class="field-row">
+          <label>${isEn ? 'Validity (days)' : 'Validità (giorni)'}</label>
+          <input type="text" class="form-control" value="${validityDays}" disabled>
+          <small style="display:block; margin-top:0.25rem; opacity:0.7;">${isEn ? 'Retrieved from AD CS template definition (KeyUsagePeriod); not editable manually. Refresh via "Discover from CA".' : 'Prelevata dalla definizione del template AD CS (KeyUsagePeriod); non modificabile manualmente. Aggiorna il valore con "Scopri dalla CA".'}</small>
+        </div>
+        <div class="field-row">
+          <label>${isEn ? 'Manual Approval' : 'Approvazione Manuale'}</label>
+          <label class="toggle-switch">
+            <input type="checkbox" class="tmpl-toggle" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="requiresApproval" ${requiresApproval ? 'checked' : ''}>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="field-row">
+          <label>${isEn ? 'Key Types' : 'Tipi Chiave'}</label>
+          <input type="text" class="form-control tmpl-array-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="allowedKeyTypes" value="${esc(allowedKeyTypes)}" placeholder="RSA-2048, RSA-4096, ECDSA-P256">
+        </div>
+        <div class="field-row">
+          <label>Key Usages</label>
+          <input type="text" class="form-control tmpl-array-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="keyUsages" value="${esc(keyUsages)}" placeholder="DigitalSignature, KeyEncipherment">
+        </div>
+        <div class="field-row">
+          <label>Extended Key Usages</label>
+          <input type="text" class="form-control tmpl-array-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="extendedKeyUsages" value="${esc(extendedKeyUsages)}" placeholder="ServerAuthentication">
+        </div>
+        <div class="field-row">
+          <label>${isEn ? 'Authorized AD Groups' : 'Gruppi AD Autorizzati'}</label>
+          <input type="text" class="form-control tmpl-array-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="allowedGroups" value="${esc(allowedGroups)}" placeholder="${isEn ? 'Empty = all users (e.g. VD\\Web-Team, LD\\App-Admin)' : 'Vuoto = tutti gli utenti (es. VD\\Web-Team, LD\\App-Admin)'}">
+          <small style="display:block; margin-top:0.25rem; opacity:0.7;">${isEn ? 'Only users in these groups can request this template (portal administrators are always allowed).' : 'Solo gli utenti di questi gruppi possono emettere con questo template (gli amministratori del portale sono sempre ammessi).'}</small>
+        </div>
+      `;
+      container.appendChild(tmplEl);
+
+      // Remove template handler
+      tmplEl.querySelector('.btn-remove-tmpl').addEventListener('click', () => {
+        if (!confirm(isEn ? 'Remove this template?' : 'Rimuovere questo template?')) return;
+        const cas = portalConfig.cas || portalConfig.CAs || [];
+        const templates = cas[caIndex].templates || cas[caIndex].Templates || [];
+        templates.splice(tIdx, 1);
+        renderCaList();
+      });
+
+      // Template field change handlers
+      tmplEl.querySelectorAll('.tmpl-field').forEach(input => {
+        input.addEventListener('change', (e) => {
+          const ci = parseInt(e.target.dataset.ca);
+          const ti = parseInt(e.target.dataset.tmpl);
+          const field = e.target.dataset.field;
+          const cas = portalConfig.cas || portalConfig.CAs || [];
+          const templates = cas[ci].templates || cas[ci].Templates || [];
+          templates[ti][field] = e.target.value;
+
+          // Sincronizza la validità dalla definizione AD CS del template:
+          // se il nome di sistema corrisponde a un template scoperto dalla CA,
+          // la validità (KeyUsagePeriod) viene presa direttamente da lì.
+          if (field === 'name') {
+            const ca = cas[ci];
+            const discovered = (ca.discoveredTemplates || []).find(d =>
+              (d.name || '').toLowerCase() === String(e.target.value).trim().toLowerCase());
+            if (discovered) {
+              const v = parseInt(discovered.validityDays || discovered.ValidityDays, 10);
+              if (v) {
+                templates[ti].validityDays = v;
+                renderCaList();
+                showToast(`Validità sincronizzata dalla definizione del template: ${v} giorni.`, 'success');
+              }
+            }
+          }
+        });
+      });
+
+      // Template toggle handlers
+      tmplEl.querySelectorAll('.tmpl-toggle').forEach(input => {
+        input.addEventListener('change', (e) => {
+          const ci = parseInt(e.target.dataset.ca);
+          const ti = parseInt(e.target.dataset.tmpl);
+          const field = e.target.dataset.field;
+          const cas = portalConfig.cas || portalConfig.CAs || [];
+          const templates = cas[ci].templates || cas[ci].Templates || [];
+          templates[ti][field] = e.target.checked;
+        });
+      });
+
+      // Template array field handlers (comma-separated)
+      tmplEl.querySelectorAll('.tmpl-array-field').forEach(input => {
+        input.addEventListener('change', (e) => {
+          const ci = parseInt(e.target.dataset.ca);
+          const ti = parseInt(e.target.dataset.tmpl);
+          const field = e.target.dataset.field;
+          const cas = portalConfig.cas || portalConfig.CAs || [];
+          const templates = cas[ci].templates || cas[ci].Templates || [];
+          templates[ti][field] = e.target.value.split(',').map(s => s.trim()).filter(s => s);
+        });
+      });
+    }
+    function populateDiscoveredDropdown(cardEl, caObj, ci) {
+      const select = cardEl.querySelector(`.discovered-templates-select[data-ca="${ci}"]`);
+      const addBtn = cardEl.querySelector(`.btn-add-discovered[data-ca="${ci}"]`);
+      if (!select || !addBtn) return;
+
+      const discovered = caObj.discoveredTemplates || [];
+      if (discovered.length === 0) {
+        select.innerHTML = '<option value="">— Clicca "Scopri dalla CA" —</option>';
+        select.disabled = true;
+        addBtn.disabled = true;
+        return;
+      }
+
+      // Filtra template già configurati
+      const existingNames = (caObj.templates || caObj.Templates || []).map(t => (t.name || t.Name || '').toLowerCase());
+      const available = discovered.filter(t => !existingNames.includes((t.name || '').toLowerCase()));
+
+      select.innerHTML = '';
+      if (available.length === 0) {
+        select.innerHTML = '<option value="">Tutti i template sono già configurati</option>';
+        select.disabled = true;
+        addBtn.disabled = true;
+      } else {
+        select.innerHTML = '<option value="">— Seleziona un template —</option>';
+        available.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.name;
+          const validity = parseInt(t.validityDays || t.ValidityDays, 10);
+          opt.textContent = `${t.displayName || t.name} (${t.name})` + (validity ? ` — validità ${validity} gg` : '');
+          opt.dataset.displayName = t.displayName || t.name;
+          opt.dataset.validityDays = validity || '';
+          select.appendChild(opt);
+        });
+        select.disabled = false;
+        addBtn.disabled = false;
+      }
+    }
+
+    function addNewCa() {
+      const cas = portalConfig.cas || portalConfig.CAs || [];
+      cas.push({
+        id: 'ca-nuova-' + (cas.length + 1),
+        displayName: 'Nuova Certificate Authority',
+        forestOrDomain: '',
+        configString: '',
+        isDefault: false,
+        useSimulator: true,
+        description: '',
+        authMode: 'LocalIdentity',
+        credentialTarget: '',
+        templates: []
+      });
+      // Ensure the property reference exists
+      if (!portalConfig.cas && !portalConfig.CAs) portalConfig.cas = cas;
+      renderCaList();
+    }
+
+    async function saveConfig() {
+      // Build config object with PascalCase properties for C# deserialization
+      const cas = portalConfig.cas || portalConfig.CAs || [];
+      const configToSave = {
+        PortalTitle: document.getElementById('cfg-title').value,
+        PortalMode: document.getElementById('cfg-mode').value,
+        DefaultCaId: document.getElementById('cfg-default-ca').value,
+        CAs: cas.map(ca => ({
+          Id: ca.id || ca.Id || '',
+          DisplayName: ca.displayName || ca.DisplayName || '',
+          ForestOrDomain: ca.forestOrDomain || ca.ForestOrDomain || '',
+          ConfigString: ca.configString || ca.ConfigString || '',
+          IsDefault: ca.isDefault || ca.IsDefault || false,
+          UseSimulator: ca.useSimulator || ca.UseSimulator || false,
+          Description: ca.description || ca.Description || '',
+          AuthMode: ca.authMode || ca.AuthMode || 'LocalIdentity',
+          CredentialTarget: ca.credentialTarget || ca.CredentialTarget || null,
+          Templates: (ca.templates || ca.Templates || []).map(t => ({
+            Name: t.name || t.Name || '',
+            DisplayName: t.displayName || t.DisplayName || '',
+            Description: t.description || t.Description || '',
+            RequiresApproval: t.requiresApproval || t.RequiresApproval || false,
+            ValidityDays: t.validityDays || t.ValidityDays || 365,
+            AllowedKeyTypes: t.allowedKeyTypes || t.AllowedKeyTypes || [],
+            KeyUsages: t.keyUsages || t.KeyUsages || [],
+            ExtendedKeyUsages: t.extendedKeyUsages || t.ExtendedKeyUsages || [],
+            AllowedGroups: t.allowedGroups || t.AllowedGroups || []
+          }))
+        }))
+      };
+
+      try {
+        const resp = await fetch('/api/admin/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': 'pki-admin' },
+          body: JSON.stringify(configToSave)
+        });
+        const result = await resp.json();
+        if (resp.ok && result.success) {
+          showToast(result.message || 'Configurazione salvata!', 'success');
+        } else {
+          showToast('Errore: ' + (result.message || result.detail || 'Salvataggio fallito'), 'error');
+        }
+      } catch (err) {
+        showToast('Errore di rete: ' + err.message, 'error');
+      }
+    }
+
+    // ===== Gestione Tab e Richieste Trattenute =====
+    function setupTabs() {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+          const targetPane = document.getElementById(btn.getAttribute('data-tab'));
+          if (targetPane) targetPane.classList.add('active');
+          if (btn.getAttribute('data-tab') === 'pane-requests') {
+            loadHeldRequests();
+          }
+        });
+      });
+    }
+
+    function setupHeldRequestsHandlers() {
+      const filterSelect = document.getElementById('filter-held-status');
+      if (filterSelect) {
+        filterSelect.addEventListener('change', loadHeldRequests);
+      }
+      const refreshBtn = document.getElementById('btn-refresh-requests');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', loadHeldRequests);
+      }
+    }
+
+    async function updatePendingBadge() {
+      try {
+        const resp = await fetch('/api/admin/held-requests?status=pending');
+        if (resp.ok) {
+          const data = await resp.json();
+          const count = data.count !== undefined ? data.count : (data.requests ? data.requests.length : 0);
+          const badge = document.getElementById('badge-pending-count');
+          if (badge) {
+            badge.textContent = count;
+            badge.className = 'tab-badge' + (count === 0 ? ' zero' : '');
+          }
+        }
+      } catch (e) {
+        console.warn('Errore aggiornamento badge:', e);
+      }
+    }
+
+    async function loadHeldRequests() {
+      const filter = document.getElementById('filter-held-status')?.value || 'pending';
+      const container = document.getElementById('held-requests-container');
+      if (!container) return;
+
+      container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--gray-500);"><div class="spinner-sm"></div> Caricamento richieste in corso...</div>';
+
+      try {
+        const resp = await fetch(`/api/admin/held-requests?status=${encodeURIComponent(filter)}`);
+        if (!resp.ok) {
+          throw new Error(`Errore HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        updatePendingBadge();
+        renderHeldRequests(data.requests || []);
+      } catch (err) {
+        container.innerHTML = `<div class="alert alert-danger">Impossibile caricare le richieste trattenute: ${esc(err.message)}</div>`;
+      }
+    }
+
+    function renderHeldRequests(requests) {
+      const container = document.getElementById('held-requests-container');
+      if (!container) return;
+
+      const isEn = window.I18N && window.I18N.getLanguage() === 'en';
+
+      if (!requests || requests.length === 0) {
+        container.innerHTML = `
+          <div class="card" style="text-align:center; padding: 2.5rem; color: var(--gray-500);">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:0.75rem; opacity:0.6;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            <p style="font-size:1rem; font-weight:600; color:var(--gray-700);">${isEn ? 'No requests found' : 'Nessuna richiesta trovata'}</p>
+            <p style="font-size:0.85rem;">${isEn ? 'There are no certificate requests matching the selected filter.' : 'Non ci sono certificati trattenuti con il filtro selezionato.'}</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = '';
+      requests.forEach(r => {
+        const card = document.createElement('div');
+        card.className = 'held-card';
+
+        const status = r.status || r.Status || '';
+        const holdId = r.holdId || r.HoldId || '';
+        const templateDisplayName = r.templateDisplayName || r.TemplateDisplayName || '';
+        const templateName = r.templateName || r.TemplateName || '';
+        const requesterUser = r.requesterUser || r.RequesterUser || '';
+        const subjectCommonName = r.subjectCommonName || r.SubjectCommonName || '';
+        const caId = r.caId || r.CaId || '';
+        const caRequestId = r.caRequestId || r.CaRequestId || '';
+        const sanAttribute = r.sanAttribute || r.SanAttribute || '';
+        const requesterComments = r.requesterComments || r.RequesterComments || '';
+        const reviewedBy = r.reviewedBy || r.ReviewedBy || '';
+        const rejectionReason = r.rejectionReason || r.RejectionReason || '';
+        const submittedAt = r.submittedAt || r.SubmittedAt;
+        const reviewedAt = r.reviewedAt || r.ReviewedAt;
+
+        let statusClass = 'status-pending';
+        let statusLabel = isEn ? 'Pending' : 'In Attesa';
+
+        if (status === 'PendingApproval') {
+          statusClass = 'status-pending';
+          statusLabel = isEn ? 'Pending Approval' : 'In Attesa Approvazione';
+        } else if (status === 'UnderSubmission') {
+          statusClass = 'status-pending';
+          statusLabel = isEn ? 'In Progress (CA)' : 'In Sospeso (CA)';
+        } else if (status === 'Approved') {
+          statusClass = 'status-approved';
+          statusLabel = isEn ? 'Approved' : 'Approvato';
+        } else if (status === 'Issued') {
+          statusClass = 'status-approved';
+          statusLabel = isEn ? 'Issued' : 'Emesso';
+        } else if (status === 'Rejected') {
+          statusClass = 'status-rejected';
+          statusLabel = isEn ? 'Rejected' : 'Rifiutato';
+        } else {
+          statusClass = 'status-pending';
+          statusLabel = esc(status);
+        }
+
+        const dateLocale = isEn ? 'en-US' : 'it-IT';
+        const submittedDate = submittedAt ? new Date(submittedAt).toLocaleString(dateLocale) : '-';
+        const reviewedDate = reviewedAt ? new Date(reviewedAt).toLocaleString(dateLocale) : null;
+
+        const certBoxId = `cert-box-${esc(holdId)}`;
+
+        card.innerHTML = `
+          <div class="held-header">
+            <div>
+              <span class="status-badge ${statusClass}">${statusLabel}</span>
+              <strong style="margin-left: 0.5rem; font-size: 1rem; color: var(--gray-900);">${esc(templateDisplayName || templateName || 'Template')}</strong>
+              <span style="font-size:0.8rem; color:var(--gray-500); margin-left:0.5rem;">(Hold ID: <code>${esc(holdId)}</code>)</span>
+            </div>
+            <div style="font-size:0.8rem; color:var(--gray-500);">
+              ${isEn ? 'Submitted:' : 'Sottomesso:'} <strong>${submittedDate}</strong>
+            </div>
+          </div>
+
+          <div class="held-details">
+            <div><strong>${isEn ? 'Requester:' : 'Richiedente:'}</strong> ${esc(requesterUser || (isEn ? 'Anonymous / Unauthenticated' : 'Anonimo / Non autenticato'))}</div>
+            <div><strong>Common Name (CN):</strong> ${esc(subjectCommonName || 'N/D')}</div>
+            <div><strong>CA Target:</strong> ${esc(caId)} (Req #${esc(caRequestId)})</div>
+            ${sanAttribute ? `<div><strong>SAN:</strong> ${esc(sanAttribute)}</div>` : ''}
+            ${requesterComments ? `<div><strong>${isEn ? 'Requester Notes:' : 'Note Richiedente:'}</strong> ${esc(requesterComments)}</div>` : ''}
+            ${reviewedDate ? `<div><strong>${isEn ? 'Reviewed:' : 'Revisionato:'}</strong> ${reviewedDate} ${isEn ? 'by' : 'da'} ${esc(reviewedBy || 'Admin')}</div>` : ''}
+            ${rejectionReason ? `<div style="grid-column: 1 / -1; color: var(--danger);"><strong>${isEn ? 'Rejection Reason:' : 'Motivo Rifiuto:'}</strong> ${esc(rejectionReason)}</div>` : ''}
+          </div>
+
+          <div class="held-actions">
+            ${status === 'PendingApproval' ? `
+              <button type="button" class="btn btn-danger btn-sm btn-reject-held" data-id="${esc(holdId)}">
+                ${isEn ? '✕ Reject Request' : '✕ Rifiuta Richiesta'}
+              </button>
+              <button type="button" class="btn btn-success btn-sm btn-approve-held" data-id="${esc(holdId)}" style="background-color: var(--success); color: white;">
+                ${isEn ? '✓ Approve &amp; Issue Certificate' : '✓ Approva &amp; Rilascia Certificato'}
+              </button>
+            ` : ''}
+            ${(status === 'Approved' || status === 'Issued') ? `
+              <button type="button" class="btn btn-secondary btn-sm btn-toggle-cert" data-target="${certBoxId}" data-id="${esc(holdId)}">
+                ${isEn ? '📄 View Issued Certificate' : '📄 Visualizza Certificato Emesso'}
+              </button>
+            ` : ''}
+            ${status === 'UnderSubmission' ? `
+              <span style="font-size:0.8rem; color:var(--gray-500); font-style:italic;">${isEn ? 'Pending approval on AD CS CA' : 'In attesa di approvazione sulla CA ADCS'}</span>
+            ` : ''}
+          </div>
+
+          <div id="${certBoxId}" class="cert-view-box"></div>
+        `;
+
+        container.appendChild(card);
+      });
+
+      // Bind actions
+      container.querySelectorAll('.btn-approve-held').forEach(btn => {
+        btn.addEventListener('click', () => approveHeldRequest(btn.getAttribute('data-id')));
+      });
+
+      container.querySelectorAll('.btn-reject-held').forEach(btn => {
+        btn.addEventListener('click', () => rejectHeldRequest(btn.getAttribute('data-id')));
+      });
+
+      container.querySelectorAll('.btn-toggle-cert').forEach(btn => {
+        btn.addEventListener('click', () => toggleCertView(btn.getAttribute('data-id'), btn.getAttribute('data-target')));
+      });
+    }
+
+    async function approveHeldRequest(holdId) {
+      if (!confirm(`Confermi l'approvazione del certificato con Hold ID '${holdId}'?\n\nIl certificato diverrà scaricabile dal richiedente.`)) {
+        return;
+      }
+
+      try {
+        const resp = await fetch(`/api/admin/held-requests/${encodeURIComponent(holdId)}/approve`, {
+          method: 'POST',
+          headers: { 'X-Pki-Portal-Admin': 'pki-admin' }
+        });
+        const result = await resp.json();
+        if (resp.ok && result.success) {
+          showToast(result.message || 'Certificato approvato con successo!', 'success');
+          loadHeldRequests();
+        } else {
+          showToast('Errore: ' + (result.message || 'Impossibile approvare'), 'error');
+        }
+      } catch (err) {
+        showToast('Errore di comunicazione: ' + err.message, 'error');
+      }
+    }
+
+    async function rejectHeldRequest(holdId) {
+      const reason = prompt(`Inserisci il motivo del rifiuto per la richiesta '${holdId}' (opzionale):`);
+      if (reason === null) return; // annullato
+
+      try {
+        const resp = await fetch(`/api/admin/held-requests/${encodeURIComponent(holdId)}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': 'pki-admin' },
+          body: JSON.stringify({ reason: reason.trim() })
+        });
+        const result = await resp.json();
+        if (resp.ok && result.success) {
+          showToast(result.message || 'Richiesta rifiutata.', 'success');
+          loadHeldRequests();
+        } else {
+          showToast('Errore: ' + (result.message || 'Impossibile rifiutare'), 'error');
+        }
+      } catch (err) {
+        showToast('Errore di comunicazione: ' + err.message, 'error');
+      }
+    }
+
+    async function toggleCertView(holdId, boxId) {
+      const box = document.getElementById(boxId);
+      if (!box) return;
+
+      if (box.style.display === 'block') {
+        box.style.display = 'none';
+        return;
+      }
+
+      box.innerHTML = 'Caricamento dettagli certificato...';
+      box.style.display = 'block';
+
+      try {
+        const resp = await fetch(`/api/admin/held-requests/${encodeURIComponent(holdId)}`);
+        if (!resp.ok) throw new Error('Richiesta non trovata');
+        const data = await resp.json();
+        box.textContent = data.certificatePem || data.CertificatePem || data.p7bBase64 || data.P7bBase64 || 'Nessun certificato archiviato per questa richiesta.';
+      } catch (err) {
+        box.textContent = 'Errore nel recupero del certificato: ' + err.message;
+      }
+    }
+
+    function showToast(message, type) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast ' + type + ' show';
+      setTimeout(() => { toast.className = 'toast'; }, 4000);
+    }
+
+    function esc(text) {
+      if (!text) return '';
+      return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+  })();
+  </script>
+</body>
+</html>
