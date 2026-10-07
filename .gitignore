@@ -1,0 +1,37 @@
+# Segreti e configurazioni locali
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+*.p12
+secrets/
+credentials/
+config.local.*
+appsettings.json
+
+# File temporanei e database locali
+*.log
+*.tmp
+*.temp
+*.bak
+held-requests.json
+
+# Directory di compilazione .NET
+bin/
+obj/
+.tmp-dpapi-test/
+
+# Directory comuni
+.vscode/
+.idea/
+node_modules/
+__pycache__/
+.venv/
+dist/
+build/
+AppData/
+
+# File del sistema operativo
+.DS_Store
+Thumbs.db

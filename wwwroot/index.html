@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enterprise PKI Web Enrollment Portal</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="brand">
+      <div class="brand-icon">PKI</div>
+      <div class="brand-text">
+        <h1 id="portal-title" data-i18n="portal_title">Enterprise PKI Web Enrollment</h1>
+        <p id="portal-subtitle"><span data-i18n="portal_subtitle">Active Directory Certificate Services (AD CS) Modern Gateway</span> <span class="brand-version">v2.0.6</span></p>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <button id="theme-toggle" class="theme-toggle" data-i18n-title="theme_toggle_title" title="Cambia tema">
+        <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <button id="lang-toggle" class="lang-toggle-btn" data-i18n-title="lang_toggle_title" title="Switch to English">
+        🌐 <span class="lang-label">EN</span>
+      </button>
+      <div class="ca-select-group">
+        <label for="ca-selector" data-i18n="ca_label">CA di Emissione:</label>
+        <select id="ca-selector">
+          <!-- Popolato dinamicamente -->
+        </select>
+      </div>
+      <span class="badge-mode" id="portal-mode-badge" data-i18n="portal_mode_hub">Modalità Hub</span>
+      <span id="portal-user-badge" style="font-size:0.75rem; padding: 0.3rem 0.6rem; border-radius: 4px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: var(--text-color, #e2e8f0); margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.35rem;">
+        👤 <span id="portal-user-name" data-i18n="user_checking">Verifica accesso...</span>
+      </span>
+      <a href="/admin.html" class="btn btn-secondary btn-sm" title="Pannello Admin" style="margin-left:0.5rem;font-size:0.75rem;" data-i18n="admin_btn">
+        ⚙️ Admin
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+
+    <!-- Tab Bar -->
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="tab-wizard">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <span data-i18n="tab_wizard">Nuova Richiesta (Browser Web Crypto)</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-upload">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span data-i18n="tab_upload">Invia CSR Esistente (Base64 / File)</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-pending">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span data-i18n="tab_pending">Ritiro Certificati (Pending o Emessi)</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-automation">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span data-i18n="tab_automation">Automazione & win-acme</span>
+      </button>
+    </nav>
+
+    <!-- Info Banner CA Attiva -->
+    <div id="ca-info-banner" class="alert alert-info">
+      <div>
+        <strong id="ca-info-name">Caricamento CA...</strong>
+        <p id="ca-info-desc" style="font-size: 0.8rem; margin-top: 0.2rem;"></p>
+      </div>
+    </div>
+
+    <!-- TAB 1: Generazione Chiave Client-Side (Web Crypto) -->
+    <section id="tab-wizard" class="tab-pane active">
+      <div class="card">
+        <div class="card-title">
+          <span data-i18n="wizard_step1_title">1. Seleziona il Certificate Template</span>
+        </div>
+        <p class="card-subtitle" data-i18n="wizard_step1_sub">Scegli la tipologia di certificato da emettere dalla Sub-CA selezionata:</p>
+        <div class="template-cards" id="template-cards-container">
+          <!-- Popolate via JS -->
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span data-i18n="wizard_step2_title">2. Dati del Soggetto (Subject DN)</span>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="form-cn" data-i18n="field_cn">Common Name (CN) *</label>
+            <input type="text" id="form-cn" class="form-control" data-i18n-placeholder="placeholder_cn" placeholder="es. portal.azienda.lan o web01.azienda.lan" required>
+            <span class="hint" data-i18n="hint_cn">Nome principale dell'host o servizio</span>
+          </div>
+          <div class="form-group">
+            <label for="form-o" data-i18n="field_o">Organizzazione (O)</label>
+            <input type="text" id="form-o" class="form-control" data-i18n-placeholder="placeholder_o" placeholder="es. Azienda S.p.A.">
+          </div>
+          <div class="form-group">
+            <label for="form-ou" data-i18n="field_ou">Unità Organizzativa (OU)</label>
+            <input type="text" id="form-ou" class="form-control" data-i18n-placeholder="placeholder_ou" placeholder="es. IT Security / DevOps">
+          </div>
+          <div class="form-group">
+            <label for="form-c" data-i18n="field_c">Paese (C)</label>
+            <input type="text" id="form-c" class="form-control" placeholder="es. IT" maxlength="2" value="IT">
+          </div>
+        </div>
+
+        <div class="card-title" style="margin-top: 1.5rem;">
+          <span data-i18n="wizard_step3_title">3. Subject Alternative Names (SAN)</span>
+        </div>
+        <p class="card-subtitle" data-i18n="wizard_step3_sub">Aggiungi nomi DNS alternativi o indirizzi IP associati al certificato:</p>
+        
+        <div class="san-input-row">
+          <select id="san-type" class="form-control san-type-select">
+            <option value="DNS">DNS</option>
+            <option value="IP">IP</option>
+            <option value="EMAIL">Email</option>
+            <option value="URI">URI</option>
+          </select>
+          <input type="text" id="san-value" class="form-control" data-i18n-placeholder="placeholder_san_val" placeholder="es. app.azienda.lan o 10.0.1.50">
+          <button type="button" id="btn-add-san" class="btn btn-secondary" data-i18n="btn_add_san">Aggiungi SAN</button>
+        </div>
+        
+        <div class="san-chips" id="san-chips-list">
+          <!-- Popolato dinamicamente -->
+          <span style="font-size: 0.8rem; color: var(--gray-400); margin-left: 0.5rem;" id="san-empty-hint" data-i18n="san_empty_hint">Nessun SAN alternativo aggiunto (il CN verrà inserito automaticamente)</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span data-i18n="wizard_step4_title">4. Parametri Chiave & Password PFX</span>
+        </div>
+        <p class="card-subtitle" data-i18n="wizard_step4_sub">La chiave privata viene generata in memoria direttamente all'interno del browser (Web Crypto). Il server riceve solo la richiesta pubblica CSR.</p>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="key-algorithm" data-i18n="field_key_algo">Tipo e Dimensione Chiave</label>
+            <select id="key-algorithm" class="form-control">
+              <option value="RSA-2048" data-i18n="opt_rsa_2048">RSA 2048 bit (Standard compatibilità)</option>
+              <option value="RSA-4096" data-i18n="opt_rsa_4096">RSA 4096 bit (Alta sicurezza)</option>
+              <option value="RSA-3072" data-i18n="opt_rsa_3072">RSA 3072 bit</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="pfx-password" data-i18n="field_pfx_pwd">Password di Protezione PFX *</label>
+            <input type="password" id="pfx-password" class="form-control" data-i18n-placeholder="placeholder_pfx_pwd" placeholder="Imposta password per il file .pfx scaricato" required>
+            <span class="hint" data-i18n="hint_pfx_pwd">Necessaria per proteggere il file .pfx contenente la chiave privata</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 1rem;">
+          <button type="button" id="btn-submit-wizard" class="btn btn-primary" style="padding: 0.85rem 2rem; font-size: 1rem;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span data-i18n="btn_submit_wizard">Genera Chiave & Richiedi Certificato</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: Upload / Incolla CSR Esistente -->
+    <section id="tab-upload" class="tab-pane" style="display: none;">
+      <div class="card">
+        <div class="card-title">
+          <span data-i18n="upload_title">Carica o Incolla una Richiesta CSR (PKCS#10)</span>
+        </div>
+        <p class="card-subtitle" data-i18n="upload_sub">Utilizza questa modalità per certificati destinati a server Linux, switch, firewall o apparati di rete la cui chiave privata è già stata generata localmente:</p>
+
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label for="csr-text" data-i18n="field_csr_text">Richiesta CSR (Formato Base64 / PEM) *</label>
+          <textarea id="csr-text" class="form-control" rows="8" placeholder="-----BEGIN CERTIFICATE REQUEST-----&#10;MIIC...&#10;-----END CERTIFICATE REQUEST-----"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem;">
+          <label class="btn btn-secondary btn-sm" style="cursor: pointer;">
+            <span data-i18n="btn_select_file">📁 Seleziona File (.csr / .req)</span>
+            <input type="file" id="csr-file-input" accept=".csr,.req,.txt" style="display: none;">
+          </label>
+          <button type="button" id="btn-parse-csr" class="btn btn-secondary btn-sm" data-i18n="btn_parse_csr">🔍 Ispeziona CSR</button>
+        </div>
+
+        <!-- Box dettagli CSR analizzato -->
+        <div id="csr-preview-box" class="alert alert-info" style="display: none;">
+          <div>
+            <strong data-i18n="csr_preview_title">Dati Rilevati nel CSR:</strong>
+            <ul style="margin-top: 0.5rem; margin-left: 1.25rem; font-size: 0.85rem;">
+              <li><strong>Common Name:</strong> <span id="csr-preview-cn">-</span></li>
+              <li><strong>Subject DN:</strong> <span id="csr-preview-subject">-</span></li>
+              <li><strong>Algoritmo & Dimensione:</strong> <span id="csr-preview-key">-</span></li>
+              <li><strong>Subject Alt Names (SAN):</strong> <span id="csr-preview-sans">-</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label for="upload-template-select" data-i18n="upload_template_select">Seleziona Template AD CS di Destinazione *</label>
+          <select id="upload-template-select" class="form-control">
+            <!-- Popolato dinamicamente -->
+          </select>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end;">
+          <button type="button" id="btn-submit-upload" class="btn btn-primary" style="padding: 0.85rem 2rem;" data-i18n="btn_submit_upload">
+            Invia CSR alla CA
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: Ritiro Certificati (Pending o Emessi) -->
+    <section id="tab-pending" class="tab-pane" style="display: none;">
+      <div class="card">
+        <div class="card-title">
+          <span data-i18n="pending_title">Ritiro Certificato (Pending o già Emesso)</span>
+        </div>
+        <p class="card-subtitle">
+          <span data-i18n="pending_sub">Inserisci il Request ID della richiesta per ritirare il certificato emesso o verificarne lo stato di approvazione.</span><br>
+          <span style="display: inline-block; margin-top: 0.35rem; color: var(--text-color, #e2e8f0); font-weight: 500;" data-i18n="pending_security_note">
+            🔒 Controllo Sicurezza: Per tutelare la riservatezza delle chiavi e dei dati, il recupero è consentito esclusivamente all'utente che ha sottomesso la richiesta o a un amministratore.
+          </span>
+        </p>
+
+        <div class="form-grid" style="max-width: 500px;">
+          <div class="form-group">
+            <label for="pending-req-id" data-i18n="field_req_id">Request ID (#) *</label>
+            <input type="number" id="pending-req-id" class="form-control" data-i18n-placeholder="placeholder_req_id" placeholder="es. 1042" required>
+          </div>
+        </div>
+
+        <div style="margin-top: 1rem;">
+          <button type="button" id="btn-check-pending" class="btn btn-primary" data-i18n="btn_check_pending">
+            Verifica Stato & Scarica
+          </button>
+        </div>
+
+        <div id="pending-result-area" style="margin-top: 1.5rem; display: none;"></div>
+
+        <!-- Sezione Storico Richieste Utente -->
+        <div style="margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color, #334155);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <h3 id="my-requests-title" style="font-size: 1.05rem; margin: 0; font-weight: 600;" data-i18n="my_requests_title">📋 I Tuoi Certificati e Richieste</h3>
+              <p id="my-requests-subtitle" class="card-subtitle" style="margin: 0.2rem 0 0 0; font-size: 0.85rem;" data-i18n="my_requests_subtitle">Tutte le richieste registrate a nome del tuo account utente Windows.</p>
+            </div>
+            <button type="button" id="btn-refresh-my-requests" class="btn btn-secondary btn-sm" title="Aggiorna elenco richieste" data-i18n="btn_refresh">
+              🔄 Aggiorna Elenco
+            </button>
+          </div>
+
+          <div id="my-requests-area" style="overflow-x: auto;">
+            <p style="color: var(--text-muted, #94a3b8); font-size: 0.9rem;" data-i18n="loading_my_requests">Caricamento delle tue richieste in corso...</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: Guida Automazione win-acme & CLI -->
+    <section id="tab-automation" class="tab-pane" style="display: none;">
+      <div class="card">
+        <div class="card-title">
+          <span data-i18n="automation_title">Automazione Rilascio Certificati & win-acme</span>
+        </div>
+        <p class="card-subtitle" data-i18n="automation_sub">Questo portale espone API RESTful moderne che consentono di automatizzare le richieste da script PowerShell, Ansible, cURL o client ACME:</p>
+
+        <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; font-size: 0.95rem;" data-i18n="automation_winacme_title">1. Integrazione con win-acme</h4>
+        <p style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 0.75rem;" data-i18n="automation_winacme_desc">
+          win-acme è un client ACME per Windows. Per utilizzarlo verso la vostra PKI aziendale senza esporre direttamente la CA:
+        </p>
+        <ul style="font-size: 0.85rem; color: var(--gray-700); margin-left: 1.5rem; margin-bottom: 1rem;">
+          <li data-i18n="automation_winacme_li1">Il portale funge da Registration Authority (RA) intermediaria.</li>
+          <li data-i18n="automation_winacme_li2">I server interni possono eseguire uno script PowerShell di rinnovo automatico schedulato via Windows Task Scheduler senza bisogno di installare componenti DCOM complessi sulle macchine client.</li>
+        </ul>
+
+        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.95rem;" data-i18n="automation_ps_title">2. Esempio Richiesta Automatica via PowerShell</h4>
+        <pre style="background: #ffffff; color: #000000; padding: 1rem; border-radius: var(--radius); font-size: 0.8rem; overflow-x: auto; border: 1px solid var(--gray-300);"><code># Genera CSR locale su IIS o Windows Server
+$csr = (Get-Content "C:\cert\request.csr" -Raw)
+
+# Sottometti al Portale PKI via REST API
+$body = @{
+    CaId = "ca-foresta1"
+    TemplateName = "WebServer"
+    CsrPem = $csr
+} | ConvertTo-Json
+
+$response = Invoke-RestMethod -Uri "https://pki.azienda.lan/api/certificates/request" -Method Post -Body $body -ContentType "application/json"
+
+if ($response.success -and $response.disposition -eq "Issued") {
+    $response.certificatePem | Out-File "C:\cert\issued.cer" -Encoding ascii
+    Write-Host "Certificato emesso con successo!" -ForegroundColor Green
+}</code></pre>
+      </div>
+    </section>
+
+    <!-- Sezione Risultato Emissione (Download Bundle) -->
+    <div id="result-box" class="card" style="display: none; border-color: var(--success);">
+      <div class="card-title" style="color: var(--success);">
+        <span style="display: flex; align-items: center; gap: 0.5rem;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span data-i18n="result_title">Certificato Emesso con Successo!</span>
+        </span>
+      </div>
+      <p id="result-message" class="card-subtitle" style="color: var(--gray-700);"></p>
+
+      <div class="download-grid">
+        <!-- Download PFX (se generato da browser) -->
+        <div class="download-card" id="card-download-pfx">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <h4 data-i18n="pfx_card_title">Archivio PFX (.pfx)</h4>
+          <p data-i18n="pfx_card_desc">Contiene certificato + chiave privata cifrata per Windows / IIS</p>
+          <button type="button" id="btn-dl-pfx" class="btn btn-primary btn-sm" data-i18n="btn_dl_pfx">Scarica PFX</button>
+        </div>
+
+        <!-- Download CRT -->
+        <div class="download-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <h4 data-i18n="crt_card_title">Certificato (.crt)</h4>
+          <p data-i18n="crt_card_desc">Certificato X.509 firmato in formato Base64 PEM</p>
+          <button type="button" id="btn-dl-crt" class="btn btn-secondary btn-sm" data-i18n="btn_dl_crt">Scarica .CRT</button>
+        </div>
+
+        <!-- Download P7B / Chain -->
+        <div class="download-card">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <h4 data-i18n="chain_card_title">Catena Completa (.p7b)</h4>
+          <p data-i18n="chain_card_desc">Include la Sub-CA di emissione e la Root CA aziendale</p>
+          <button type="button" id="btn-dl-chain" class="btn btn-secondary btn-sm" data-i18n="btn_dl_chain">Scarica Catena</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Modale di caricamento/progresso -->
+  <div id="progress-modal" class="progress-overlay" style="display: none;">
+    <div class="progress-box">
+      <div class="spinner"></div>
+      <h3 id="progress-step-title" style="margin-bottom: 0.5rem; color: var(--gray-900);" data-i18n="progress_title">Generazione Crittografica in Corso...</h3>
+      <p id="progress-step-desc" style="font-size: 0.85rem; color: var(--gray-600);" data-i18n="progress_desc">Creazione della coppia di chiavi RSA nel browser...</p>
+    </div>
+  </div>
+
+  <!-- Modale Password PFX per Ritiro -->
+  <div id="pfx-password-modal" class="progress-overlay" style="display: none;">
+    <div class="progress-box" style="text-align: left; max-width: 440px;">
+      <h3 style="margin-bottom: 0.5rem; color: var(--gray-900); font-size: 1.15rem; display: flex; align-items: center; gap: 0.5rem;">
+        <span>🔐</span> <span data-i18n="pfx_modal_title">Download Archivio PFX (.pfx)</span>
+      </h3>
+      <p style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 1rem;" data-i18n="pfx_modal_desc">
+        Inserisci una password per proteggere il certificato e la chiave privata nel file PKCS#12 (PFX):
+      </p>
+      <div class="form-group" style="margin-bottom: 1.25rem;">
+        <label for="pfx-modal-password" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;" data-i18n="pfx_modal_pwd_label">Password PFX *</label>
+        <input type="password" id="pfx-modal-password" class="form-control" data-i18n-placeholder="placeholder_pfx_modal_pwd" placeholder="Inserisci password di protezione..." autocomplete="new-password">
+        <span class="hint" style="display: block; margin-top: 0.35rem; font-size: 0.75rem; color: var(--gray-500);" data-i18n="hint_pfx_modal_pwd">Questa password sarà richiesta durante l'importazione del certificato su Windows / IIS / Linux.</span>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" id="btn-pfx-modal-cancel" class="btn btn-secondary btn-sm" data-i18n="btn_cancel">Annulla</button>
+        <button type="button" id="btn-pfx-modal-confirm" class="btn btn-primary btn-sm" data-i18n="btn_confirm_pfx">Genera &amp; Scarica PFX</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <p data-i18n="footer_text">Enterprise PKI Web Enrollment Gateway &bull; Sostituto moderno Microsoft AD CS / certsrv &bull; HTML5 &amp; Web Crypto API</p>
+  </footer>
+
+  <!-- Script Libraries -->
+  <script src="/js/vendor/forge.min.js?v=2.0.6"></script>
+  <script src="/js/crypto-helper.js?v=2.0.6"></script>
+  <script src="/js/i18n.js?v=2.0.6"></script>
+  <script src="/js/app.js?v=2.0.6"></script>
+</body>
+</html>
