@@ -16,6 +16,7 @@ public class CertificateSubmissionResponse
     public string Disposition { get; set; } = string.Empty; // "Issued", "UnderSubmission", "Denied", "Failed"
     public int RequestId { get; set; }
     public string StatusMessage { get; set; } = string.Empty;
+    public string? ErrorCode { get; set; }
     public string? CertificatePem { get; set; }
     public string? CertificateChainPem { get; set; }
     public string? CaCertificatePem { get; set; }

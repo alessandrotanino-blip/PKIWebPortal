@@ -199,6 +199,8 @@ api.MapGet("/certificates/status/{caId}/{requestId:int}", async (string caId, in
                 Success = false,
                 Disposition = "Forbidden",
                 RequestId = requestId,
+                ErrorCode = "NotOwner",
+                RequesterUser = currentUser,
                 StatusMessage = $"Accesso negato: La richiesta #{requestId} non risulta associata al tuo account ({currentUser}). Solo il richiedente originale o un amministratore possono recuperare il certificato."
             }, statusCode: StatusCodes.Status403Forbidden);
         }
@@ -625,6 +627,8 @@ api.MapGet("/certificates/held/{holdId}", async (string holdId, IHeldRequestStor
             Success = false,
             Disposition = "Forbidden",
             RequestId = request.CaRequestId,
+            ErrorCode = "NotOwner",
+            RequesterUser = currentUser,
             StatusMessage = request.CaRequestId > 0
                 ? $"Accesso negato: La richiesta #{request.CaRequestId} non risulta associata al tuo account ({currentUser}). Solo il richiedente originale o un amministratore possono recuperare il certificato."
                 : $"Accesso negato: La richiesta non risulta associata al tuo account ({currentUser}). Solo il richiedente originale o un amministratore possono recuperare il certificato."

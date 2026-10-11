@@ -153,8 +153,7 @@
     selectedTemplate = null;
 
     if (!templates || templates.length === 0) {
-      const isEn = window.I18N && window.I18N.getLanguage() === 'en';
-      container.innerHTML = `<p style="color: var(--gray-400); font-size: 0.9rem;">${isEn ? 'No templates configured for this CA.' : 'Nessun template configurato per questa CA.'}</p>`;
+      container.innerHTML = `<p style="color: var(--gray-400); font-size: 0.9rem;">${window.I18N ? window.I18N.t('no_templates_ca', 'Nessun template configurato per questa CA.') : 'Nessun template configurato per questa CA.'}</p>`;
       return;
     }
 
@@ -162,7 +161,6 @@
     // autorizzati — vincolati a gruppi AD — non sono selezionabili).
     const firstAllowedIndex = templates.findIndex(t => (t.IsAllowed ?? t.isAllowed ?? true) !== false);
 
-    const isEn = window.I18N && window.I18N.getLanguage() === 'en';
     templates.forEach((tmpl, index) => {
       const isAllowed = (tmpl.IsAllowed ?? tmpl.isAllowed ?? true) !== false;
       const isSelected = index === firstAllowedIndex;
@@ -182,6 +180,7 @@
       const name = tmpl.name || tmpl.Name || '';
       const desc = tmpl.description || tmpl.Description || '';
       const validityDays = tmpl.validityDays || tmpl.ValidityDays || 365;
+      const daysText = window.I18N ? window.I18N.t('days_unit', 'giorni') : 'giorni';
 
       card.innerHTML = `
         <div class="template-name">${escapeHtml(displayName)}</div>
@@ -189,15 +188,15 @@
         <div class="template-tags">
           ${approvalBadge}
           ${lockBadge}
-          <span class="tag">${validityDays} ${isEn ? 'days' : 'giorni'}</span>
+          <span class="tag">${validityDays} ${daysText}</span>
           <span class="tag">${escapeHtml(name)}</span>
         </div>
       `;
 
       card.addEventListener('click', () => {
         if (!isAllowed) {
-          alert(isEn 
-            ? 'Unauthorized template: membership in one of the configured AD groups is required to request certificates with this template. Please contact a portal administrator.' 
+          alert(window.I18N 
+            ? window.I18N.t('unauthorized_template_alert', 'Template non autorizzato: per emettere certificati con questo template è richiesta l\'appartenenza a uno dei gruppi AD configurati. Contatta un amministratore del portale.') 
             : 'Template non autorizzato: per emettere certificati con questo template è richiesta l\'appartenenza a uno dei gruppi AD configurati. Contatta un amministratore del portale.');
           return;
         }
@@ -211,13 +210,12 @@
   }
 
   function renderUploadTemplates(templates) {
-    const isEn = window.I18N && window.I18N.getLanguage() === 'en';
     const select = document.getElementById('upload-template-select');
     select.innerHTML = '';
     if (!templates || templates.length === 0) {
       const opt = document.createElement('option');
       opt.value = '';
-      opt.textContent = isEn ? 'No templates available' : 'Nessun template disponibile';
+      opt.textContent = window.I18N ? window.I18N.t('no_templates_avail', 'Nessun template disponibile') : 'Nessun template disponibile';
       select.appendChild(opt);
       return;
     }
@@ -231,7 +229,7 @@
       const approvalText = requiresApproval 
         ? (window.I18N ? window.I18N.t('requires_approval_badge', 'Richiede Approvazione') : 'Richiede Approvazione')
         : (window.I18N ? window.I18N.t('auto_issued_badge', 'Immediato') : 'Immediato');
-      const notAllowedText = isEn ? ' — Not authorized' : ' — Non autorizzato';
+      const notAllowedText = window.I18N ? window.I18N.t('not_authorized_tag', ' — Non autorizzato') : ' — Non autorizzato';
       opt.textContent = `${displayName} (${approvalText})${isAllowed ? '' : notAllowedText}`;
       opt.disabled = !isAllowed;
       select.appendChild(opt);
@@ -295,7 +293,8 @@
     list.innerHTML = '';
 
     if (sansList.length === 0) {
-      list.innerHTML = '<span style="font-size: 0.8rem; color: var(--gray-400); margin-left: 0.5rem;">Nessun SAN alternativo aggiunto (il CN verrà inserito automaticamente)</span>';
+      const hint = window.I18N ? window.I18N.t('san_empty_hint', 'Nessun SAN alternativo aggiunto (il CN verrà inserito automaticamente)') : 'Nessun SAN alternativo aggiunto (il CN verrà inserito automaticamente)';
+      list.innerHTML = `<span style="font-size: 0.8rem; color: var(--gray-400); margin-left: 0.5rem;">${escapeHtml(hint)}</span>`;
       return;
     }
 
@@ -327,18 +326,18 @@
       const pfxPassword = document.getElementById('pfx-password').value;
 
       if (!cn) {
-        alert('Il campo Common Name (CN) è obbligatorio.');
+        alert(window.I18N ? window.I18N.t('err_enter_cn', 'Il campo Common Name (CN) è obbligatorio.') : 'Il campo Common Name (CN) è obbligatorio.');
         document.getElementById('form-cn').focus();
         return;
       }
 
       if (!selectedTemplate) {
-        alert('Selezionare un Certificate Template.');
+        alert(window.I18N ? window.I18N.t('err_select_template', 'Selezionare un Certificate Template.') : 'Selezionare un Certificate Template.');
         return;
       }
 
       if (!pfxPassword) {
-        alert('Impostare una password di protezione per il file PFX.');
+        alert(window.I18N ? window.I18N.t('err_enter_pfx_pwd', 'Impostare una password di protezione per il file PFX.') : 'Impostare una password di protezione per il file PFX.');
         document.getElementById('pfx-password').focus();
         return;
       }
@@ -351,7 +350,10 @@
         finalSans.unshift({ type: 'DNS', value: cn });
       }
 
-      showProgress('Generazione Crittografica Locale', 'Creazione della coppia di chiavi RSA/ECC nel browser tramite Web Crypto...');
+      showProgress(
+        window.I18N ? window.I18N.t('progress_crypto_local_title', 'Generazione Crittografica Locale') : 'Generazione Crittografica Locale',
+        window.I18N ? window.I18N.t('progress_crypto_local_desc', 'Creazione della coppia di chiavi RSA/ECC nel browser tramite Web Crypto...') : 'Creazione della coppia di chiavi RSA/ECC nel browser tramite Web Crypto...'
+      );
 
       try {
         // Step 1: Generazione CSR in JavaScript
@@ -366,7 +368,10 @@
 
         const privateKeyPem = CryptoHelper.exportPrivateKeyPem(privateKey);
 
-        updateProgress('Sottomissione alla CA', 'Invio sicuro del CSR alla Sub-CA Microsoft AD CS...');
+        updateProgress(
+          window.I18N ? window.I18N.t('progress_submitting_ca_title', 'Sottomissione alla CA') : 'Sottomissione alla CA',
+          window.I18N ? window.I18N.t('progress_submitting_ca_desc', 'Invio sicuro del CSR alla Sub-CA Microsoft AD CS...') : 'Invio sicuro del CSR alla Sub-CA Microsoft AD CS...'
+        );
 
         // Step 2: Sottomissione al backend
         const response = await fetch('/api/certificates/request', {
@@ -389,30 +394,22 @@
         }
 
         if (result.disposition === 'UnderSubmission') {
-          alert(`Richiesta inoltrata con successo!\n\nLa richiesta è in attesa di approvazione manuale (Pending).\nRequest ID: #${result.requestId}\n\nUna volta approvata dall'amministratore, potrai ritirarla dalla scheda "Ritiro Certificati" scaricando sia il certificato (.crt) sia l'archivio con chiave privata (.pfx).`);
+          const msg = window.I18N
+            ? window.I18N.t('msg_pending_submission_wizard', null, { requestId: result.requestId })
+            : `Richiesta inoltrata con successo!\n\nLa richiesta è in attesa di approvazione manuale (Pending).\nRequest ID: #${result.requestId}\n\nUna volta approvata dall'amministratore, potrai ritirarla dalla scheda "Ritiro Certificati" scaricando sia il certificato (.crt) sia l'archivio con chiave privata (.pfx).`;
+          alert(msg);
           return;
         }
 
         // Step 3: Emissione completata! Creazione del PFX client-side
-        showProgress('Creazione Archivio PFX', 'Assemblaggio del pacchetto PKCS#12 protetto da password...');
+        showProgress(
+          window.I18N ? window.I18N.t('progress_pfx_title', 'Creazione Archivio PFX') : 'Creazione Archivio PFX',
+          window.I18N ? window.I18N.t('progress_pfx_desc', 'Assemblaggio del pacchetto PKCS#12 (.pfx) protetto da password...') : 'Assemblaggio del pacchetto PKCS#12 protetto da password...'
+        );
 
         lastIssuedCertPem = result.certificatePem;
         lastIssuedChainPem = result.certificateChainPem;
         lastIssuedP7bBase64 = result.p7bBase64 || null;
-
-        // === DEBUG: log dei dati ricevuti dal server ===
-        console.log('=== DEBUG PFX: dati ricevuti dal server ===');
-        console.log('certificatePem type:', typeof lastIssuedCertPem);
-        console.log('certificatePem length:', lastIssuedCertPem ? lastIssuedCertPem.length : 'null/undefined');
-        console.log('certificatePem (primi 300 char):', lastIssuedCertPem ? lastIssuedCertPem.substring(0, 300) : 'VUOTO');
-        console.log('certificatePem (ultimi 100 char):', lastIssuedCertPem ? lastIssuedCertPem.substring(lastIssuedCertPem.length - 100) : 'VUOTO');
-        console.log('chainPem type:', typeof lastIssuedChainPem);
-        console.log('chainPem length:', lastIssuedChainPem ? lastIssuedChainPem.length : 'null/undefined');
-        console.log('chainPem (primi 300 char):', lastIssuedChainPem ? lastIssuedChainPem.substring(0, 300) : 'VUOTO');
-        console.log('privateKey type:', typeof privateKey);
-        console.log('privateKey has n:', privateKey && privateKey.n ? 'SI' : 'NO');
-        console.log('Intero result JSON:', JSON.stringify(result).substring(0, 500));
-        console.log('=== FINE DEBUG PFX ===');
 
         try {
           lastGeneratedPfxBlob = CryptoHelper.createPfxBundle(
@@ -422,19 +419,14 @@
             pfxPassword
           );
         } catch (pfxErr) {
-          console.error('=== ERRORE PFX dettagliato ===');
-          console.error('Messaggio:', pfxErr.message);
-          console.error('Stack:', pfxErr.stack);
-          console.error('certificatePem COMPLETO:', lastIssuedCertPem);
-          console.error('chainPem COMPLETO:', lastIssuedChainPem);
-          console.error('=== FINE ERRORE PFX ===');
+          console.error('=== ERRORE PFX dettagliato ===', pfxErr);
           throw pfxErr;
         }
 
         hideProgress();
 
         // Mostra il box dei download
-        showResultBox(result.statusMessage || 'Certificato emesso con successo!', true);
+        showResultBox(result.statusMessage || (window.I18N ? window.I18N.t('result_title', 'Certificato emesso con successo!') : 'Certificato emesso con successo!'), true);
 
       } catch (err) {
         hideProgress();
@@ -472,11 +464,14 @@
       const template = document.getElementById('upload-template-select').value;
 
       if (!csr) {
-        alert('Incollare o caricare un file CSR prima di procedere.');
+        alert(window.I18N ? window.I18N.t('err_enter_csr', 'Incollare o caricare un file CSR prima di procedere.') : 'Incollare o caricare un file CSR prima di procedere.');
         return;
       }
 
-      showProgress('Sottomissione CSR', 'Invio del CSR Base64 alla Subordinate CA AD CS...');
+      showProgress(
+        window.I18N ? window.I18N.t('progress_submitting_csr_title', 'Sottomissione CSR') : 'Sottomissione CSR',
+        window.I18N ? window.I18N.t('progress_submitting_csr_desc', 'Invio del CSR Base64 alla Subordinate CA AD CS...') : 'Invio del CSR Base64 alla Subordinate CA AD CS...'
+      );
 
       try {
         const response = await fetch('/api/certificates/request', {
@@ -498,7 +493,10 @@
         }
 
         if (result.disposition === 'UnderSubmission') {
-          alert(`Richiesta inviata con successo!\n\nStato: In attesa di approvazione (Pending).\nRequest ID: #${result.requestId}`);
+          const msg = window.I18N
+            ? window.I18N.t('msg_pending_submission_upload', null, { requestId: result.requestId })
+            : `Richiesta inviata con successo!\n\nStato: In attesa di approvazione (Pending).\nRequest ID: #${result.requestId}`;
+          alert(msg);
           return;
         }
 
@@ -508,7 +506,7 @@
         lastGeneratedPfxBlob = null; // Nessuna chiave privata per CSR pre-generato
         lastCommonName = 'cert_' + result.requestId;
 
-        showResultBox(result.statusMessage || 'Certificato emesso con successo!', false);
+        showResultBox(result.statusMessage || (window.I18N ? window.I18N.t('result_title', 'Certificato emesso con successo!') : 'Certificato emesso con successo!'), false);
 
       } catch (err) {
         hideProgress();
@@ -556,7 +554,8 @@
     const btnCancel = document.getElementById('btn-pfx-modal-cancel');
 
     if (!modal || !pwdInput) {
-      const pwd = prompt('Inserisci la password per proteggere il file PFX (opzionale):', '');
+      const promptText = window.I18N ? window.I18N.t('pfx_prompt_password', 'Inserisci la password per proteggere il file PFX (opzionale):') : 'Inserisci la password per proteggere il file PFX (opzionale):';
+      const pwd = prompt(promptText, '');
       if (pwd === null) return;
       doGenerateAndDownloadPfx(privateKeyPem, certPem, chainPem, certCommonName, pwd);
       return;
@@ -600,7 +599,10 @@
 
   function doGenerateAndDownloadPfx(privateKeyPem, certPem, chainPem, certCommonName, password) {
     try {
-      showProgress('Creazione Archivio PFX', 'Assemblaggio del pacchetto PKCS#12 (.pfx) protetto da password...');
+      showProgress(
+        window.I18N ? window.I18N.t('progress_pfx_title', 'Creazione Archivio PFX') : 'Creazione Archivio PFX',
+        window.I18N ? window.I18N.t('progress_pfx_desc', 'Assemblaggio del pacchetto PKCS#12 (.pfx) protetto da password...') : 'Assemblaggio del pacchetto PKCS#12 (.pfx) protetto da password...'
+      );
       setTimeout(() => {
         try {
           const pfxBlob = CryptoHelper.createPfxBundle(
@@ -615,7 +617,8 @@
         } catch (err) {
           hideProgress();
           console.error('Errore generazione PFX:', err);
-          alert('Errore durante la creazione del file PFX: ' + err.message);
+          const errMsg = (window.I18N ? window.I18N.t('err_pfx_creation', 'Errore durante la creazione del file PFX: ') : 'Errore durante la creazione del file PFX: ') + err.message;
+          alert(errMsg);
         }
       }, 50);
     } catch (err) {
@@ -629,16 +632,15 @@
     const btn = document.getElementById('btn-check-pending');
     if (btn) {
       btn.addEventListener('click', async () => {
-        const isEn = window.I18N && window.I18N.getLanguage() === 'en';
         const reqId = document.getElementById('pending-req-id').value;
         if (!reqId) {
-          alert(isEn ? 'Please enter a Request ID.' : 'Inserire il Request ID.');
+          alert(window.I18N ? window.I18N.t('err_enter_req_id', 'Inserire il Request ID.') : 'Inserire il Request ID.');
           return;
         }
 
         showProgress(
-          isEn ? 'Checking Request Status' : 'Verifica Stato Richiesta',
-          isEn ? `Querying CA for request #${reqId}...` : `Interrogazione CA per la richiesta #${reqId}...`
+          window.I18N ? window.I18N.t('progress_checking_status_title', 'Verifica Stato Richiesta') : 'Verifica Stato Richiesta',
+          window.I18N ? window.I18N.t('progress_checking_status_desc', null, { requestId: reqId }) : `Interrogazione CA per la richiesta #${reqId}...`
         );
 
         try {
@@ -649,10 +651,12 @@
           resultArea.style.display = 'block';
 
           if (response.status === 401) {
+            const authTitle = window.I18N ? window.I18N.t('auth_required_title', 'Autenticazione Richiesta') : 'Autenticazione Richiesta';
+            const authDesc = window.I18N ? window.I18N.t('auth_required_desc', 'È necessario accedere con il proprio account utente per verificare e scaricare i certificati.') : 'È necessario accedere con il proprio account utente per verificare e scaricare i certificati.';
             resultArea.innerHTML = `
               <div class="alert alert-warning">
-                <strong>🔒 ${isEn ? 'Authentication Required' : 'Autenticazione Richiesta'}</strong>
-                <p style="margin-top: 0.25rem;">${isEn ? 'Please sign in with your user account to verify and download certificates.' : 'È necessario accedere con il proprio account utente per verificare e scaricare i certificati.'}</p>
+                <strong>🔒 ${escapeHtml(authTitle)}</strong>
+                <p style="margin-top: 0.25rem;">${escapeHtml(authDesc)}</p>
               </div>
             `;
             return;
@@ -660,11 +664,22 @@
 
           if (response.status === 403) {
             const errData = await response.json();
+            const secTitle = window.I18N ? window.I18N.t('access_denied_security_title', 'Accesso Negato (Controllo di Sicurezza)') : 'Accesso Negato (Controllo di Sicurezza)';
+            let displayMsg = errData.statusMessage;
+            if (errData.errorCode === 'NotOwner' || (errData.statusMessage && errData.statusMessage.includes('non risulta associata'))) {
+              const currentUserName = errData.requesterUser || (cachedUserData && cachedUserData.userName) || '';
+              displayMsg = window.I18N
+                ? window.I18N.t('access_denied_security_not_owner', null, { requestId: reqId, currentUser: currentUserName })
+                : `Accesso negato: La richiesta #${reqId} non risulta associata al tuo account (${currentUserName}). Solo il richiedente originale o un amministratore possono recuperare il certificato.`;
+            } else if (!displayMsg) {
+              displayMsg = window.I18N ? window.I18N.t('access_denied_security_desc', 'Non sei autorizzato a recuperare questo certificato. Il recupero è consentito esclusivamente a chi ha effettuato la richiesta o a un amministratore.') : 'Non sei autorizzato a recuperare questo certificato. Il recupero è consentito esclusivamente a chi ha effettuato la richiesta o a un amministratore.';
+            }
+
             resultArea.innerHTML = `
               <div class="alert alert-danger" style="border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.1);">
                 <div>
-                  <strong style="color: #ef4444; font-size: 1rem;">⛔ ${isEn ? 'Access Denied (Security Check)' : 'Accesso Negato (Controllo di Sicurezza)'}</strong>
-                  <p style="margin-top: 0.35rem; color: var(--text-color, #e2e8f0);">${escapeHtml(errData.statusMessage || (isEn ? 'You are not authorized to retrieve this certificate. Retrieval is restricted to the original requester or an administrator.' : 'Non sei autorizzato a recuperare questo certificato. Il recupero è consentito esclusivamente a chi ha effettuato la richiesta o a un amministratore.'))}</p>
+                  <strong style="color: #ef4444; font-size: 1rem;">⛔ ${escapeHtml(secTitle)}</strong>
+                  <p style="margin-top: 0.35rem; color: var(--text-color, #e2e8f0);">${escapeHtml(displayMsg)}</p>
                 </div>
               </div>
             `;
@@ -675,21 +690,30 @@
 
           if (result.success && result.disposition === 'Issued') {
             const hasPfx = !!(result.privateKeyPem || result.hasPrivateKey);
+            const readyTitle = window.I18N ? window.I18N.t('pending_ready_title', 'Certificato Pronto ed Emesso!') : 'Certificato Pronto ed Emesso!';
+            const readyDesc = window.I18N ? window.I18N.t('pending_ready_desc', null, { requestId: reqId }) : `La richiesta #${reqId} è stata approvata/emessa con successo.`;
+            const reqLabel = window.I18N ? window.I18N.t('requester_label', 'Richiedente:') : 'Richiedente:';
+            const unspecLabel = window.I18N ? window.I18N.t('unspecified_label', 'Non specificato') : 'Non specificato';
+            const dlPfxText = window.I18N ? window.I18N.t('pending_dl_pfx_btn', '🔐 Scarica Archivio PFX (.pfx)') : '🔐 Scarica Archivio PFX (.pfx)';
+            const dlCertText = window.I18N ? window.I18N.t('pending_dl_crt_btn', '📄 Scarica Certificato (.crt)') : '📄 Scarica Certificato (.crt)';
+            const dlP7bText = window.I18N ? window.I18N.t('pending_dl_p7b_btn', '🔗 Scarica Catena Completa (.p7b)') : '🔗 Scarica Catena Completa (.p7b)';
+            const dlChainText = window.I18N ? window.I18N.t('pending_dl_chain_btn', '📜 Scarica Catena (.crt)') : '📜 Scarica Catena (.crt)';
+
             resultArea.innerHTML = `
               <div class="alert alert-success">
                 <div>
-                  <strong>${isEn ? 'Certificate Ready and Issued!' : 'Certificato Pronto ed Emesso!'}</strong>
-                  <p style="margin-top: 0.35rem;">${escapeHtml(result.statusMessage || (isEn ? `Request #${reqId} was successfully approved/issued.` : `La richiesta #${reqId} è stata approvata/emessa con successo.`))}</p>
+                  <strong>${escapeHtml(readyTitle)}</strong>
+                  <p style="margin-top: 0.35rem;">${escapeHtml(result.statusMessage || readyDesc)}</p>
                   <div style="margin-top: 0.6rem; font-size: 0.85rem; line-height: 1.6; background: rgba(0,0,0,0.05); padding: 0.6rem 0.8rem; border-radius: 6px; margin-bottom: 0.75rem;">
-                    <div><strong>${isEn ? 'Requester:' : 'Richiedente:'}</strong> 👤 ${escapeHtml(result.requesterUser || (isEn ? 'Unspecified' : 'Non specificato'))}</div>
+                    <div><strong>${escapeHtml(reqLabel)}</strong> 👤 ${escapeHtml(result.requesterUser || unspecLabel)}</div>
                     <div><strong>Common Name (CN):</strong> <code>${escapeHtml(result.subjectCommonName || '-')}</code></div>
                     ${result.templateDisplayName ? `<div><strong>Template:</strong> ${escapeHtml(result.templateDisplayName)}</div>` : ''}
                   </div>
                   <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                    ${hasPfx ? `<button type="button" class="btn btn-primary btn-sm" id="btn-dl-pending-pfx">🔐 ${isEn ? 'Download PFX Archive (.pfx)' : 'Scarica Archivio PFX (.pfx)'}</button>` : ''}
-                    <button type="button" class="btn btn-success btn-sm" id="btn-dl-pending-cert">📄 ${isEn ? 'Download Certificate (.crt)' : 'Scarica Certificato (.crt)'}</button>
-                    ${result.p7bBase64 ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-dl-pending-p7b">🔗 ${isEn ? 'Download Full Chain (.p7b)' : 'Scarica Catena Completa (.p7b)'}</button>` : ''}
-                    ${result.certificateChainPem ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-dl-pending-chain">📜 ${isEn ? 'Download Chain (.crt)' : 'Scarica Catena (.crt)'}</button>` : ''}
+                    ${hasPfx ? `<button type="button" class="btn btn-primary btn-sm" id="btn-dl-pending-pfx">${escapeHtml(dlPfxText)}</button>` : ''}
+                    <button type="button" class="btn btn-success btn-sm" id="btn-dl-pending-cert">${escapeHtml(dlCertText)}</button>
+                    ${result.p7bBase64 ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-dl-pending-p7b">${escapeHtml(dlP7bText)}</button>` : ''}
+                    ${result.certificateChainPem ? `<button type="button" class="btn btn-secondary btn-sm" id="btn-dl-pending-chain">${escapeHtml(dlChainText)}</button>` : ''}
                   </div>
                 </div>
               </div>
@@ -717,7 +741,6 @@
               const p7bBtn = document.getElementById('btn-dl-pending-p7b');
               if (p7bBtn) {
                 p7bBtn.addEventListener('click', () => {
-                  // PKCS#7 (.p7b) reale con la catena completa; fallback sulla catena PEM
                   const p7bText = p7bBase64ToFileText(result.p7bBase64);
                   if (p7bText) {
                     downloadFile(`${result.subjectCommonName || reqId}_chain.p7b`, p7bText, 'application/x-pkcs7-certificates');
@@ -740,17 +763,20 @@
             // Aggiorna lo storico delle proprie richieste
             loadMyRequests();
           } else {
+            const pendingTitle = window.I18N ? window.I18N.t('pending_status_box_title', 'Stato Richiesta: In Attesa o Non Disponibile') : 'Stato Richiesta: In Attesa o Non Disponibile';
+            const pendingDesc = window.I18N ? window.I18N.t('pending_status_box_desc', 'Richiesta ancora in attesa di approvazione.') : 'Richiesta ancora in attesa di approvazione.';
+            const reqLabel = window.I18N ? window.I18N.t('requester_label', 'Richiedente:') : 'Richiedente:';
             resultArea.innerHTML = `
               <div class="alert alert-warning">
-                <strong>${isEn ? 'Request Status: Pending or Unavailable' : 'Stato Richiesta: In Attesa o Non Disponibile'}</strong>
-                <p style="margin-top: 0.25rem;">${escapeHtml(result.statusMessage || (isEn ? 'Request still pending approval.' : 'Richiesta ancora in attesa di approvazione.'))}</p>
-                ${result.requesterUser ? `<div style="margin-top:0.35rem; font-size: 0.85rem;"><strong>${isEn ? 'Requester:' : 'Richiedente:'}</strong> 👤 ${escapeHtml(result.requesterUser)}</div>` : ''}
+                <strong>${escapeHtml(pendingTitle)}</strong>
+                <p style="margin-top: 0.25rem;">${escapeHtml(result.statusMessage || pendingDesc)}</p>
+                ${result.requesterUser ? `<div style="margin-top:0.35rem; font-size: 0.85rem;"><strong>${escapeHtml(reqLabel)}</strong> 👤 ${escapeHtml(result.requesterUser)}</div>` : ''}
               </div>
             `;
           }
         } catch (err) {
           hideProgress();
-          alert((isEn ? 'Error during verification: ' : 'Errore durante la verifica: ') + err.message);
+          alert('Errore durante la verifica: ' + err.message);
         }
       });
     }
@@ -765,48 +791,58 @@
   async function loadMyRequests() {
     const area = document.getElementById('my-requests-area');
     if (!area) return;
-    const isEn = window.I18N && window.I18N.getLanguage() === 'en';
 
     try {
       const resp = await fetch('/api/certificates/my-requests');
       if (resp.status === 401) {
-        area.innerHTML = `<p style="color: var(--text-muted, #94a3b8); font-size: 0.9rem;">🔒 ${isEn ? 'Please log in to view your request history.' : 'Effettua l\'accesso per visualizzare lo storico delle tue richieste.'}</p>`;
+        const loginReqMsg = window.I18N ? window.I18N.t('login_required', 'Effettua l\'accesso per visualizzare lo storico delle tue richieste.') : 'Effettua l\'accesso per visualizzare lo storico delle tue richieste.';
+        area.innerHTML = `<p style="color: var(--text-muted, #94a3b8); font-size: 0.9rem;">🔒 ${escapeHtml(loginReqMsg)}</p>`;
         return;
       }
-      if (!resp.ok) throw new Error(isEn ? 'Error retrieving requests.' : 'Errore durante il recupero delle richieste.');
+      if (!resp.ok) throw new Error('Errore durante il recupero delle richieste.');
 
       const requests = await resp.json();
       if (!requests || requests.length === 0) {
-        area.innerHTML = `<p style="color: var(--text-muted, #94a3b8); font-size: 0.9rem;">${isEn ? 'No certificate requests found for your account.' : 'Nessuna richiesta certificato trovata per il tuo account.'}</p>`;
+        const noReqMsg = window.I18N ? window.I18N.t('no_requests_found', 'Nessuna richiesta certificato trovata a tuo nome.') : 'Nessuna richiesta certificato trovata a tuo nome.';
+        area.innerHTML = `<p style="color: var(--text-muted, #94a3b8); font-size: 0.9rem;">${escapeHtml(noReqMsg)}</p>`;
         return;
       }
+
+      const thReq = window.I18N ? window.I18N.t('th_requester', 'Richiedente') : 'Richiedente';
+      const thDate = window.I18N ? window.I18N.t('th_date', 'Data') : 'Data';
+      const thStatus = window.I18N ? window.I18N.t('th_status', 'Stato') : 'Stato';
+      const thAction = window.I18N ? window.I18N.t('th_action', 'Azione') : 'Azione';
+      const userLocale = window.I18N ? window.I18N.getLocale() : 'it-IT';
 
       let html = `
         <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem;">
           <thead>
             <tr style="border-bottom: 2px solid var(--border-color, #334155); text-align: left;">
               <th style="padding: 0.6rem 0.5rem;">ID (#)</th>
-              <th style="padding: 0.6rem 0.5rem;">${isEn ? 'Requester' : 'Richiedente'}</th>
+              <th style="padding: 0.6rem 0.5rem;">${escapeHtml(thReq)}</th>
               <th style="padding: 0.6rem 0.5rem;">CA</th>
               <th style="padding: 0.6rem 0.5rem;">Template</th>
               <th style="padding: 0.6rem 0.5rem;">Common Name</th>
-              <th style="padding: 0.6rem 0.5rem;">${isEn ? 'Date' : 'Data'}</th>
-              <th style="padding: 0.6rem 0.5rem;">${isEn ? 'Status' : 'Stato'}</th>
-              <th style="padding: 0.6rem 0.5rem; text-align: center;">${isEn ? 'Action' : 'Azione'}</th>
+              <th style="padding: 0.6rem 0.5rem;">${escapeHtml(thDate)}</th>
+              <th style="padding: 0.6rem 0.5rem;">${escapeHtml(thStatus)}</th>
+              <th style="padding: 0.6rem 0.5rem; text-align: center;">${escapeHtml(thAction)}</th>
             </tr>
           </thead>
           <tbody>
       `;
 
       for (const r of requests) {
-        const dateStr = r.submittedAt ? new Date(r.submittedAt).toLocaleString(isEn ? 'en-US' : 'it-IT') : '-';
+        const dateStr = r.submittedAt ? new Date(r.submittedAt).toLocaleString(userLocale) : '-';
         let statusBadge = '';
         if (r.status === 'Issued' || r.status === 'Approved') {
-          statusBadge = `<span style="background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${isEn ? 'Issued' : 'Emesso'}</span>`;
+          const lbl = window.I18N ? window.I18N.t('status_issued', 'Emesso') : 'Emesso';
+          statusBadge = `<span style="background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${escapeHtml(lbl)}</span>`;
         } else if (r.status === 'PendingApproval' || r.status === 'UnderSubmission') {
-          statusBadge = `<span style="background: rgba(234, 179, 8, 0.2); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${isEn ? 'Pending' : 'In Attesa'}</span>`;
+          const lbl = window.I18N ? window.I18N.t('status_pending', 'In Attesa') : 'In Attesa';
+          statusBadge = `<span style="background: rgba(234, 179, 8, 0.2); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${escapeHtml(lbl)}</span>`;
         } else if (r.status === 'Rejected') {
-          statusBadge = `<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${isEn ? 'Rejected' : 'Rifiutato'}</span>`;
+          const lbl = window.I18N ? window.I18N.t('status_rejected', 'Rifiutato') : 'Rifiutato';
+          statusBadge = `<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${escapeHtml(lbl)}</span>`;
         } else {
           statusBadge = `<span style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px;">${escapeHtml(r.status)}</span>`;
         }
@@ -814,10 +850,12 @@
         const canDownload = (r.status === 'Issued' || r.status === 'Approved') && r.hasCertificate;
         let actionHtml = `<span style="color: var(--text-muted, #94a3b8);">-</span>`;
         if (canDownload) {
+          const tipCrt = window.I18N ? window.I18N.t('btn_dl_row_crt_title', 'Scarica Certificato .CRT') : 'Scarica Certificato .CRT';
+          const tipPfx = window.I18N ? window.I18N.t('btn_dl_row_pfx_title', 'Scarica Archivio PFX con chiave privata') : 'Scarica Archivio PFX con chiave privata';
           actionHtml = `
             <div style="display: inline-flex; gap: 0.35rem; justify-content: center; flex-wrap: wrap;">
-              <button type="button" class="btn btn-secondary btn-sm btn-dl-row-crt" data-ca="${escapeHtml(r.caId)}" data-reqid="${r.caRequestId}" data-cn="${escapeHtml(r.subjectCommonName || 'cert')}" style="padding: 0.25rem 0.55rem; font-size: 0.78rem;" title="${isEn ? 'Download .CRT Certificate' : 'Scarica Certificato .CRT'}">.CRT</button>
-              ${r.hasPrivateKey ? `<button type="button" class="btn btn-primary btn-sm btn-dl-row-pfx" data-ca="${escapeHtml(r.caId)}" data-reqid="${r.caRequestId}" data-cn="${escapeHtml(r.subjectCommonName || 'cert')}" style="padding: 0.25rem 0.55rem; font-size: 0.78rem;" title="${isEn ? 'Download PFX archive with private key' : 'Scarica Archivio PFX con chiave privata'}">.PFX</button>` : ''}
+              <button type="button" class="btn btn-secondary btn-sm btn-dl-row-crt" data-ca="${escapeHtml(r.caId)}" data-reqid="${r.caRequestId}" data-cn="${escapeHtml(r.subjectCommonName || 'cert')}" style="padding: 0.25rem 0.55rem; font-size: 0.78rem;" title="${escapeHtml(tipCrt)}">.CRT</button>
+              ${r.hasPrivateKey ? `<button type="button" class="btn btn-primary btn-sm btn-dl-row-pfx" data-ca="${escapeHtml(r.caId)}" data-reqid="${r.caRequestId}" data-cn="${escapeHtml(r.subjectCommonName || 'cert')}" style="padding: 0.25rem 0.55rem; font-size: 0.78rem;" title="${escapeHtml(tipPfx)}">.PFX</button>` : ''}
             </div>
           `;
         }
@@ -845,7 +883,10 @@
           const caId = button.dataset.ca;
           const reqId = button.dataset.reqid;
           const cn = button.dataset.cn || `cert_${reqId}`;
-          showProgress(isEn ? 'Retrieving Certificate' : 'Recupero Certificato', isEn ? `Downloading certificate for request #${reqId}...` : `Download certificato per richiesta #${reqId}...`);
+          showProgress(
+            window.I18N ? window.I18N.t('progress_retrieving_cert_title', 'Recupero Certificato') : 'Recupero Certificato',
+            window.I18N ? window.I18N.t('progress_retrieving_cert_desc', null, { requestId: reqId }) : `Download certificato per richiesta #${reqId}...`
+          );
           try {
             const resp = await fetch(`/api/certificates/status/${caId}/${reqId}`);
             const result = await resp.json();
@@ -853,11 +894,18 @@
             if (result.success && result.certificatePem) {
               downloadFile(`${cn}.crt`, result.certificatePem, 'application/x-x509-ca-cert');
             } else {
-              alert(result.statusMessage || (isEn ? 'Certificate not available for download.' : 'Certificato non disponibile per il download.'));
+              let alertMsg = result.statusMessage;
+              if (result.errorCode === 'NotOwner' || (result.statusMessage && result.statusMessage.includes('non risulta associata'))) {
+                const currentUserName = result.requesterUser || (cachedUserData && cachedUserData.userName) || '';
+                alertMsg = window.I18N
+                  ? window.I18N.t('access_denied_security_not_owner', null, { requestId: reqId, currentUser: currentUserName })
+                  : `Accesso negato: La richiesta #${reqId} non risulta associata al tuo account (${currentUserName}). Solo il richiedente originale o un amministratore possono recuperare il certificato.`;
+              }
+              alert(alertMsg || (window.I18N ? window.I18N.t('cert_not_available_dl', 'Certificato non disponibile per il download.') : 'Certificato non disponibile per il download.'));
             }
           } catch (err) {
             hideProgress();
-            alert((isEn ? 'Download error: ' : 'Errore download: ') + err.message);
+            alert('Errore download: ' + err.message);
           }
         });
       });
@@ -868,7 +916,10 @@
           const caId = button.dataset.ca;
           const reqId = button.dataset.reqid;
           const cn = button.dataset.cn || `cert_${reqId}`;
-          showProgress(isEn ? 'Retrieving Certificate & Key' : 'Recupero Certificato & Chiave', isEn ? `Retrieving PKCS#12 archive for request #${reqId}...` : `Recupero archivio PKCS#12 per richiesta #${reqId}...`);
+          showProgress(
+            window.I18N ? window.I18N.t('progress_pfx_retrieving_title', 'Recupero Certificato & Chiave') : 'Recupero Certificato & Chiave',
+            window.I18N ? window.I18N.t('progress_pfx_retrieving_desc', null, { requestId: reqId }) : `Recupero archivio PKCS#12 per richiesta #${reqId}...`
+          );
           try {
             const resp = await fetch(`/api/certificates/status/${caId}/${reqId}`);
             const result = await resp.json();
@@ -876,17 +927,25 @@
             if (result.success && result.certificatePem && result.privateKeyPem) {
               promptAndDownloadPfx(result.privateKeyPem, result.certificatePem, result.certificateChainPem, cn);
             } else {
-              alert(result.statusMessage || (isEn ? 'Private key not available for this request.' : 'Chiave privata non disponibile per questa richiesta.'));
+              let alertMsg = result.statusMessage;
+              if (result.errorCode === 'NotOwner' || (result.statusMessage && result.statusMessage.includes('non risulta associata'))) {
+                const currentUserName = result.requesterUser || (cachedUserData && cachedUserData.userName) || '';
+                alertMsg = window.I18N
+                  ? window.I18N.t('access_denied_security_not_owner', null, { requestId: reqId, currentUser: currentUserName })
+                  : `Accesso negato: La richiesta #${reqId} non risulta associata al tuo account (${currentUserName}). Solo il richiedente originale o un amministratore possono recuperare il certificato.`;
+              }
+              const noKeyMsg = window.I18N ? window.I18N.t('err_pfx_no_key', 'Chiave privata non disponibile per questa richiesta.') : 'Chiave privata non disponibile per questa richiesta.';
+              alert(alertMsg || noKeyMsg);
             }
           } catch (err) {
             hideProgress();
-            alert((isEn ? 'PFX download error: ' : 'Errore download PFX: ') + err.message);
+            alert('Errore download PFX: ' + err.message);
           }
         });
       });
 
     } catch (err) {
-      area.innerHTML = `<p style="color: #ef4444; font-size: 0.9rem;">${isEn ? 'Error loading requests: ' : 'Errore caricamento richieste: '}${escapeHtml(err.message)}</p>`;
+      area.innerHTML = `<p style="color: #ef4444; font-size: 0.9rem;">Errore caricamento richieste: ${escapeHtml(err.message)}</p>`;
     }
   }
 
@@ -901,26 +960,29 @@
         }
       }
       const data = cachedUserData;
-      const isEn = window.I18N && window.I18N.getLanguage() === 'en';
       const badge = document.getElementById('portal-user-badge');
       const nameSpan = document.getElementById('portal-user-name');
+      const connAsText = window.I18N ? window.I18N.t('connected_as', 'Connesso come') : 'Connesso come';
+      const anonText = window.I18N ? window.I18N.t('anonymous_user', 'Anonimo') : 'Anonimo';
+      const unauthText = window.I18N ? window.I18N.t('unauthenticated_user', 'Non autenticato') : 'Non autenticato';
+
       if (data && badge && nameSpan) {
         if (data.isAuthenticated) {
           nameSpan.textContent = data.isAdmin ? `${data.userName} (Admin)` : data.userName;
-          badge.title = `${isEn ? 'Connected as' : 'Connesso come'}: ${data.userName}`;
+          badge.title = `${connAsText}: ${data.userName}`;
           if (data.isAdmin) {
             const myRequestsTitle = document.getElementById('my-requests-title');
             const myRequestsSubtitle = document.getElementById('my-requests-subtitle');
-            if (myRequestsTitle) myRequestsTitle.textContent = isEn ? '📋 All Certificates and Requests (Administrator)' : '📋 Tutti i Certificati e Richieste (Amministratore)';
-            if (myRequestsSubtitle) myRequestsSubtitle.textContent = isEn ? 'Global list of all certificate requests registered in the portal.' : 'Elenco globale di tutte le richieste registrate nel portale.';
+            if (myRequestsTitle) myRequestsTitle.textContent = window.I18N ? window.I18N.t('all_requests_admin_title', '📋 Tutti i Certificati e Richieste (Amministratore)') : '📋 Tutti i Certificati e Richieste (Amministratore)';
+            if (myRequestsSubtitle) myRequestsSubtitle.textContent = window.I18N ? window.I18N.t('all_requests_admin_subtitle', 'Elenco globale di tutte le richieste registrate nel portale.') : 'Elenco globale di tutte le richieste registrate nel portale.';
           }
         } else {
-          nameSpan.textContent = isEn ? 'Anonymous' : 'Anonimo';
-          badge.title = isEn ? 'Unauthenticated access' : 'Accesso non autenticato';
+          nameSpan.textContent = anonText;
+          badge.title = unauthText;
         }
       } else if (nameSpan) {
-        nameSpan.textContent = isEn ? 'Unauthenticated' : 'Non autenticato';
-        if (badge) badge.title = isEn ? 'Unauthenticated access' : 'Accesso non autenticato';
+        nameSpan.textContent = unauthText;
+        if (badge) badge.title = unauthText;
       }
     } catch { }
   }

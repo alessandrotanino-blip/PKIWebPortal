@@ -4,12 +4,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PKI Portal - Configurazione Amministratore</title>
-  <link rel="stylesheet" href="/css/styles.css">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('pki-theme');
+      if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/css/styles.css?v=2.0.9">
   <style>
-    .admin-container { max-width: 1000px; margin: 2rem auto; padding: 0 1.5rem; }
+    .admin-container { max-width: 1440px; margin: 2rem auto; padding: 0 2rem; }
     .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     .admin-header h2 { font-size: 1.3rem; color: var(--gray-900); }
-    .user-badge { font-size: 0.85rem; color: var(--gray-600); background: var(--gray-100); padding: 0.4rem 0.8rem; border-radius: var(--radius); border: 1px solid var(--gray-200); }
+    .user-badge { font-size: 0.85rem; font-weight: 600; color: var(--primary, #2563eb); background: var(--primary-light, #eff6ff); padding: 0.4rem 0.8rem; border-radius: var(--radius); border: 1px solid var(--primary, #2563eb); }
+    [data-theme="dark"] .user-badge { color: #93c5fd; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.4); }
     .section-title { font-size: 1.1rem; font-weight: 700; color: var(--gray-900); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
     .ca-card { border: 1px solid var(--gray-200); border-radius: var(--radius); margin-bottom: 1rem; overflow: hidden; background: white; }
     [data-theme="dark"] .ca-card { background: var(--gray-100); }
@@ -74,7 +85,7 @@
     .status-rejected { background: #fee2e2; color: #991b1b; }
     .cert-view-box { margin-top: 1rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 0.75rem; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; display: none; }
   </style>
-  <script src="/js/i18n.js?v=2.0.6"></script>
+  <script src="/js/i18n.js?v=2.0.9"></script>
 </head>
 <body>
   <header class="navbar">
@@ -82,13 +93,45 @@
       <div class="brand-icon">PKI</div>
       <div class="brand-text">
         <h1 data-i18n="admin_panel_title">Configurazione Portale PKI</h1>
-        <p><span data-i18n="admin_panel_sub">Pannello di Amministrazione</span> <span class="brand-version">v2.0.6</span></p>
+        <p><span data-i18n="admin_panel_sub">Pannello di Amministrazione</span> <span class="brand-version">v2.0.9</span></p>
       </div>
     </div>
     <div class="nav-actions">
-      <button id="lang-toggle" class="lang-toggle-btn" data-i18n-title="lang_toggle_title" title="Switch to English" style="margin-right: 0.75rem;">
-        🌐 <span class="lang-label">EN</span>
+      <button id="theme-toggle" class="theme-toggle" data-i18n-title="theme_toggle_title" title="Cambia tema">
+        <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+        <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       </button>
+      <div class="lang-dropdown" id="lang-dropdown" style="margin-right: 0.75rem;">
+        <button type="button" class="lang-dropdown-btn" id="lang-dropdown-btn" aria-haspopup="true" aria-expanded="false" data-i18n-title="lang_select_title" title="Seleziona lingua">
+          <span class="lang-flag" id="lang-current-flag">
+            <svg class="flag-icon" viewBox="0 0 18 12" width="18" height="12"><rect width="6" height="12" fill="#009246"/><rect x="6" width="6" height="12" fill="#ffffff"/><rect x="12" width="6" height="12" fill="#ce2b37"/></svg>
+          </span>
+          <span class="lang-code" id="lang-current-code">IT</span>
+          <span class="lang-arrow">▾</span>
+        </button>
+        <div class="lang-dropdown-menu" id="lang-dropdown-menu" role="menu" style="display: none;">
+          <button type="button" class="lang-dropdown-item active" data-lang="it" role="menuitem">
+            <span class="lang-item-flag"><svg class="flag-icon" viewBox="0 0 18 12" width="18" height="12"><rect width="6" height="12" fill="#009246"/><rect x="6" width="6" height="12" fill="#ffffff"/><rect x="12" width="6" height="12" fill="#ce2b37"/></svg></span>
+            <span class="lang-name">Italiano</span>
+          </button>
+          <button type="button" class="lang-dropdown-item" data-lang="en" role="menuitem">
+            <span class="lang-item-flag"><svg class="flag-icon" viewBox="0 0 60 30" width="18" height="12"><clipPath id="uk-c-admin"><path d="M0 0 v30 h60 v-30 z"/></clipPath><clipPath id="uk-d-admin"><path d="M30 15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath><g clip-path="url(#uk-c-admin)"><path d="M0 0 v30 h60 v-30 z" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#ffffff" stroke-width="6"/><path d="M0 0 L60 30 M60 0 L0 30" clip-path="url(#uk-d-admin)" stroke="#C8102E" stroke-width="4"/><path d="M30 0 v30 M0 15 h60" stroke="#ffffff" stroke-width="10"/><path d="M30 0 v30 M0 15 h60" stroke="#C8102E" stroke-width="6"/></g></svg></span>
+            <span class="lang-name">English</span>
+          </button>
+          <button type="button" class="lang-dropdown-item" data-lang="fr" role="menuitem">
+            <span class="lang-item-flag"><svg class="flag-icon" viewBox="0 0 18 12" width="18" height="12"><rect width="6" height="12" fill="#002395"/><rect x="6" width="6" height="12" fill="#ffffff"/><rect x="12" width="6" height="12" fill="#ed2939"/></svg></span>
+            <span class="lang-name">Français</span>
+          </button>
+          <button type="button" class="lang-dropdown-item" data-lang="de" role="menuitem">
+            <span class="lang-item-flag"><svg class="flag-icon" viewBox="0 0 18 12" width="18" height="12"><rect width="18" height="4" fill="#000000"/><rect y="4" width="18" height="4" fill="#dd0000"/><rect y="8" width="18" height="4" fill="#ffce00"/></svg></span>
+            <span class="lang-name">Deutsch</span>
+          </button>
+          <button type="button" class="lang-dropdown-item" data-lang="es" role="menuitem">
+            <span class="lang-item-flag"><svg class="flag-icon" viewBox="0 0 18 12" width="18" height="12"><rect width="18" height="3" fill="#aa151b"/><rect y="3" width="18" height="6" fill="#f1bf00"/><rect y="9" width="18" height="3" fill="#aa151b"/></svg></span>
+            <span class="lang-name">Español</span>
+          </button>
+        </div>
+      </div>
       <a href="/" class="back-link">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
         <span data-i18n="back_to_portal">Torna al Portale</span>
@@ -195,30 +238,62 @@
 
   <footer>
     <p data-i18n="admin_footer">Enterprise PKI Web Enrollment Gateway &bull; Pannello Amministrativo</p>
+    <p class="footer-author"><span data-i18n="footer_author_label">Autore:</span> <a href="mailto:alessandro.tanino@gmail.com">Alessandro Tanino</a></p>
   </footer>
 
   <script>
   (function() {
     'use strict';
 
-    // Apply saved theme
-    const savedTheme = localStorage.getItem('pki-theme');
-    if (savedTheme) {
-      document.documentElement.setAttribute('data-theme', savedTheme);
-    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      document.documentElement.setAttribute('data-theme', 'dark');
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function setupThemeToggle() {
+      const toggle = document.getElementById('theme-toggle');
+      if (!toggle) return;
+      const iconSun = document.getElementById('theme-icon-sun');
+      const iconMoon = document.getElementById('theme-icon-moon');
+
+      function updateThemeIcon() {
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        if (iconSun) iconSun.style.display = isDark ? 'block' : 'none';
+        if (iconMoon) iconMoon.style.display = isDark ? 'none' : 'block';
+      }
+
+      updateThemeIcon();
+
+      toggle.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem('pki-theme', next);
+        updateThemeIcon();
+      });
     }
 
     let portalConfig = null;
+    let currentAdminUser = '';
 
     document.addEventListener('DOMContentLoaded', init);
 
+    function updateAdminUserBadge() {
+      const userBadge = document.getElementById('admin-user-badge');
+      if (userBadge && currentAdminUser) {
+        const lblUser = window.I18N ? window.I18N.t('admin_user_label', 'Utente:') : 'Utente:';
+        userBadge.textContent = `${lblUser} ${currentAdminUser}`;
+      }
+    }
+
     async function init() {
+      setupThemeToggle();
       // Check admin access
       try {
         const resp = await fetch('/api/admin/check');
         if (resp.status === 401 || resp.status === 403) {
-          showAccessDenied('Autenticazione richiesta.');
+          const authMsg = window.I18N ? window.I18N.t('admin_auth_required', 'Autenticazione richiesta.') : 'Autenticazione richiesta.';
+          showAccessDenied(authMsg);
           return;
         }
         const data = await resp.json();
@@ -226,9 +301,11 @@
           showAccessDenied(data.userName);
           return;
         }
-        document.getElementById('admin-user-badge').textContent = `Utente: ${data.userName}`;
+        currentAdminUser = data.userName;
+        updateAdminUserBadge();
       } catch (err) {
-        showAccessDenied('Errore di connessione');
+        const connMsg = window.I18N ? window.I18N.t('admin_conn_error', 'Errore di connessione') : 'Errore di connessione';
+        showAccessDenied(connMsg);
         return;
       }
 
@@ -236,7 +313,8 @@
       try {
         const resp = await fetch('/api/admin/config');
         if (!resp.ok) {
-          showAccessDenied('Impossibile caricare la configurazione');
+          const cfgMsg = window.I18N ? window.I18N.t('admin_config_load_error', 'Impossibile caricare la configurazione') : 'Impossibile caricare la configurazione';
+          showAccessDenied(cfgMsg);
           return;
         }
         portalConfig = await resp.json();
@@ -253,6 +331,7 @@
 
       // Setup language changed listener
       window.addEventListener('languageChanged', () => {
+        updateAdminUserBadge();
         if (portalConfig) renderConfig();
         loadHeldRequests();
       });
@@ -264,7 +343,9 @@
     function showAccessDenied(userName) {
       document.getElementById('admin-panel').style.display = 'none';
       document.getElementById('access-denied').style.display = 'block';
-      document.getElementById('denied-user').textContent = `Utente: ${userName || 'Sconosciuto'}`;
+      const lblUser = window.I18N ? window.I18N.t('admin_user_label', 'Utente:') : 'Utente:';
+      const unknownText = window.I18N ? window.I18N.t('admin_unknown_user', 'Sconosciuto') : 'Sconosciuto';
+      document.getElementById('denied-user').textContent = `${lblUser} ${userName || unknownText}`;
     }
 
     function renderConfig() {
@@ -285,10 +366,9 @@
       const card = document.createElement('div');
       card.className = 'ca-card';
 
-      const isEn = window.I18N && window.I18N.getLanguage() === 'en';
       const isDefault = ca.isDefault || ca.IsDefault || false;
       const useSimulator = ca.useSimulator || ca.UseSimulator || false;
-      const displayName = ca.displayName || ca.DisplayName || (isEn ? 'New CA' : 'Nuova CA');
+      const displayName = ca.displayName || ca.DisplayName || (window.I18N ? window.I18N.t('admin_new_ca', 'Nuova CA') : 'Nuova CA');
       const id = ca.id || ca.Id || '';
       const forestOrDomain = ca.forestOrDomain || ca.ForestOrDomain || '';
       const configString = ca.configString || ca.ConfigString || '';
@@ -296,8 +376,22 @@
       const authMode = ca.authMode || ca.AuthMode || 'LocalIdentity';
       const credentialTarget = ca.credentialTarget || ca.CredentialTarget || '';
 
-      const defaultTag = isDefault ? `<span class="tag tag-success">${isEn ? 'Default' : 'Predefinita'}</span>` : '';
-      const simulatorTag = useSimulator ? `<span class="tag tag-warning">${isEn ? 'Simulator' : 'Simulatore'}</span>` : '';
+      const defaultTagText = window.I18N ? window.I18N.t('admin_default_tag', 'Predefinita') : 'Predefinita';
+      const simulatorTagText = window.I18N ? window.I18N.t('admin_simulator_tag', 'Simulatore') : 'Simulatore';
+      const defaultTag = isDefault ? `<span class="tag tag-success">${escapeHtml(defaultTagText)}</span>` : '';
+      const simulatorTag = useSimulator ? `<span class="tag tag-warning">${escapeHtml(simulatorTagText)}</span>` : '';
+      const removeCaTitle = window.I18N ? window.I18N.t('admin_remove_ca_title', 'Rimuovi CA') : 'Rimuovi CA';
+
+      const lblDispName = window.I18N ? window.I18N.t('admin_lbl_display_name', 'Nome Visualizzato') : 'Nome Visualizzato';
+      const lblForest = window.I18N ? window.I18N.t('admin_lbl_forest', 'Foresta / Dominio') : 'Foresta / Dominio';
+      const lblDesc = window.I18N ? window.I18N.t('admin_lbl_description', 'Descrizione') : 'Descrizione';
+      const lblAuth = window.I18N ? window.I18N.t('admin_lbl_auth_mode', 'Modalità Auth') : 'Modalità Auth';
+      const lblDefCa = window.I18N ? window.I18N.t('admin_lbl_default_ca', 'CA Predefinita') : 'CA Predefinita';
+      const lblSim = window.I18N ? window.I18N.t('admin_lbl_simulator', 'Usa Simulatore') : 'Usa Simulatore';
+      const btnAddTmplManual = window.I18N ? window.I18N.t('btn_add_template_manual', '+ Aggiungi Manualmente') : '+ Aggiungi Manualmente';
+      const btnDiscoverText = window.I18N ? window.I18N.t('btn_discover', '🔍 Scopri dalla CA') : '🔍 Scopri dalla CA';
+      const clickDiscoverText = window.I18N ? window.I18N.t('admin_click_discover', 'Clicca "Scopri dalla CA"') : 'Clicca "Scopri dalla CA"';
+      const btnAddText = window.I18N ? window.I18N.t('admin_btn_add', '+ Aggiungi') : '+ Aggiungi';
 
       card.innerHTML = `
         <div class="ca-card-header">
@@ -309,7 +403,7 @@
           <div style="display:flex;gap:0.5rem;align-items:center;">
             ${defaultTag}
             ${simulatorTag}
-            <button type="button" class="btn btn-danger btn-sm btn-remove-ca" data-index="${caIndex}" title="${isEn ? 'Remove CA' : 'Rimuovi CA'}">✕</button>
+            <button type="button" class="btn btn-danger btn-sm btn-remove-ca" data-index="${caIndex}" title="${escapeHtml(removeCaTitle)}">✕</button>
           </div>
         </div>
         <div class="ca-card-body${caIndex === 0 ? ' open' : ''}">
@@ -318,11 +412,11 @@
             <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="id" value="${esc(id)}">
           </div>
           <div class="field-row">
-            <label>${isEn ? 'Display Name' : 'Nome Visualizzato'}</label>
+            <label>${escapeHtml(lblDispName)}</label>
             <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="displayName" value="${esc(displayName)}">
           </div>
           <div class="field-row">
-            <label>${isEn ? 'Forest / Domain' : 'Foresta / Dominio'}</label>
+            <label>${escapeHtml(lblForest)}</label>
             <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="forestOrDomain" value="${esc(forestOrDomain)}">
           </div>
           <div class="field-row">
@@ -330,11 +424,11 @@
             <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="configString" value="${esc(configString)}" placeholder="server\\CA-Name">
           </div>
           <div class="field-row">
-            <label>${isEn ? 'Description' : 'Descrizione'}</label>
+            <label>${escapeHtml(lblDesc)}</label>
             <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="description" value="${esc(description)}">
           </div>
           <div class="field-row">
-            <label>${isEn ? 'Auth Mode' : 'Modalità Auth'}</label>
+            <label>${escapeHtml(lblAuth)}</label>
             <select class="form-control ca-field" data-ca="${caIndex}" data-field="authMode">
               <option value="LocalIdentity" ${authMode === 'LocalIdentity' ? 'selected' : ''}>LocalIdentity (App Pool)</option>
               <option value="CredentialManager" ${authMode === 'CredentialManager' ? 'selected' : ''}>CredentialManager (Multi-Foresta)</option>
@@ -345,14 +439,14 @@
             <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="credentialTarget" value="${esc(credentialTarget)}" placeholder="es. subca01.foresta1.lan">
           </div>
           <div class="field-row">
-            <label>${isEn ? 'Default CA' : 'CA Predefinita'}</label>
+            <label>${escapeHtml(lblDefCa)}</label>
             <label class="toggle-switch">
               <input type="checkbox" class="ca-toggle" data-ca="${caIndex}" data-field="isDefault" ${isDefault ? 'checked' : ''}>
               <span class="toggle-slider"></span>
             </label>
           </div>
           <div class="field-row">
-            <label>${isEn ? 'Use Simulator' : 'Usa Simulatore'}</label>
+            <label>${escapeHtml(lblSim)}</label>
             <label class="toggle-switch">
               <input type="checkbox" class="ca-toggle" data-ca="${caIndex}" data-field="useSimulator" ${useSimulator ? 'checked' : ''}>
               <span class="toggle-slider"></span>
@@ -363,16 +457,16 @@
           <div style="margin-top:1.25rem;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
               <h4 style="font-size:0.95rem;color:var(--gray-900);">📋 Certificate Templates</h4>
-              <button type="button" class="btn btn-secondary btn-sm btn-add-template-manual" data-ca="${caIndex}">${isEn ? '+ Add Manually' : '+ Aggiungi Manualmente'}</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-add-template-manual" data-ca="${caIndex}">${escapeHtml(btnAddTmplManual)}</button>
             </div>
             <div class="template-add-bar">
-              <button type="button" class="btn btn-discover btn-sm btn-discover-templates" data-ca="${caIndex}" title="${isEn ? 'Query CA to discover published templates' : 'Interroga la CA per scoprire i template pubblicati'}">
-                ${isEn ? '🔍 Discover from CA' : '🔍 Scopri dalla CA'}
+              <button type="button" class="btn btn-discover btn-sm btn-discover-templates" data-ca="${caIndex}">
+                ${escapeHtml(btnDiscoverText)}
               </button>
               <select class="form-control discovered-templates-select" data-ca="${caIndex}" disabled>
-                <option value="">— ${isEn ? 'Click "Discover from CA"' : 'Clicca "Scopri dalla CA"'} —</option>
+                <option value="">— ${escapeHtml(clickDiscoverText)} —</option>
               </select>
-              <button type="button" class="btn btn-primary btn-sm btn-add-discovered" data-ca="${caIndex}" disabled>${isEn ? '+ Add' : '+ Aggiungi'}</button>
+              <button type="button" class="btn btn-primary btn-sm btn-add-discovered" data-ca="${caIndex}" disabled>${escapeHtml(btnAddText)}</button>
             </div>
             <div class="templates-container" data-ca="${caIndex}"></div>
           </div>
@@ -392,7 +486,8 @@
 
       // Remove CA handler
       card.querySelector('.btn-remove-ca').addEventListener('click', () => {
-        if (!confirm('Rimuovere questa CA dalla configurazione?')) return;
+        const confirmMsg = window.I18N ? window.I18N.t('confirm_remove_ca', 'Rimuovere questa CA dalla configurazione?') : 'Rimuovere questa CA dalla configurazione?';
+        if (!confirm(confirmMsg)) return;
         const cas = portalConfig.cas || portalConfig.CAs || [];
         cas.splice(caIndex, 1);
         renderCaList();
@@ -553,38 +648,49 @@
       const extendedKeyUsages = (tmpl.extendedKeyUsages || tmpl.ExtendedKeyUsages || []).join(', ');
       const allowedGroups = (tmpl.allowedGroups || tmpl.AllowedGroups || []).join(', ');
 
-      const isEn = window.I18N && window.I18N.getLanguage() === 'en';
+      const newTmplTitle = window.I18N ? window.I18N.t('admin_new_template', 'Nuovo Template') : 'Nuovo Template';
+      const lblSysName = window.I18N ? window.I18N.t('admin_lbl_sys_name', 'Nome Sistema') : 'Nome Sistema';
+      const lblDispName = window.I18N ? window.I18N.t('admin_lbl_display_name', 'Nome Visualizzato') : 'Nome Visualizzato';
+      const lblDesc = window.I18N ? window.I18N.t('admin_lbl_description', 'Descrizione') : 'Descrizione';
+      const lblValidity = window.I18N ? window.I18N.t('admin_lbl_validity', 'Validità (giorni)') : 'Validità (giorni)';
+      const validityNote = window.I18N ? window.I18N.t('admin_validity_note', 'Prelevata dalla definizione del template AD CS (KeyUsagePeriod); non modificabile manualmente. Aggiorna il valore con "Scopri dalla CA".') : 'Prelevata dalla definizione del template AD CS (KeyUsagePeriod); non modificabile manualmente. Aggiorna il valore con "Scopri dalla CA".';
+      const lblManualAppr = window.I18N ? window.I18N.t('admin_lbl_manual_approval', 'Approvazione Manuale') : 'Approvazione Manuale';
+      const lblKeyTypes = window.I18N ? window.I18N.t('admin_lbl_key_types', 'Tipi Chiave') : 'Tipi Chiave';
+      const lblAllowedGroups = window.I18N ? window.I18N.t('admin_lbl_allowed_groups', 'Gruppi AD Autorizzati') : 'Gruppi AD Autorizzati';
+      const phAllowedGroups = window.I18N ? window.I18N.t('admin_allowed_groups_placeholder', 'Vuoto = tutti gli utenti (es. VD\\Web-Team, LD\\App-Admin)') : 'Vuoto = tutti gli utenti (es. VD\\Web-Team, LD\\App-Admin)';
+      const hintAllowedGroups = window.I18N ? window.I18N.t('admin_allowed_groups_hint', 'Solo gli utenti di questi gruppi possono emettere con questo template (gli amministratori del portale sono sempre ammessi).') : 'Solo gli utenti di questi gruppi possono emettere con questo template (gli amministratori del portale sono sempre ammessi).';
+
       tmplEl.innerHTML = `
         <div class="template-item-header">
-          <h5>${esc(displayName || name || (isEn ? 'New Template' : 'Nuovo Template'))}</h5>
+          <h5>${esc(displayName || name || newTmplTitle)}</h5>
           <button type="button" class="btn btn-danger btn-sm btn-remove-tmpl" data-ca="${caIndex}" data-tmpl="${tIdx}">✕</button>
         </div>
         <div class="field-row">
-          <label>${isEn ? 'System Name' : 'Nome Sistema'}</label>
+          <label>${escapeHtml(lblSysName)}</label>
           <input type="text" class="form-control tmpl-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="name" value="${esc(name)}">
         </div>
         <div class="field-row">
-          <label>${isEn ? 'Display Name' : 'Nome Visualizzato'}</label>
+          <label>${escapeHtml(lblDispName)}</label>
           <input type="text" class="form-control tmpl-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="displayName" value="${esc(displayName)}">
         </div>
         <div class="field-row">
-          <label>${isEn ? 'Description' : 'Descrizione'}</label>
+          <label>${escapeHtml(lblDesc)}</label>
           <input type="text" class="form-control tmpl-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="description" value="${esc(description)}">
         </div>
         <div class="field-row">
-          <label>${isEn ? 'Validity (days)' : 'Validità (giorni)'}</label>
+          <label>${escapeHtml(lblValidity)}</label>
           <input type="text" class="form-control" value="${validityDays}" disabled>
-          <small style="display:block; margin-top:0.25rem; opacity:0.7;">${isEn ? 'Retrieved from AD CS template definition (KeyUsagePeriod); not editable manually. Refresh via "Discover from CA".' : 'Prelevata dalla definizione del template AD CS (KeyUsagePeriod); non modificabile manualmente. Aggiorna il valore con "Scopri dalla CA".'}</small>
+          <small style="display:block; margin-top:0.25rem; opacity:0.7;">${escapeHtml(validityNote)}</small>
         </div>
         <div class="field-row">
-          <label>${isEn ? 'Manual Approval' : 'Approvazione Manuale'}</label>
+          <label>${escapeHtml(lblManualAppr)}</label>
           <label class="toggle-switch">
             <input type="checkbox" class="tmpl-toggle" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="requiresApproval" ${requiresApproval ? 'checked' : ''}>
             <span class="toggle-slider"></span>
           </label>
         </div>
         <div class="field-row">
-          <label>${isEn ? 'Key Types' : 'Tipi Chiave'}</label>
+          <label>${escapeHtml(lblKeyTypes)}</label>
           <input type="text" class="form-control tmpl-array-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="allowedKeyTypes" value="${esc(allowedKeyTypes)}" placeholder="RSA-2048, RSA-4096, ECDSA-P256">
         </div>
         <div class="field-row">
@@ -596,16 +702,17 @@
           <input type="text" class="form-control tmpl-array-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="extendedKeyUsages" value="${esc(extendedKeyUsages)}" placeholder="ServerAuthentication">
         </div>
         <div class="field-row">
-          <label>${isEn ? 'Authorized AD Groups' : 'Gruppi AD Autorizzati'}</label>
-          <input type="text" class="form-control tmpl-array-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="allowedGroups" value="${esc(allowedGroups)}" placeholder="${isEn ? 'Empty = all users (e.g. VD\\Web-Team, LD\\App-Admin)' : 'Vuoto = tutti gli utenti (es. VD\\Web-Team, LD\\App-Admin)'}">
-          <small style="display:block; margin-top:0.25rem; opacity:0.7;">${isEn ? 'Only users in these groups can request this template (portal administrators are always allowed).' : 'Solo gli utenti di questi gruppi possono emettere con questo template (gli amministratori del portale sono sempre ammessi).'}</small>
+          <label>${escapeHtml(lblAllowedGroups)}</label>
+          <input type="text" class="form-control tmpl-array-field" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="allowedGroups" value="${esc(allowedGroups)}" placeholder="${escapeHtml(phAllowedGroups)}">
+          <small style="display:block; margin-top:0.25rem; opacity:0.7;">${escapeHtml(hintAllowedGroups)}</small>
         </div>
       `;
       container.appendChild(tmplEl);
 
       // Remove template handler
       tmplEl.querySelector('.btn-remove-tmpl').addEventListener('click', () => {
-        if (!confirm(isEn ? 'Remove this template?' : 'Rimuovere questo template?')) return;
+        const confirmMsg = window.I18N ? window.I18N.t('confirm_remove_template', 'Rimuovere questo template?') : 'Rimuovere questo template?';
+        if (!confirm(confirmMsg)) return;
         const cas = portalConfig.cas || portalConfig.CAs || [];
         const templates = cas[caIndex].templates || cas[caIndex].Templates || [];
         templates.splice(tIdx, 1);
@@ -838,18 +945,32 @@
       const container = document.getElementById('held-requests-container');
       if (!container) return;
 
-      const isEn = window.I18N && window.I18N.getLanguage() === 'en';
+      const noReqTitle = window.I18N ? window.I18N.t('admin_no_requests_found', 'Nessuna richiesta trovata') : 'Nessuna richiesta trovata';
+      const noReqDesc = window.I18N ? window.I18N.t('admin_no_requests_desc', 'Non ci sono certificati trattenuti con il filtro selezionato.') : 'Non ci sono certificati trattenuti con il filtro selezionato.';
 
       if (!requests || requests.length === 0) {
         container.innerHTML = `
           <div class="card" style="text-align:center; padding: 2.5rem; color: var(--gray-500);">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:0.75rem; opacity:0.6;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-            <p style="font-size:1rem; font-weight:600; color:var(--gray-700);">${isEn ? 'No requests found' : 'Nessuna richiesta trovata'}</p>
-            <p style="font-size:0.85rem;">${isEn ? 'There are no certificate requests matching the selected filter.' : 'Non ci sono certificati trattenuti con il filtro selezionato.'}</p>
+            <p style="font-size:1rem; font-weight:600; color:var(--gray-700);">${escapeHtml(noReqTitle)}</p>
+            <p style="font-size:0.85rem;">${escapeHtml(noReqDesc)}</p>
           </div>
         `;
         return;
       }
+
+      const dateLocale = window.I18N ? window.I18N.getLocale() : 'it-IT';
+      const lblSubmitted = window.I18N ? window.I18N.t('admin_submitted_label', 'Sottomesso:') : 'Sottomesso:';
+      const lblRequester = window.I18N ? window.I18N.t('requester_label', 'Richiedente:') : 'Richiedente:';
+      const lblAnon = window.I18N ? window.I18N.t('admin_anon_unauth', 'Anonimo / Non autenticato') : 'Anonimo / Non autenticato';
+      const lblReqNotes = window.I18N ? window.I18N.t('admin_requester_notes', 'Note Richiedente:') : 'Note Richiedente:';
+      const lblReviewed = window.I18N ? window.I18N.t('admin_reviewed_label', 'Revisionato:') : 'Revisionato:';
+      const lblBy = window.I18N ? window.I18N.t('admin_by_label', 'da') : 'da';
+      const lblRejectionReason = window.I18N ? window.I18N.t('admin_rejection_reason_label', 'Motivo Rifiuto:') : 'Motivo Rifiuto:';
+      const btnRejectText = window.I18N ? window.I18N.t('admin_btn_reject_req', '❌ Rifiuta Richiesta') : '❌ Rifiuta Richiesta';
+      const btnApproveText = window.I18N ? window.I18N.t('admin_btn_approve_req', '✅ Approva & Rilascia Certificato') : '✅ Approva & Rilascia Certificato';
+      const btnViewCertText = window.I18N ? window.I18N.t('btn_view_cert', 'Visualizza Certificato') : 'Visualizza Certificato';
+      const pendingCaHint = window.I18N ? window.I18N.t('admin_pending_ca_hint', 'In attesa di approvazione sulla CA ADCS') : 'In attesa di approvazione sulla CA ADCS';
 
       container.innerHTML = '';
       requests.forEach(r => {
@@ -872,29 +993,28 @@
         const reviewedAt = r.reviewedAt || r.ReviewedAt;
 
         let statusClass = 'status-pending';
-        let statusLabel = isEn ? 'Pending' : 'In Attesa';
+        let statusLabel = window.I18N ? window.I18N.t('status_pending', 'In Attesa') : 'In Attesa';
 
         if (status === 'PendingApproval') {
           statusClass = 'status-pending';
-          statusLabel = isEn ? 'Pending Approval' : 'In Attesa Approvazione';
+          statusLabel = window.I18N ? window.I18N.t('status_pending', 'In Attesa Approvazione') : 'In Attesa Approvazione';
         } else if (status === 'UnderSubmission') {
           statusClass = 'status-pending';
-          statusLabel = isEn ? 'In Progress (CA)' : 'In Sospeso (CA)';
+          statusLabel = window.I18N ? window.I18N.t('status_under_submission', 'In Sospeso (CA)') : 'In Sospeso (CA)';
         } else if (status === 'Approved') {
           statusClass = 'status-approved';
-          statusLabel = isEn ? 'Approved' : 'Approvato';
+          statusLabel = window.I18N ? window.I18N.t('status_issued', 'Approvato') : 'Approvato';
         } else if (status === 'Issued') {
           statusClass = 'status-approved';
-          statusLabel = isEn ? 'Issued' : 'Emesso';
+          statusLabel = window.I18N ? window.I18N.t('status_issued', 'Emesso') : 'Emesso';
         } else if (status === 'Rejected') {
           statusClass = 'status-rejected';
-          statusLabel = isEn ? 'Rejected' : 'Rifiutato';
+          statusLabel = window.I18N ? window.I18N.t('status_rejected', 'Rifiutato') : 'Rifiutato';
         } else {
           statusClass = 'status-pending';
           statusLabel = esc(status);
         }
 
-        const dateLocale = isEn ? 'en-US' : 'it-IT';
         const submittedDate = submittedAt ? new Date(submittedAt).toLocaleString(dateLocale) : '-';
         const reviewedDate = reviewedAt ? new Date(reviewedAt).toLocaleString(dateLocale) : null;
 
@@ -908,36 +1028,36 @@
               <span style="font-size:0.8rem; color:var(--gray-500); margin-left:0.5rem;">(Hold ID: <code>${esc(holdId)}</code>)</span>
             </div>
             <div style="font-size:0.8rem; color:var(--gray-500);">
-              ${isEn ? 'Submitted:' : 'Sottomesso:'} <strong>${submittedDate}</strong>
+              ${escapeHtml(lblSubmitted)} <strong>${submittedDate}</strong>
             </div>
           </div>
 
           <div class="held-details">
-            <div><strong>${isEn ? 'Requester:' : 'Richiedente:'}</strong> ${esc(requesterUser || (isEn ? 'Anonymous / Unauthenticated' : 'Anonimo / Non autenticato'))}</div>
+            <div><strong>${escapeHtml(lblRequester)}</strong> ${esc(requesterUser || lblAnon)}</div>
             <div><strong>Common Name (CN):</strong> ${esc(subjectCommonName || 'N/D')}</div>
             <div><strong>CA Target:</strong> ${esc(caId)} (Req #${esc(caRequestId)})</div>
             ${sanAttribute ? `<div><strong>SAN:</strong> ${esc(sanAttribute)}</div>` : ''}
-            ${requesterComments ? `<div><strong>${isEn ? 'Requester Notes:' : 'Note Richiedente:'}</strong> ${esc(requesterComments)}</div>` : ''}
-            ${reviewedDate ? `<div><strong>${isEn ? 'Reviewed:' : 'Revisionato:'}</strong> ${reviewedDate} ${isEn ? 'by' : 'da'} ${esc(reviewedBy || 'Admin')}</div>` : ''}
-            ${rejectionReason ? `<div style="grid-column: 1 / -1; color: var(--danger);"><strong>${isEn ? 'Rejection Reason:' : 'Motivo Rifiuto:'}</strong> ${esc(rejectionReason)}</div>` : ''}
+            ${requesterComments ? `<div><strong>${escapeHtml(lblReqNotes)}</strong> ${esc(requesterComments)}</div>` : ''}
+            ${reviewedDate ? `<div><strong>${escapeHtml(lblReviewed)}</strong> ${reviewedDate} ${escapeHtml(lblBy)} ${esc(reviewedBy || 'Admin')}</div>` : ''}
+            ${rejectionReason ? `<div style="grid-column: 1 / -1; color: var(--danger);"><strong>${escapeHtml(lblRejectionReason)}</strong> ${esc(rejectionReason)}</div>` : ''}
           </div>
 
           <div class="held-actions">
             ${status === 'PendingApproval' ? `
               <button type="button" class="btn btn-danger btn-sm btn-reject-held" data-id="${esc(holdId)}">
-                ${isEn ? '✕ Reject Request' : '✕ Rifiuta Richiesta'}
+                ${escapeHtml(btnRejectText)}
               </button>
               <button type="button" class="btn btn-success btn-sm btn-approve-held" data-id="${esc(holdId)}" style="background-color: var(--success); color: white;">
-                ${isEn ? '✓ Approve &amp; Issue Certificate' : '✓ Approva &amp; Rilascia Certificato'}
+                ${escapeHtml(btnApproveText)}
               </button>
             ` : ''}
             ${(status === 'Approved' || status === 'Issued') ? `
               <button type="button" class="btn btn-secondary btn-sm btn-toggle-cert" data-target="${certBoxId}" data-id="${esc(holdId)}">
-                ${isEn ? '📄 View Issued Certificate' : '📄 Visualizza Certificato Emesso'}
+                📄 ${escapeHtml(btnViewCertText)}
               </button>
             ` : ''}
             ${status === 'UnderSubmission' ? `
-              <span style="font-size:0.8rem; color:var(--gray-500); font-style:italic;">${isEn ? 'Pending approval on AD CS CA' : 'In attesa di approvazione sulla CA ADCS'}</span>
+              <span style="font-size:0.8rem; color:var(--gray-500); font-style:italic;">${escapeHtml(pendingCaHint)}</span>
             ` : ''}
           </div>
 
@@ -962,7 +1082,11 @@
     }
 
     async function approveHeldRequest(holdId) {
-      if (!confirm(`Confermi l'approvazione del certificato con Hold ID '${holdId}'?\n\nIl certificato diverrà scaricabile dal richiedente.`)) {
+      const confirmTpl = window.I18N
+        ? window.I18N.t('admin_confirm_approve_req', "Confermi l'approvazione del certificato con Hold ID '{0}'?\n\nIl certificato diverrà scaricabile dal richiedente.")
+        : "Confermi l'approvazione del certificato con Hold ID '{0}'?\n\nIl certificato diverrà scaricabile dal richiedente.";
+      const confirmMsg = confirmTpl.replace('{0}', holdId);
+      if (!confirm(confirmMsg)) {
         return;
       }
 
@@ -972,19 +1096,26 @@
           headers: { 'X-Pki-Portal-Admin': 'pki-admin' }
         });
         const result = await resp.json();
+        const successMsg = window.I18N ? window.I18N.t('admin_toast_approved', 'Certificato approvato con successo!') : 'Certificato approvato con successo!';
+        const defaultErrMsg = window.I18N ? window.I18N.t('admin_toast_approve_error', 'Impossibile approvare') : 'Impossibile approvare';
         if (resp.ok && result.success) {
-          showToast(result.message || 'Certificato approvato con successo!', 'success');
+          showToast(result.message || successMsg, 'success');
           loadHeldRequests();
         } else {
-          showToast('Errore: ' + (result.message || 'Impossibile approvare'), 'error');
+          showToast('Errore: ' + (result.message || defaultErrMsg), 'error');
         }
       } catch (err) {
-        showToast('Errore di comunicazione: ' + err.message, 'error');
+        const commErrMsg = window.I18N ? window.I18N.t('admin_toast_comm_error', 'Errore di comunicazione: ') : 'Errore di comunicazione: ';
+        showToast(commErrMsg + err.message, 'error');
       }
     }
 
     async function rejectHeldRequest(holdId) {
-      const reason = prompt(`Inserisci il motivo del rifiuto per la richiesta '${holdId}' (opzionale):`);
+      const promptTpl = window.I18N
+        ? window.I18N.t('admin_prompt_reject_req', "Inserisci il motivo del rifiuto per la richiesta '{0}' (opzionale):")
+        : "Inserisci il motivo del rifiuto per la richiesta '{0}' (opzionale):";
+      const promptMsg = promptTpl.replace('{0}', holdId);
+      const reason = prompt(promptMsg);
       if (reason === null) return; // annullato
 
       try {
@@ -994,14 +1125,17 @@
           body: JSON.stringify({ reason: reason.trim() })
         });
         const result = await resp.json();
+        const successMsg = window.I18N ? window.I18N.t('admin_toast_rejected', 'Richiesta rifiutata.') : 'Richiesta rifiutata.';
+        const defaultErrMsg = window.I18N ? window.I18N.t('admin_toast_reject_error', 'Impossibile rifiutare') : 'Impossibile rifiutare';
         if (resp.ok && result.success) {
-          showToast(result.message || 'Richiesta rifiutata.', 'success');
+          showToast(result.message || successMsg, 'success');
           loadHeldRequests();
         } else {
-          showToast('Errore: ' + (result.message || 'Impossibile rifiutare'), 'error');
+          showToast('Errore: ' + (result.message || defaultErrMsg), 'error');
         }
       } catch (err) {
-        showToast('Errore di comunicazione: ' + err.message, 'error');
+        const commErrMsg = window.I18N ? window.I18N.t('admin_toast_comm_error', 'Errore di comunicazione: ') : 'Errore di comunicazione: ';
+        showToast(commErrMsg + err.message, 'error');
       }
     }
 
@@ -1014,16 +1148,20 @@
         return;
       }
 
-      box.innerHTML = 'Caricamento dettagli certificato...';
+      const loadingText = window.I18N ? window.I18N.t('admin_loading_cert', 'Caricamento dettagli certificato...') : 'Caricamento dettagli certificato...';
+      const noCertText = window.I18N ? window.I18N.t('admin_no_cert_stored', 'Nessun certificato archiviato per questa richiesta.') : 'Nessun certificato archiviato per questa richiesta.';
+      const certErrMsg = window.I18N ? window.I18N.t('admin_cert_retrieve_error', 'Errore nel recupero del certificato: ') : 'Errore nel recupero del certificato: ';
+
+      box.innerHTML = escapeHtml(loadingText);
       box.style.display = 'block';
 
       try {
         const resp = await fetch(`/api/admin/held-requests/${encodeURIComponent(holdId)}`);
-        if (!resp.ok) throw new Error('Richiesta non trovata');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const data = await resp.json();
-        box.textContent = data.certificatePem || data.CertificatePem || data.p7bBase64 || data.P7bBase64 || 'Nessun certificato archiviato per questa richiesta.';
+        box.textContent = data.certificatePem || data.CertificatePem || data.p7bBase64 || data.P7bBase64 || noCertText;
       } catch (err) {
-        box.textContent = 'Errore nel recupero del certificato: ' + err.message;
+        box.textContent = certErrMsg + err.message;
       }
     }
 

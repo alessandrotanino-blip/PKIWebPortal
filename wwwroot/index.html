@@ -4,7 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Enterprise PKI Web Enrollment Portal</title>
-  <link rel="stylesheet" href="/css/styles.css">
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('pki-theme');
+      if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="/css/styles.css?v=2.0.9">
 </head>
 <body>
 
@@ -14,7 +24,7 @@
       <div class="brand-icon">PKI</div>
       <div class="brand-text">
         <h1 id="portal-title" data-i18n="portal_title">Enterprise PKI Web Enrollment</h1>
-        <p id="portal-subtitle"><span data-i18n="portal_subtitle">Active Directory Certificate Services (AD CS) Modern Gateway</span> <span class="brand-version">v2.0.6</span></p>
+        <p id="portal-subtitle"><span data-i18n="portal_subtitle">Active Directory Certificate Services (AD CS) Modern Gateway</span> <span class="brand-version">v2.0.9</span></p>
       </div>
     </div>
     <div class="nav-actions">
@@ -22,9 +32,37 @@
         <svg id="theme-icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
         <svg id="theme-icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       </button>
-      <button id="lang-toggle" class="lang-toggle-btn" data-i18n-title="lang_toggle_title" title="Switch to English">
-        🌐 <span class="lang-label">EN</span>
-      </button>
+      <div class="lang-dropdown" id="lang-dropdown">
+        <button type="button" class="lang-dropdown-btn" id="lang-dropdown-btn" aria-haspopup="true" aria-expanded="false" data-i18n-title="lang_select_title" title="Seleziona lingua">
+          <span class="lang-flag" id="lang-current-flag">
+            <svg class="flag-icon" viewBox="0 0 18 12" width="18" height="12"><rect width="6" height="12" fill="#009246"/><rect x="6" width="6" height="12" fill="#ffffff"/><rect x="12" width="6" height="12" fill="#ce2b37"/></svg>
+          </span>
+          <span class="lang-code" id="lang-current-code">IT</span>
+          <span class="lang-arrow">▾</span>
+        </button>
+        <div class="lang-dropdown-menu" id="lang-dropdown-menu" role="menu" style="display: none;">
+          <button type="button" class="lang-dropdown-item active" data-lang="it" role="menuitem">
+            <span class="lang-item-flag"><svg class="flag-icon" viewBox="0 0 18 12" width="18" height="12"><rect width="6" height="12" fill="#009246"/><rect x="6" width="6" height="12" fill="#ffffff"/><rect x="12" width="6" height="12" fill="#ce2b37"/></svg></span>
+            <span class="lang-name">Italiano</span>
+          </button>
+          <button type="button" class="lang-dropdown-item" data-lang="en" role="menuitem">
+            <span class="lang-item-flag"><svg class="flag-icon" viewBox="0 0 60 30" width="18" height="12"><clipPath id="uk-c-idx"><path d="M0 0 v30 h60 v-30 z"/></clipPath><clipPath id="uk-d-idx"><path d="M30 15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z"/></clipPath><g clip-path="url(#uk-c-idx)"><path d="M0 0 v30 h60 v-30 z" fill="#012169"/><path d="M0 0 L60 30 M60 0 L0 30" stroke="#ffffff" stroke-width="6"/><path d="M0 0 L60 30 M60 0 L0 30" clip-path="url(#uk-d-idx)" stroke="#C8102E" stroke-width="4"/><path d="M30 0 v30 M0 15 h60" stroke="#ffffff" stroke-width="10"/><path d="M30 0 v30 M0 15 h60" stroke="#C8102E" stroke-width="6"/></g></svg></span>
+            <span class="lang-name">English</span>
+          </button>
+          <button type="button" class="lang-dropdown-item" data-lang="fr" role="menuitem">
+            <span class="lang-item-flag"><svg class="flag-icon" viewBox="0 0 18 12" width="18" height="12"><rect width="6" height="12" fill="#002395"/><rect x="6" width="6" height="12" fill="#ffffff"/><rect x="12" width="6" height="12" fill="#ed2939"/></svg></span>
+            <span class="lang-name">Français</span>
+          </button>
+          <button type="button" class="lang-dropdown-item" data-lang="de" role="menuitem">
+            <span class="lang-item-flag"><svg class="flag-icon" viewBox="0 0 18 12" width="18" height="12"><rect width="18" height="4" fill="#000000"/><rect y="4" width="18" height="4" fill="#dd0000"/><rect y="8" width="18" height="4" fill="#ffce00"/></svg></span>
+            <span class="lang-name">Deutsch</span>
+          </button>
+          <button type="button" class="lang-dropdown-item" data-lang="es" role="menuitem">
+            <span class="lang-item-flag"><svg class="flag-icon" viewBox="0 0 18 12" width="18" height="12"><rect width="18" height="3" fill="#aa151b"/><rect y="3" width="18" height="6" fill="#f1bf00"/><rect y="9" width="18" height="3" fill="#aa151b"/></svg></span>
+            <span class="lang-name">Español</span>
+          </button>
+        </div>
+      </div>
       <div class="ca-select-group">
         <label for="ca-selector" data-i18n="ca_label">CA di Emissione:</label>
         <select id="ca-selector">
@@ -32,7 +70,7 @@
         </select>
       </div>
       <span class="badge-mode" id="portal-mode-badge" data-i18n="portal_mode_hub">Modalità Hub</span>
-      <span id="portal-user-badge" style="font-size:0.75rem; padding: 0.3rem 0.6rem; border-radius: 4px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); color: var(--text-color, #e2e8f0); margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.35rem;">
+      <span class="portal-user-badge" id="portal-user-badge">
         👤 <span id="portal-user-name" data-i18n="user_checking">Verifica accesso...</span>
       </span>
       <a href="/admin.html" class="btn btn-secondary btn-sm" title="Pannello Admin" style="margin-left:0.5rem;font-size:0.75rem;" data-i18n="admin_btn">
@@ -366,12 +404,13 @@ if ($response.success -and $response.disposition -eq "Issued") {
   <!-- Footer -->
   <footer>
     <p data-i18n="footer_text">Enterprise PKI Web Enrollment Gateway &bull; Sostituto moderno Microsoft AD CS / certsrv &bull; HTML5 &amp; Web Crypto API</p>
+    <p class="footer-author"><span data-i18n="footer_author_label">Autore:</span> <a href="mailto:alessandro.tanino@gmail.com">Alessandro Tanino</a></p>
   </footer>
 
   <!-- Script Libraries -->
-  <script src="/js/vendor/forge.min.js?v=2.0.6"></script>
-  <script src="/js/crypto-helper.js?v=2.0.6"></script>
-  <script src="/js/i18n.js?v=2.0.6"></script>
-  <script src="/js/app.js?v=2.0.6"></script>
+  <script src="/js/vendor/forge.min.js?v=2.0.9"></script>
+  <script src="/js/crypto-helper.js?v=2.0.9"></script>
+  <script src="/js/i18n.js?v=2.0.9"></script>
+  <script src="/js/app.js?v=2.0.9"></script>
 </body>
 </html>
