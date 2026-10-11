@@ -4,7 +4,7 @@
 
 Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostituire l'obsoleto e deprecato **Microsoft Web Enrollment (`certsrv`)**, eliminando qualsiasi dipendenza da ActiveX/Internet Explorer e mitigando i rischi di sicurezza NTLM Relay (ESC8).
 
-\---
+---
 
 ## 🌟 Caratteristiche Principali
 
@@ -50,21 +50,27 @@ Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostit
 ## 📸 Screenshot
 
 ### Portale Utente - Nuova Richiesta Certificato
+
 ![Portale Utente - Nuova Richiesta](Screens/1-PKI-UserPortal.jpeg)
 
 ### Portale Utente - Emissione Automatica & Download PFX
+
 ![Emissione Automatica](Screens/1-PKI-UserPortal_Auto.jpeg)
 
-### Portale Utente - Richiesta in Attesa di Approvazione
+### Admin Utente - Richiesta in Attesa di Approvazione
+
 ![In Attesa di Approvazione](Screens/PendingApproval.png)
 
 ### Portale Utente - Ritiro Certificati & Storico Utente
+
 ![Ritiro Certificati](Screens/2-PKI-UserPortal.jpeg)
 
 ### Portale Utente - Template con Accesso Limitato (Gruppi AD)
+
 ![Template Ristretti](Screens/DeniedTemplates.png)
 
 ### Pannello Amministrazione - Configurazione Portale, CA & Richieste Trattenute
+
 ![Pannello Amministrazione](Screens/3-PKI-UserPortal.jpeg)
 
 ---
@@ -102,7 +108,7 @@ Portale/
 └── run.ps1                      # Script rapido di avvio in sviluppo
 ```
 
-\---
+---
 
 ## 🖥️ Installazione su IIS (a fianco di certsrv)
 
@@ -129,24 +135,24 @@ dove è attivo Microsoft Web Enrollment (certsrv), **senza modificare né interr
 
 ```powershell
 # Installazione base: sito HTTP sulla porta 8443
-.\\\\Install-PkiPortal.ps1
+.\\Install-PkiPortal.ps1
 
 # Installazione con gMSA (Group Managed Service Account - nessuna password richiesta)
-.\\\\Install-PkiPortal.ps1 -SitePort 8443 -AppPoolIdentity "DOMAIN\\\\gmsa$" -IsGMSA
+.\\Install-PkiPortal.ps1 -SitePort 8443 -AppPoolIdentity "DOMAIN\\gmsa$" -IsGMSA
 
 # Installazione HTTPS con hostname personalizzato e account utente standard
-.\\\\Install-PkiPortal.ps1 -SitePort 443 `
+.\\Install-PkiPortal.ps1 -SitePort 443 `
     -SiteHostHeader "pki.azienda.lan" `
     -UseHttps `
     -CertThumbprint "A1B2C3D4E5F6..." `
-    -AppPoolIdentity "DOMINIO\\\\svc-pki-portal" `
+    -AppPoolIdentity "DOMINIO\\svc-pki-portal" `
     -AppPoolPassword (Read-Host -AsSecureString "Password")
 
 # Installazione su porta custom con nome sito personalizzato
-.\\\\Install-PkiPortal.ps1 -SiteName "PKI-Enrollment-F1" -SitePort 9443
+.\\Install-PkiPortal.ps1 -SiteName "PKI-Enrollment-F1" -SitePort 9443
 
 # Installazione senza regola firewall (ambienti gestiti centralmente)
-.\\\\Install-PkiPortal.ps1 -SitePort 8443 -SkipFirewall
+.\\Install-PkiPortal.ps1 -SitePort 8443 -SkipFirewall
 ```
 
 ### Parametri disponibili
@@ -156,8 +162,8 @@ dove è attivo Microsoft Web Enrollment (certsrv), **senza modificare né interr
 |`-SiteName`|`PkiWebEnrollment`|Nome del sito IIS|
 |`-SitePort`|`8443`|Porta TCP di ascolto|
 |`-SiteHostHeader`|*(vuoto = tutti)*|Hostname specifico (es. `pki.azienda.lan`)|
-|`-InstallPath`|`C:\\\\inetpub\\\\PkiWebEnrollment`|Cartella di pubblicazione|
-|`-AppPoolIdentity`|`ApplicationPoolIdentity`|Identità del pool (`NetworkService`, `LocalSystem`, `DOMINIO\\\\Account$` o `DOMINIO\\\\User`)|
+|`-InstallPath`|`C:\\inetpub\\PkiWebEnrollment`|Cartella di pubblicazione|
+|`-AppPoolIdentity`|`ApplicationPoolIdentity`|Identità del pool (`NetworkService`, `LocalSystem`, `DOMINIO\\Account$` o `DOMINIO\\User`)|
 |`-AppPoolPassword`|*(nessuna)*|Password per account utente di dominio standard (non necessaria per gMSA)|
 |`-IsGMSA`|*(no)*|Specifica che l'identità è un gMSA (senza password, aggiunge `$` se mancante)|
 |`-UseHttps`|*(no)*|Abilita binding HTTPS|
@@ -170,21 +176,21 @@ dove è attivo Microsoft Web Enrollment (certsrv), **senza modificare né interr
 
 ```powershell
 # Rimuove sito IIS, app pool e regola firewall (conserva i file)
-.\\\\Uninstall-PkiPortal.ps1
+.\Uninstall-PkiPortal.ps1
 
 # Rimuove tutto inclusi i file applicativi
-.\\\\Uninstall-PkiPortal.ps1 -RemoveFiles
+.\Uninstall-PkiPortal.ps1 -RemoveFiles
 ```
 
-> \\\*\\\*⚠️ Garanzia di non intrusività\\\*\\\*: Entrambi gli script operano esclusivamente sul sito
+> **⚠️ Garanzia di non intrusività**: Entrambi gli script operano esclusivamente sul sito
 > e sull'app pool dedicato al portale PKI. Il sito "Default Web Site" e l'applicazione
-> `/CertSrv` \\\*\\\*non vengono mai toccati né modificati\\\*\\\*.
+> `/CertSrv` **non vengono mai toccati né modificati**.
 
-\---
+---
 
 ## ⚙️ Configurazione con le Vere Sub-CA
 
-Modificare il file `appsettings.json` (nella cartella di installazione, es. `C:\\\\inetpub\\\\PkiWebEnrollment\\\\appsettings.json`):
+Modificare il file `appsettings.json` (nella cartella di installazione, es. `C:\\inetpub\\PkiWebEnrollment\\appsettings.json`):
 
 ### 1\. Modalità Locale (Installazione a fianco di certsrv nella stessa foresta)
 
@@ -196,16 +202,16 @@ In questa modalità non serve alcuna configurazione di credenziali: il portale u
     "PortalMode": "Standalone",
     "PortalTitle": "Enterprise PKI Web Enrollment Portal",
     "DefaultCaId": "ca-foresta1",
-    "CAs": \\\[
+    "CAs": [
       {
         "Id": "ca-foresta1",
         "DisplayName": "Foresta 1 - Enterprise Issuing CA (Prod)",
         "ForestOrDomain": "foresta1.lan",
-        "ConfigString": "subca01.foresta1.lan\\\\\\\\Foresta1-SubCA",
+        "ConfigString": "subca01.foresta1.lan\\Foresta1-SubCA",
         "IsDefault": true,
         "UseSimulator": false,
         "AuthMode": "LocalIdentity",
-        "Templates": \\\[ ... ]
+        "Templates": [ ... ]
       }
     ]
   }
@@ -222,35 +228,35 @@ In questa modalità il portale contatta ciascuna Sub-CA usando l'account di serv
     "PortalMode": "Hub",
     "PortalTitle": "Enterprise PKI Web Enrollment Portal",
     "DefaultCaId": "ca-foresta1",
-    "CAs": \\\[
+    "CAs": [
       {
         "Id": "ca-foresta1",
         "DisplayName": "Foresta 1 - Enterprise Issuing CA",
         "ForestOrDomain": "foresta1.lan",
-        "ConfigString": "subca01.foresta1.lan\\\\\\\\Foresta1-SubCA",
+        "ConfigString": "subca01.foresta1.lan\\Foresta1-SubCA",
         "IsDefault": true,
         "UseSimulator": false,
         "AuthMode": "CredentialManager",
         "CredentialTarget": "subca01.foresta1.lan",
-        "Templates": \\\[ ... ]
+        "Templates": [ ... ]
       },
       {
         "Id": "ca-foresta2",
         "DisplayName": "Foresta 2 - Enterprise Issuing CA (Non Trustata)",
         "ForestOrDomain": "foresta2.lan",
-        "ConfigString": "subca02.foresta2.lan\\\\\\\\Foresta2-SubCA",
+        "ConfigString": "subca02.foresta2.lan\\Foresta2-SubCA",
         "IsDefault": false,
         "UseSimulator": false,
         "AuthMode": "CredentialManager",
         "CredentialTarget": "subca02.foresta2.lan",
-        "Templates": \\\[ ... ]
+        "Templates": [ ... ]
       }
     ]
   }
 }
 ```
 
-\---
+---
 
 ## 🔐 Registrazione Sicura Credenziali (Windows Credential Manager)
 
@@ -258,41 +264,41 @@ Per registrare le credenziali degli account di servizio delle diverse foreste **
 
 ```powershell
 # Registra l'account per la Sub-CA di Foresta 1 (la password viene chiesta con maschera protetta)
-.\\\\Add-CaCredential.ps1 -Target "subca01.foresta1.lan" -UserName "FORESTA1\\\\svc-pki-enroll"
+.\Add-CaCredential.ps1 -Target "subca01.foresta1.lan" -UserName "FORESTA1\\svc-pki-enroll"
 
 # Registra l'account per la Sub-CA di Foresta 2 (foresta separata non trustata)
-.\\\\Add-CaCredential.ps1 -Target "subca02.foresta2.lan" -UserName "FORESTA2\\\\svc-pki-enroll"
+.\Add-CaCredential.ps1 -Target "subca02.foresta2.lan" -UserName "FORESTA2\\svc-pki-enroll"
 
 # Visualizza i target registrati nel Credential Manager
-.\\\\Add-CaCredential.ps1 -List
+.\Add-CaCredential.ps1 -List
 
 # Rimuove una credenziale memorizzata
-.\\\\Add-CaCredential.ps1 -Target "subca02.foresta2.lan" -Remove
+.\Add-CaCredential.ps1 -Target "subca02.foresta2.lan" -Remove
 ```
 
-> \\\*\\\*Come funziona sotto il cofano\\\*\\\*:
-> Quando arriva una richiesta per `ca-foresta2`, il backend interroga `Advapi32.dll` (`CredReadW`) per il target `subca02.foresta2.lan`, crea un token di rete sicuro tramite `LogonUser` (`LOGON32\\\_LOGON\\\_NEW\\\_CREDENTIALS`) ed esegue l'operazione (`CCertRequest` / `certreq`) in un blocco `WindowsIdentity.RunImpersonated`. Le chiamate RPC/DCOM verso la CA remota si presentano così con l'account di quella foresta, superando l'assenza di trust.
+> **Come funziona sotto il cofano**:
+> Quando arriva una richiesta per `ca-foresta2`, il backend interroga `Advapi32.dll` (`CredReadW`) per il target `subca02.foresta2.lan`, crea un token di rete sicuro tramite `LogonUser` (`LOGON32\_LOGON\_NEW\_CREDENTIALS`) ed esegue l'operazione (`CCertRequest` / `certreq`) in un blocco `WindowsIdentity.RunImpersonated`. Le chiamate RPC/DCOM verso la CA remota si presentano così con l'account di quella foresta, superando l'assenza di trust.
 
-\---
+---
 
 ## 🚀 Avvio Rapido (Sviluppo Locale)
 
 In una console PowerShell:
 
 ```powershell
-.\\\\run.ps1
+.\run.ps1
 ```
 
 Oppure manualmente:
 
 ```powershell
-$env:PATH = "C:\\\\Program Files\\\\dotnet;$env:PATH"
+$env:PATH = "C:\\Program Files\\dotnet;$env:PATH"
 dotnet run --urls "http://127.0.0.1:5055"
 ```
 
 Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 
-\---
+---
 
 ## 🔒 Sicurezza e Best Practice
 
@@ -326,6 +332,7 @@ Il portale include `/admin.html`, protetto da Windows Authentication e da una AC
 ### Workflow di approvazione manuale (Hold & Review)
 
 Quando un template ha `RequiresApproval: true`:
+
 1. L'utente invia la richiesta tramite Web Crypto o CSR esterno.
 2. AD CS elabora la richiesta ed emette tecnicamente il certificato.
 3. Il portale intercetta il certificato, lo archivia cifrato/protetto in `held-requests.json` e contrassegna la richiesta come `PendingApproval`.
@@ -336,33 +343,33 @@ Dopo l'approvazione, il certificato diventa scaricabile dal richiedente original
 
 ### Stati delle richieste trattenute
 
-| Stato | Descrizione | Azione disponibile |
-|---|---|---|
-| `PendingApproval` | Certificato trattenuto in attesa di autorizzazione amministrativa. | Approva e rilascia, oppure Rifiuta. |
-| `Approved` | Richiesta approvata da un amministratore. | Download del certificato abilitato per il richiedente. |
-| `Issued` | Certificato emesso direttamente (template senza approvazione). | Download diretto abilitato. |
-| `UnderSubmission` | Richiesta in sospeso sulla CA AD CS stessa (richiesta marcata Pending dalla CA). | Visualizza stato richiesta. |
-| `Rejected` | Richiesta rifiutata da un amministratore. | Visualizza motivazione del rifiuto. |
+|Stato|Descrizione|Azione disponibile|
+|-|-|-|
+|`PendingApproval`|Certificato trattenuto in attesa di autorizzazione amministrativa.|Approva e rilascia, oppure Rifiuta.|
+|`Approved`|Richiesta approvata da un amministratore.|Download del certificato abilitato per il richiedente.|
+|`Issued`|Certificato emesso direttamente (template senza approvazione).|Download diretto abilitato.|
+|`UnderSubmission`|Richiesta in sospeso sulla CA AD CS stessa (richiesta marcata Pending dalla CA).|Visualizza stato richiesta.|
+|`Rejected`|Richiesta rifiutata da un amministratore.|Visualizza motivazione del rifiuto.|
 
 ### Endpoint amministrativi
 
-| Metodo | Endpoint | Descrizione | Autorizzazione |
-|---|---|---|---|
-| GET | `/api/admin/check` | Verifica se l'utente corrente è amministratore | Utente autenticato |
-| GET | `/api/admin/config` | Legge l'intera configurazione del portale | Amministratore |
-| PUT | `/api/admin/config` | Salva la configurazione e ricarica il provider a caldo | Amministratore |
-| POST | `/api/admin/templates/discover` | Scopre i template pubblicati sulla CA tramite DCOM o LDAP | Amministratore |
-| GET | `/api/admin/held-requests?status={filter}` | Elenca le richieste trattenute (`pending`, `approved`, `rejected`, `all`) | Amministratore |
-| GET | `/api/admin/held-requests/{holdId}` | Mostra il dettaglio di una richiesta e il certificato archiviato | Amministratore |
-| POST | `/api/admin/held-requests/{holdId}/approve` | Approva e autorizza il rilascio del certificato | Amministratore |
-| POST | `/api/admin/held-requests/{holdId}/reject` | Rifiuta la richiesta con motivazione opzionale | Amministratore |
+|Metodo|Endpoint|Descrizione|Autorizzazione|
+|-|-|-|-|
+|GET|`/api/admin/check`|Verifica se l'utente corrente è amministratore|Utente autenticato|
+|GET|`/api/admin/config`|Legge l'intera configurazione del portale|Amministratore|
+|PUT|`/api/admin/config`|Salva la configurazione e ricarica il provider a caldo|Amministratore|
+|POST|`/api/admin/templates/discover`|Scopre i template pubblicati sulla CA tramite DCOM o LDAP|Amministratore|
+|GET|`/api/admin/held-requests?status={filter}`|Elenca le richieste trattenute (`pending`, `approved`, `rejected`, `all`)|Amministratore|
+|GET|`/api/admin/held-requests/{holdId}`|Mostra il dettaglio di una richiesta e il certificato archiviato|Amministratore|
+|POST|`/api/admin/held-requests/{holdId}/approve`|Approva e autorizza il rilascio del certificato|Amministratore|
+|POST|`/api/admin/held-requests/{holdId}/reject`|Rifiuta la richiesta con motivazione opzionale|Amministratore|
 
 ## 🔎 Scoperta dei template e validità
 
 La funzione di discovery legge dalla definizione del template AD CS l'attributo `pKIDefaultLifetime` tramite Active Directory e converte il valore in giorni. In modalità Hub, la query usa le credenziali della foresta di destinazione; se LDAP non è disponibile, viene usato il fallback:
 
 ```powershell
-certutil -config "server\CA" -template NomeTemplate
+certutil -config "server\\CA" -template NomeTemplate
 ```
 
 La validità viene salvata in `appsettings.json` e mostrata in sola lettura all'amministratore. Per le CA in modalità simulatore, la validità è tratta dalle definizioni mock.
@@ -371,4 +378,5 @@ La validità viene salvata in `appsettings.json` e mostrata in sola lettura all'
 
 ## 👤 Autore
 
-**Alessandro Tanino** (<alessandro.tanino@hotmail.com>)
+**Alessandro Tanino** ([alessandro.tanino@hotmail.com](mailto:alessandro.tanino@hotmail.com))
+
