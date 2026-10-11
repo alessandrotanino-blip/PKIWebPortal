@@ -9,6 +9,7 @@ secrets/
 credentials/
 config.local.*
 appsettings.json
+*.docuwiki
 
 # File temporanei e database locali
 *.log
@@ -34,4 +35,4 @@ AppData/
 
 # File del sistema operativo
 .DS_Store
-Thumbs.db
+Thumbs.db
