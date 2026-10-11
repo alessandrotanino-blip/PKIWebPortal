@@ -1,5 +1,7 @@
 # Changelog
 
+[🇮🇹 Italiano](CHANGELOG.md) | [🇬🇧 English](CHANGELOG.en.md)
+
 Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in questo file.
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
@@ -9,10 +11,15 @@ Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/)
 ### Corretto
 - **Fix Errore JavaScript `escapeHtml is not defined` nella Pagina Admin**:
   - Definita la funzione hoisted `escapeHtml()` all'inizio dello script in `admin.html`, prevenendo il `ReferenceError` che bloccava il caricamento della configurazione e delle schede CA/template.
-- **Internazionalizzazione (i18n) Pannello Amministrazione**:
+- **Internazionalizzazione (i18n) Pannello Amministrazione & Messaggi di Sistema**:
   - Localizzate le finestre di conferma approvazione (`admin_confirm_approve_req`), inserimento motivo rifiuto (`admin_prompt_reject_req`) e rimozione CA (`confirm_remove_ca`) per tutte le 5 lingue supportate (it, en, fr, de, es).
   - Internazionalizzato il badge utente (`admin_user_label`, es. *"User: ..."* in inglese) con aggiornamento reattivo al cambio di lingua.
+  - Tradotti i messaggi di sicurezza 403 Forbidden nel recupero certificati per richieste non associate al proprio account (`access_denied_security_not_owner`).
   - Tradotti i messaggi toast e lo stato di visualizzazione certificato emesso.
+- **Accessibilità & Contrasto Tema Chiaro**:
+  - Risolto il problema di contrasto nel badge utente (`#portal-user-badge`), ora perfettamente visibile e conforme sia in tema chiaro che in tema scuro.
+- **Documentazione**:
+  - Inserita galleria screenshot esplicativa (`Screens/`) e allineata la documentazione in italiano e inglese.
 - **Versioning**: bump a `2.0.9` (`PkiPortal.csproj`, badge UI in `index.html` e `admin.html`, cache-busting script e fogli di stile `?v=2.0.9`).
 
 ---
@@ -21,7 +28,7 @@ Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/)
 
 ### Aggiunto
 - **Informazioni Autore nel Footer**:
-  - Inserita l'indicazione dell'autore con relativo link `mailto:` (*Alessandro Tanino*, `mailto:alessandro.tanino@gmail.com`) nel footer di tutte le pagine (`index.html` e `admin.html`).
+  - Inserita l'indicazione dell'autore con relativo link `mailto:` (*Alessandro Tanino*, `mailto:alessandro.tanino@hotmail.com`) nel footer di tutte le pagine (`index.html` e `admin.html`).
   - Aggiunte etichette localizzate nel modulo di internazionalizzazione `i18n.js` per tutte le lingue supportate (it, en, fr, de, es).
   - Regole CSS dedicate nel footer per hover e contrasto sia in tema chiaro che in tema scuro.
 - **Versioning**: bump a `2.0.7` (`PkiPortal.csproj`, badge UI in `index.html` e `admin.html`, cache-busting script `?v=2.0.7`).

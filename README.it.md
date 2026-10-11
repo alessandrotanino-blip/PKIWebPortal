@@ -30,15 +30,48 @@ Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostit
 
    * Permette il recupero del certificato emesso inserendo il *Request ID* o visualizzando la propria tabella *"I Tuoi Certificati"*.
    * **Controllo di proprietà e sicurezza**: il download è consentito esclusivamente all'utente Windows che ha inviato la richiesta originale (`ctx.User.Identity.Name`) o agli amministratori, prevenendo qualsiasi accesso non autorizzato ai certificati altrui (HTTP 403 Forbidden).
-6. **REST API per Automazione (win-acme / PowerShell)**:
+6. **Workflow di Approvazione Manuale (Hold & Review)**:
+
+   * Possibilità di impostare `RequiresApproval: true` sui template sensibili.
+   * Il certificato generato viene trattenuto dal portale in stato `PendingApproval` e rilasciato all'utente solo dopo l'autorizzazione di un amministratore.
+7. **Controllo Accessi Basato sui Ruoli (RBAC sui Template)**:
+
+   * Assegnazione granulare dei template a specifici gruppi Active Directory (`AllowedGroups`). Gli utenti non appartenenti ai gruppi autorizzati non possono emettere con tali template.
+8. **Interfaccia Multilingua & Tema Chiaro/Scuro**:
+
+   * Supporto completo per 5 lingue (**Italiano, Inglese, Francese, Tedesco, Spagnolo**) con cambio dinamico istantaneo.
+   * Selezione tema Chiaro/Scuro persistente in memoria locale.
+9. **REST API per Automazione (win-acme / PowerShell)**:
 
    * Espone endpoint RESTful per integrare script di rinnovo automatico e client di automazione come `win-acme`.
 
-\---
+---
+
+## 📸 Screenshot
+
+### Portale Utente - Nuova Richiesta Certificato
+![Portale Utente - Nuova Richiesta](Screens/1-PKI-UserPortal.jpeg)
+
+### Portale Utente - Emissione Automatica & Download PFX
+![Emissione Automatica](Screens/1-PKI-UserPortal_Auto.jpeg)
+
+### Portale Utente - Richiesta in Attesa di Approvazione
+![In Attesa di Approvazione](Screens/PendingApproval.png)
+
+### Portale Utente - Ritiro Certificati & Storico Utente
+![Ritiro Certificati](Screens/2-PKI-UserPortal.jpeg)
+
+### Portale Utente - Template con Accesso Limitato (Gruppi AD)
+![Template Ristretti](Screens/DeniedTemplates.png)
+
+### Pannello Amministrazione - Configurazione Portale, CA & Richieste Trattenute
+![Pannello Amministrazione](Screens/3-PKI-UserPortal.jpeg)
+
+---
 
 ## 📁 Struttura del Progetto
 
-```
+```text
 Portale/
 ├── Models/
 │   ├── AdminConfig.cs           # Configurazione autorizzativa amministratori
@@ -52,16 +85,18 @@ Portale/
 │   ├── AdcsService.cs           # Motore COM CCertRequest + certreq.exe + Simulatore
 │   └── CsrParserService.cs      # Servizio di parsing CSR X.509
 ├── wwwroot/
-│   ├── css/styles.css           # UI moderna responsive
+│   ├── css/styles.css           # UI moderna responsive con supporto Dark/Light
 │   ├── js/
 │   │   ├── vendor/forge.min.js  # Libreria crittografica per PFX/ASN.1
 │   │   ├── crypto-helper.js     # Generazione chiavi e PFX client-side
+│   │   ├── i18n.js              # Modulo multilingua (IT, EN, FR, DE, ES)
 │   │   └── app.js               # Controller applicativo e gestione form
 │   ├── index.html               # Portale utente HTML5/SPA
-│   └── admin.html               # Pannello amministrativo
-├── appsettings.json             # Configurazione CA, Template e modalità Hub/Standalone
+│   └── admin.html               # Pannello amministrativo (Configurazione & Hold)
+├── appsettings.json             # Configurazione CA, Template, RBAC e modalità Hub/Standalone
 ├── Program.cs                   # Entry point e Minimal API
 ├── web.config                   # Configurazione IIS (ASP.NET Core Module V2)
+├── Add-CaCredential.ps1         # Gestione sicura credenziali cross-forest (Credential Manager)
 ├── Install-PkiPortal.ps1        # Script di installazione su IIS (a fianco di certsrv)
 ├── Uninstall-PkiPortal.ps1      # Script di disinstallazione pulita
 └── run.ps1                      # Script rapido di avvio in sviluppo
@@ -268,7 +303,7 @@ Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 
 
 
-\---
+---
 
 ## 🛡️ Pannello amministrativo e richieste in approvazione
 
@@ -277,37 +312,63 @@ Il portale include `/admin.html`, protetto da Windows Authentication e da una AC
 ```json
 {
   "AdminConfig": {
-    "AllowedGroups": \\\["BUILTIN\\\\\\\\Administrators", "CONTOSO\\\\\\\\Domain Admins"],
-    "AllowedUsers": \\\["CONTOSO\\\\\\\\user-adm"]
+    "AllowedGroups": [
+      "BUILTIN\\Administrators",
+      "CONTOSO\\Domain Admins"
+    ],
+    "AllowedUsers": [
+      "CONTOSO\\user-adm"
+    ]
   }
 }
 ```
 
-Per i template con `RequiresApproval: true`, il certificato emesso dalla CA viene trattenuto in `held-requests.json` e rilasciato solo dopo l'approvazione amministrativa. Gli stati gestiti sono `PendingApproval`, `Approved`, `Issued`, `UnderSubmission` e `Rejected`.
+### Workflow di approvazione manuale (Hold & Review)
+
+Quando un template ha `RequiresApproval: true`:
+1. L'utente invia la richiesta tramite Web Crypto o CSR esterno.
+2. AD CS elabora la richiesta ed emette tecnicamente il certificato.
+3. Il portale intercetta il certificato, lo archivia cifrato/protetto in `held-requests.json` e contrassegna la richiesta come `PendingApproval`.
+4. L'utente riceve un Hold ID univoco e viene informato che la richiesta è in attesa di approvazione.
+5. Il certificato non può essere scaricato finché un amministratore autorizzato non lo approva dal pannello admin.
+
+Dopo l'approvazione, il certificato diventa scaricabile dal richiedente originale tramite la sezione di ritiro certificati. Gli amministratori possono inoltre rifiutare la richiesta registrando una motivazione.
+
+### Stati delle richieste trattenute
+
+| Stato | Descrizione | Azione disponibile |
+|---|---|---|
+| `PendingApproval` | Certificato trattenuto in attesa di autorizzazione amministrativa. | Approva e rilascia, oppure Rifiuta. |
+| `Approved` | Richiesta approvata da un amministratore. | Download del certificato abilitato per il richiedente. |
+| `Issued` | Certificato emesso direttamente (template senza approvazione). | Download diretto abilitato. |
+| `UnderSubmission` | Richiesta in sospeso sulla CA AD CS stessa (richiesta marcata Pending dalla CA). | Visualizza stato richiesta. |
+| `Rejected` | Richiesta rifiutata da un amministratore. | Visualizza motivazione del rifiuto. |
 
 ### Endpoint amministrativi
 
-|Metodo|Endpoint|Descrizione|
-|-|-|-|
-|GET|`/api/admin/check`|Verifica l'abilitazione dell'utente corrente|
-|GET|`/api/admin/config`|Legge la configurazione completa|
-|PUT|`/api/admin/config`|Salva la configurazione e ricarica il provider|
-|POST|`/api/admin/templates/discover`|Scopre i template pubblicati sulla CA|
-|GET|`/api/admin/held-requests?status={filter}`|Elenca le richieste trattenute|
-|GET|`/api/admin/held-requests/{holdId}`|Mostra il dettaglio di una richiesta|
-|POST|`/api/admin/held-requests/{holdId}/approve`|Approva e abilita il rilascio|
-|POST|`/api/admin/held-requests/{holdId}/reject`|Rifiuta la richiesta con motivazione opzionale|
-
-```
+| Metodo | Endpoint | Descrizione | Autorizzazione |
+|---|---|---|---|
+| GET | `/api/admin/check` | Verifica se l'utente corrente è amministratore | Utente autenticato |
+| GET | `/api/admin/config` | Legge l'intera configurazione del portale | Amministratore |
+| PUT | `/api/admin/config` | Salva la configurazione e ricarica il provider a caldo | Amministratore |
+| POST | `/api/admin/templates/discover` | Scopre i template pubblicati sulla CA tramite DCOM o LDAP | Amministratore |
+| GET | `/api/admin/held-requests?status={filter}` | Elenca le richieste trattenute (`pending`, `approved`, `rejected`, `all`) | Amministratore |
+| GET | `/api/admin/held-requests/{holdId}` | Mostra il dettaglio di una richiesta e il certificato archiviato | Amministratore |
+| POST | `/api/admin/held-requests/{holdId}/approve` | Approva e autorizza il rilascio del certificato | Amministratore |
+| POST | `/api/admin/held-requests/{holdId}/reject` | Rifiuta la richiesta con motivazione opzionale | Amministratore |
 
 ## 🔎 Scoperta dei template e validità
 
-La funzione di discovery legge dalla definizione del template AD CS l'attributo `pKIDefaultLifetime` tramite Active Directory e converte il valore in giorni. In modalità Hub, la query usa le credenziali della foresta di destinazione; se LDAP non è disponibile, viene usato il fallback `certutil -config "server\\\\CA" -template NomeTemplate`. La validità viene salvata in `appsettings.json` e mostrata in sola lettura all'amministratore.
+La funzione di discovery legge dalla definizione del template AD CS l'attributo `pKIDefaultLifetime` tramite Active Directory e converte il valore in giorni. In modalità Hub, la query usa le credenziali della foresta di destinazione; se LDAP non è disponibile, viene usato il fallback:
+
+```powershell
+certutil -config "server\CA" -template NomeTemplate
+```
+
+La validità viene salvata in `appsettings.json` e mostrata in sola lettura all'amministratore. Per le CA in modalità simulatore, la validità è tratta dalle definizioni mock.
 
 ---
 
 ## 👤 Autore
 
-\*\*Alessandro Tanino\*\*
-
-
+**Alessandro Tanino** (<alessandro.tanino@hotmail.com>)

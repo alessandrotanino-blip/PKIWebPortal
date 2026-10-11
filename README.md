@@ -30,33 +30,73 @@ Modern web portal built with **HTML5** and **ASP.NET Core 8 (C#)**, designed to 
 
    * Allows users to retrieve an issued certificate by entering the *Request ID* or by viewing their own *“Your Certificates”* table.
    * **Ownership and security checks**: Downloads are allowed exclusively for the Windows user who submitted the original request (`ctx.User.Identity.Name`) or for administrators, preventing unauthorized access to other users’ certificates (`HTTP 403 Forbidden`).
-6. **REST API for Automation (win-acme / PowerShell)**:
+6. **Manual Approval Workflow (Hold & Review)**:
+
+   * Ability to enable `RequiresApproval: true` on sensitive templates.
+   * Issued certificates are securely intercepted, stored in `held-requests.json` in `PendingApproval` state, and released only upon administrator authorization.
+7. **Role-Based Access Control (Template RBAC)**:
+
+   * Granular assignment of certificate templates to specific Active Directory groups (`AllowedGroups`). Users outside authorized groups are restricted from issuing certificates with those templates.
+8. **Multi-Language UI & Theme Support**:
+
+   * Full support for 5 languages (**English, Italian, French, German, Spanish**) with real-time dynamic switching.
+   * Persistent Light and Dark theme selection.
+9. **REST API for Automation (win-acme / PowerShell)**:
 
    * Exposes RESTful endpoints for integrating automatic renewal scripts and automation clients such as `win-acme`.
 
-\---
+---
+
+## 📸 Screenshots
+
+### User Portal - New Certificate Request
+![User Portal - New Certificate Request](Screens/1-PKI-UserPortal.jpeg)
+
+### User Portal - Automatic Issuance & PFX Download
+![Automatic Issuance](Screens/1-PKI-UserPortal_Auto.jpeg)
+
+### User Portal - Request Pending Approval
+![Pending Approval](Screens/PendingApproval.png)
+
+### User Portal - Certificate Retrieval & Request History
+![Certificate Retrieval](Screens/2-PKI-UserPortal.jpeg)
+
+### User Portal - Restricted Templates (AD Group Membership)
+![Restricted Templates](Screens/DeniedTemplates.png)
+
+### Administration Panel - Portal, CA Configuration & Held Requests
+![Administration Panel](Screens/3-PKI-UserPortal.jpeg)
+
+---
 
 ## 📁 Project Structure
 
 ```text
 Portal/
 ├── Models/
+│   ├── AdminConfig.cs           # Administrator authorization configuration
+│   ├── HeldCertificateRequest.cs# Held certificate request models and states
 │   ├── PortalConfig.cs          # CA and template configuration models
 │   └── EnrollmentDto.cs         # DTOs for requests/responses and CSR parsing
 ├── Services/
+│   ├── IHeldRequestStore.cs     # Held request store interface
+│   ├── HeldRequestStore.cs      # Thread-safe store with JSON persistence
 │   ├── IAdcsService.cs          # AD CS connector interface
 │   ├── AdcsService.cs           # COM CCertRequest engine + certreq.exe + Simulator
 │   └── CsrParserService.cs      # X.509 CSR parsing service
 ├── wwwroot/
-│   ├── css/styles.css           # Modern responsive UI
+│   ├── css/styles.css           # Modern responsive UI with Dark/Light theme support
 │   ├── js/
 │   │   ├── vendor/forge.min.js  # Cryptographic library for PFX/ASN.1
 │   │   ├── crypto-helper.js     # Client-side key and PFX generation
+│   │   ├── i18n.js              # Multi-language module (EN, IT, FR, DE, ES)
 │   │   └── app.js               # Application controller and form handling
-│   └── index.html               # HTML5 graphical interface
-├── appsettings.json             # CA, template, and Hub/Standalone configuration
+│   ├── index.html               # User portal HTML5/SPA
+│   └── admin.html               # Administration panel (Config & Held Requests)
+├── appsettings.json             # CA, template, RBAC, and Hub/Standalone configuration
 ├── Program.cs                   # Entry point and Minimal API
 ├── web.config                   # IIS configuration (ASP.NET Core Module V2)
+├── Add-CaCredential.ps1         # Secure cross-forest credential manager script
 ├── Install-PkiPortal.ps1        # IIS installation script (alongside certsrv)
 ├── Uninstall-PkiPortal.ps1      # Clean uninstallation script
 └── run.ps1                      # Quick development startup script
@@ -333,14 +373,14 @@ The “Discover from CA” function reads the template definition from Active Di
 In Hub mode, the LDAP query uses the credentials configured for the destination forest. If Active Directory is unavailable, the portal falls back to:
 
 ```powershell
-certutil -config "server\\\\CA" -template TemplateName
+certutil -config "server\CA" -template TemplateName
 ```
 
 For simulator CAs, validity is taken from the mock template definitions.
 
-\---
+---
 
 ## 👤 Author
 
-**Alessandro Tanino**
+**Alessandro Tanino** (<alessandro.tanino@hotmail.com>)
 
