@@ -30,14 +30,14 @@ Modern web portal built with **HTML5** and **ASP.NET Core 8 (C#)**, designed to 
 
    * Allows users to retrieve an issued certificate by entering the *Request ID* or by viewing their own *“Your Certificates”* table.
    * **Ownership and security checks**: Downloads are allowed exclusively for the Windows user who submitted the original request (`ctx.User.Identity.Name`) or for administrators, preventing unauthorized access to other users’ certificates (`HTTP 403 Forbidden`).
-6. **Manual Approval Workflow (Hold & Review)**:
+6. **Manual Approval Workflow (Hold \& Review)**:
 
    * Ability to enable `RequiresApproval: true` on sensitive templates.
    * Issued certificates are securely intercepted, stored in `held-requests.json` in `PendingApproval` state, and released only upon administrator authorization.
 7. **Role-Based Access Control (Template RBAC)**:
 
    * Granular assignment of certificate templates to specific Active Directory groups (`AllowedGroups`). Users outside authorized groups are restricted from issuing certificates with those templates.
-8. **Multi-Language UI & Theme Support**:
+8. **Multi-Language UI \& Theme Support**:
 
    * Full support for 5 languages (**English, Italian, French, German, Spanish**) with real-time dynamic switching.
    * Persistent Light and Dark theme selection.
@@ -45,29 +45,35 @@ Modern web portal built with **HTML5** and **ASP.NET Core 8 (C#)**, designed to 
 
    * Exposes RESTful endpoints for integrating automatic renewal scripts and automation clients such as `win-acme`.
 
----
+\---
 
 ## 📸 Screenshots
 
 ### User Portal - New Certificate Request
-![User Portal - New Certificate Request](Screens/1-PKI-UserPortal.jpeg)
 
-### User Portal - Automatic Issuance & PFX Download
-![Automatic Issuance](Screens/1-PKI-UserPortal_Auto.jpeg)
+!\[User Portal - New Certificate Request](Screens/1-PKI-UserPortal.jpeg)
 
-### User Portal - Request Pending Approval
-![Pending Approval](Screens/PendingApproval.png)
+### User Portal - Automatic Issuance \& PFX Download
 
-### User Portal - Certificate Retrieval & Request History
-![Certificate Retrieval](Screens/2-PKI-UserPortal.jpeg)
+!\[Automatic Issuance](Screens/1-PKI-UserPortal\_Auto.jpeg)
+
+### Admin Portal - Request Pending Approval
+
+!\[Pending Approval](Screens/PendingApproval.png)
+
+### User Portal - Certificate Retrieval \& Request History
+
+!\[Certificate Retrieval](Screens/2-PKI-UserPortal.jpeg)
 
 ### User Portal - Restricted Templates (AD Group Membership)
-![Restricted Templates](Screens/DeniedTemplates.png)
 
-### Administration Panel - Portal, CA Configuration & Held Requests
-![Administration Panel](Screens/3-PKI-UserPortal.jpeg)
+!\[Restricted Templates](Screens/DeniedTemplates.png)
 
----
+### Administration Panel - Portal, CA Configuration \& Held Requests
+
+!\[Administration Panel](Screens/3-PKI-UserPortal.jpeg)
+
+\---
 
 ## 📁 Project Structure
 
@@ -92,7 +98,7 @@ Portal/
 │   │   ├── i18n.js              # Multi-language module (EN, IT, FR, DE, ES)
 │   │   └── app.js               # Application controller and form handling
 │   ├── index.html               # User portal HTML5/SPA
-│   └── admin.html               # Administration panel (Config & Held Requests)
+│   └── admin.html               # Administration panel (Config \& Held Requests)
 ├── appsettings.json             # CA, template, RBAC, and Hub/Standalone configuration
 ├── Program.cs                   # Entry point and Minimal API
 ├── web.config                   # IIS configuration (ASP.NET Core Module V2)
@@ -128,24 +134,24 @@ The `Install-PkiPortal.ps1` script installs the portal as a **separate IIS websi
 
 ```powershell
 # Basic installation: HTTP site on port 8443
-.\\\\Install-PkiPortal.ps1
+.\\Install-PkiPortal.ps1
 
 # Installation with a gMSA (Group Managed Service Account — no password required)
-.\\\\Install-PkiPortal.ps1 -SitePort 8443 -AppPoolIdentity "DOMAIN\\\\GMA$" -IsGMSA
+.\\Install-PkiPortal.ps1 -SitePort 8443 -AppPoolIdentity "DOMAIN\\GMA$" -IsGMSA
 
 # HTTPS installation with a custom hostname and standard user account
-.\\\\Install-PkiPortal.ps1 -SitePort 443 `
+.\\Install-PkiPortal.ps1 -SitePort 443 `
     -SiteHostHeader "pki.company.lan" `
     -UseHttps `
     -CertThumbprint "A1B2C3D4E5F6..." `
-    -AppPoolIdentity "DOMAIN\\\\svc-pki-portal" `
+    -AppPoolIdentity "DOMAIN\\svc-pki-portal" `
     -AppPoolPassword (Read-Host -AsSecureString "Password")
 
 # Installation on a custom port with a custom site name
-.\\\\Install-PkiPortal.ps1 -SiteName "PKI-Enrollment-F1" -SitePort 9443
+.\\Install-PkiPortal.ps1 -SiteName "PKI-Enrollment-F1" -SitePort 9443
 
 # Installation without a firewall rule (centrally managed environments)
-.\\\\Install-PkiPortal.ps1 -SitePort 8443 -SkipFirewall
+.\\Install-PkiPortal.ps1 -SitePort 8443 -SkipFirewall
 ```
 
 ### Available parameters
@@ -155,8 +161,8 @@ The `Install-PkiPortal.ps1` script installs the portal as a **separate IIS websi
 |`-SiteName`|`PkiWebEnrollment`|IIS site name|
 |`-SitePort`|`8443`|Listening TCP port|
 |`-SiteHostHeader`|*(empty = all)*|Specific hostname, e.g. `pki.company.lan`|
-|`-InstallPath`|`C:\\\\inetpub\\\\PkiWebEnrollment`|Publishing directory|
-|`-AppPoolIdentity`|`ApplicationPoolIdentity`|Pool identity (`NetworkService`, `LocalSystem`, `DOMAIN\\\\Account$`, or `DOMAIN\\\\User`)|
+|`-InstallPath`|`C:\\inetpub\\PkiWebEnrollment`|Publishing directory|
+|`-AppPoolIdentity`|`ApplicationPoolIdentity`|Pool identity (`NetworkService`, `LocalSystem`, `DOMAIN\\Account$`, or `DOMAIN\\User`)|
 |`-AppPoolPassword`|*(none)*|Password for a standard domain user account, not required for a gMSA|
 |`-IsGMSA`|*(no)*|Specifies that the identity is a gMSA, without a password; appends `$` if missing|
 |`-UseHttps`|*(no)*|Enables the HTTPS binding|
@@ -169,15 +175,15 @@ The `Install-PkiPortal.ps1` script installs the portal as a **separate IIS websi
 
 ```powershell
 # Removes the IIS site, application pool, and firewall rule; preserves the files
-.\\\\Uninstall-PkiPortal.ps1
+.\\Uninstall-PkiPortal.ps1
 
 # Removes everything, including application files
-.\\\\Uninstall-PkiPortal.ps1 -RemoveFiles
+.\\Uninstall-PkiPortal.ps1 -RemoveFiles
 ```
 
-> \\\*\\\*⚠️ Non-intrusiveness guarantee\\\*\\\*: Both scripts operate exclusively on the dedicated
+> \*\*⚠️ Non-intrusiveness guarantee\*\*: Both scripts operate exclusively on the dedicated
 > PKI portal website and application pool. The `Default Web Site` and the
-> `/CertSrv` application are \\\*\\\*never touched or modified\\\*\\\*.
+> `/CertSrv` application are \*\*never touched or modified\*\*.
 
 \---
 
@@ -186,7 +192,7 @@ The `Install-PkiPortal.ps1` script installs the portal as a **separate IIS websi
 Edit the `appsettings.json` file in the installation directory, for example:
 
 ```text
-C:\\\\inetpub\\\\PkiWebEnrollment\\\\appsettings.json
+C:\\inetpub\\PkiWebEnrollment\\appsettings.json
 ```
 
 ### 1\. Local Mode (Installation alongside certsrv in the same forest)
@@ -199,16 +205,16 @@ In this mode, no credential configuration is required: the portal uses the IIS A
     "PortalMode": "Standalone",
     "PortalTitle": "Enterprise PKI Web Enrollment Portal",
     "DefaultCaId": "ca-forest1",
-    "CAs": \\\[
+    "CAs": \[
       {
         "Id": "ca-forest1",
         "DisplayName": "Forest 1 - Enterprise Issuing CA (Prod)",
         "ForestOrDomain": "forest1.lan",
-        "ConfigString": "subca01.forest1.lan\\\\\\\\Forest1-SubCA",
+        "ConfigString": "subca01.forest1.lan\\\\Forest1-SubCA",
         "IsDefault": true,
         "UseSimulator": false,
         "AuthMode": "LocalIdentity",
-        "Templates": \\\[ ... ]
+        "Templates": \[ ... ]
       }
     ]
   }
@@ -225,28 +231,28 @@ In this mode, the portal contacts each Sub-CA using the specific service account
     "PortalMode": "Hub",
     "PortalTitle": "Enterprise PKI Web Enrollment Portal",
     "DefaultCaId": "ca-forest1",
-    "CAs": \\\[
+    "CAs": \[
       {
         "Id": "ca-forest1",
         "DisplayName": "Forest 1 - Enterprise Issuing CA",
         "ForestOrDomain": "forest1.lan",
-        "ConfigString": "subca01.forest1.lan\\\\\\\\Forest1-SubCA",
+        "ConfigString": "subca01.forest1.lan\\\\Forest1-SubCA",
         "IsDefault": true,
         "UseSimulator": false,
         "AuthMode": "CredentialManager",
         "CredentialTarget": "subca01.forest1.lan",
-        "Templates": \\\[ ... ]
+        "Templates": \[ ... ]
       },
       {
         "Id": "ca-forest2",
         "DisplayName": "Forest 2 - Enterprise Issuing CA (Untrusted)",
         "ForestOrDomain": "forest2.lan",
-        "ConfigString": "subca02.forest2.lan\\\\\\\\Forest2-SubCA",
+        "ConfigString": "subca02.forest2.lan\\\\Forest2-SubCA",
         "IsDefault": false,
         "UseSimulator": false,
         "AuthMode": "CredentialManager",
         "CredentialTarget": "subca02.forest2.lan",
-        "Templates": \\\[ ... ]
+        "Templates": \[ ... ]
       }
     ]
   }
@@ -261,20 +267,20 @@ To register service-account credentials for the different forests **without ever
 
 ```powershell
 # Registers the account for the Forest 1 Sub-CA; the password is requested using a protected prompt
-.\\\\Add-CaCredential.ps1 -Target "subca01.forest1.lan" -UserName "FOREST1\\\\svc-pki-enroll"
+.\\Add-CaCredential.ps1 -Target "subca01.forest1.lan" -UserName "FOREST1\\svc-pki-enroll"
 
 # Registers the account for the Forest 2 Sub-CA (separate untrusted forest)
-.\\\\Add-CaCredential.ps1 -Target "subca02.forest2.lan" -UserName "FOREST2\\\\svc-pki-enroll"
+.\\Add-CaCredential.ps1 -Target "subca02.forest2.lan" -UserName "FOREST2\\svc-pki-enroll"
 
 # Lists the targets registered in Credential Manager
-.\\\\Add-CaCredential.ps1 -List
+.\\Add-CaCredential.ps1 -List
 
 # Removes a stored credential
-.\\\\Add-CaCredential.ps1 -Target "subca02.forest2.lan" -Remove
+.\\Add-CaCredential.ps1 -Target "subca02.forest2.lan" -Remove
 ```
 
-> \\\*\\\*How it works under the hood\\\*\\\*:
-> When a request arrives for `ca-forest2`, the backend queries `Advapi32.dll` (`CredReadW`) for the `subca02.forest2.lan` target, creates a secure network token through `LogonUser` (`LOGON32\\\_LOGON\\\_NEW\\\_CREDENTIALS`), and executes the operation (`CCertRequest` / `certreq`) inside a `WindowsIdentity.RunImpersonated` block. RPC/DCOM calls to the remote CA therefore use the account from that forest, overcoming the absence of a trust relationship.
+> \*\*How it works under the hood\*\*:
+> When a request arrives for `ca-forest2`, the backend queries `Advapi32.dll` (`CredReadW`) for the `subca02.forest2.lan` target, creates a secure network token through `LogonUser` (`LOGON32\_LOGON\_NEW\_CREDENTIALS`), and executes the operation (`CCertRequest` / `certreq`) inside a `WindowsIdentity.RunImpersonated` block. RPC/DCOM calls to the remote CA therefore use the account from that forest, overcoming the absence of a trust relationship.
 
 \---
 
@@ -283,13 +289,13 @@ To register service-account credentials for the different forests **without ever
 In a PowerShell console:
 
 ```powershell
-.\\\\run.ps1
+.\\run.ps1
 ```
 
 Or manually:
 
 ```powershell
-$env:PATH = "C:\\\\Program Files\\\\dotnet;$env:PATH"
+$env:PATH = "C:\\Program Files\\dotnet;$env:PATH"
 dotnet run --urls "http://127.0.0.1:5055"
 ```
 
@@ -308,17 +314,17 @@ Then open a browser at:
 
 ## 🛡️ Administrative panel and approval workflow
 
-The portal includes `/admin.html`, protected by Windows Authentication and an authorization ACL configured in the `AdminConfig` section of `appsettings.json`. Access can be granted to groups through `AllowedGroups` or to individual accounts through `AllowedUsers`. Any other user receives `HTTP 403 Forbidden` when accessing the administrative page or `/api/admin/\\\*` endpoints.
+The portal includes `/admin.html`, protected by Windows Authentication and an authorization ACL configured in the `AdminConfig` section of `appsettings.json`. Access can be granted to groups through `AllowedGroups` or to individual accounts through `AllowedUsers`. Any other user receives `HTTP 403 Forbidden` when accessing the administrative page or `/api/admin/\*` endpoints.
 
 ```json
 {
   "AdminConfig": {
-    "AllowedGroups": \\\[
-      "BUILTIN\\\\\\\\Administrators",
-      "CONTOSO\\\\\\\\Domain Admins"
+    "AllowedGroups": \[
+      "BUILTIN\\\\Administrators",
+      "CONTOSO\\\\Domain Admins"
     ],
-    "AllowedUsers": \\\[
-      "CONTOSO\\\\\\\\user-adm"
+    "AllowedUsers": \[
+      "CONTOSO\\\\user-adm"
     ]
   }
 }
@@ -373,14 +379,14 @@ The “Discover from CA” function reads the template definition from Active Di
 In Hub mode, the LDAP query uses the credentials configured for the destination forest. If Active Directory is unavailable, the portal falls back to:
 
 ```powershell
-certutil -config "server\CA" -template TemplateName
+certutil -config "server\\CA" -template TemplateName
 ```
 
 For simulator CAs, validity is taken from the mock template definitions.
 
----
+\---
 
 ## 👤 Author
 
-**Alessandro Tanino** (<alessandro.tanino@hotmail.com>)
+**Alessandro Tanino** ([alessandro.tanino@hotmail.com](mailto:alessandro.tanino@hotmail.com))
 
