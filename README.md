@@ -468,4 +468,10 @@ The simulator:
 
 **Alessandro Tanino** ([alessandro.tanino@hotmail.com](mailto:alessandro.tanino@hotmail.com))
 
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+
 

@@ -458,4 +458,10 @@ Il simulatore:
 
 **Alessandro Tanino** ([alessandro.tanino@hotmail.com](mailto:alessandro.tanino@hotmail.com))
 
+---
+
+## 📄 Licenza
+
+Questo progetto è rilasciato sotto licenza [MIT](LICENSE).
+
 
