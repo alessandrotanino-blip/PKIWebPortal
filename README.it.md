@@ -10,7 +10,7 @@ Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostit
 
 1. **Generazione Chiavi Client-Side (HTML5 Web Crypto)**:
 
-   * La coppia di chiavi (RSA 2048/3072/4096 o ECC) viene generata in memoria direttamente all'interno del browser (`window.crypto.subtle`).
+   * La coppia di chiavi (RSA 2048/3072/4096 o ECC P-256/P-384) viene generata in memoria direttamente all'interno del browser (`window.crypto.subtle`).
    * La **chiave privata non viaggia mai sulla rete né tocca il server**.
    * All'emissione del certificato da parte di AD CS, il browser genera un pacchetto **PKCS#12 (.pfx)** cifrato con password scelta dall'utente, pronto per essere installato su Windows/IIS.
 2. **Caricamento CSR Esistente (Base64 / File)**:
@@ -34,6 +34,7 @@ Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostit
 
    * Possibilità di impostare `RequiresApproval: true` sui template sensibili.
    * Il certificato generato viene trattenuto dal portale in stato `PendingApproval` e rilasciato all'utente solo dopo l'autorizzazione di un amministratore.
+   * Gli utenti possono allegare **note opzionali** alle proprie richieste per fornire contesto agli amministratori.
 7. **Controllo Accessi Basato sui Ruoli (RBAC sui Template)**:
 
    * Assegnazione granulare dei template a specifici gruppi Active Directory (`AllowedGroups`). Gli utenti non appartenenti ai gruppi autorizzati non possono emettere con tali template.
@@ -376,7 +377,85 @@ La validità viene salvata in `appsettings.json` e mostrata in sola lettura all'
 
 ---
 
+## 🔑 RBAC sui Template (Controllo Accessi per Gruppo)
+
+L'accesso ai singoli template di certificato può essere limitato a specifici gruppi Active Directory tramite il campo `AllowedGroups` nella configurazione del template:
+
+```json
+{
+  "Name": "WebServer-Secure",
+  "DisplayName": "Web Server SSL/TLS (Solo Admins)",
+  "Description": "Template riservato al gruppo PKI-Admins",
+  "RequiresApproval": true,
+  "ValidityDays": 365,
+  "AllowedKeyTypes": ["RSA-2048", "RSA-4096"],
+  "KeyUsages": ["DigitalSignature", "KeyEncipherment"],
+  "ExtendedKeyUsages": ["ServerAuthentication"],
+  "AllowedGroups": ["CONTOSO\\PKI-Admins"]
+}
+```
+
+Quando `AllowedGroups` contiene uno o più gruppi, solo gli utenti appartenenti a tali gruppi possono visualizzare e utilizzare il template. Gli utenti non autorizzati vedranno il template disabilitato con un'icona lucchetto nell'interfaccia del portale.
+
+---
+
+## 🧪 Modalità Simulatore (Sviluppo e Test)
+
+Per ambienti di sviluppo, test o demo offline, è possibile attivare il simulatore integrato impostando `"UseSimulator": true` sulla configurazione della CA:
+
+```json
+{
+  "Id": "ca-test",
+  "DisplayName": "CA Simulata (Test/Demo)",
+  "ForestOrDomain": "test.local",
+  "ConfigString": "simulator",
+  "IsDefault": true,
+  "UseSimulator": true,
+  "AuthMode": "LocalIdentity",
+  "Templates": []
+}
+```
+
+Il simulatore:
+
+* Genera certificati auto-firmati tramite l'API .NET `CertificateRequest`.
+* Produce risposte PKCS#7 (P7B) realistiche con certificato emesso e Root CA simulata.
+* Supporta template simulati con nomi, display name e validità predefiniti.
+* Implementa completamente il workflow `RequiresApproval` (approvazione manuale).
+* Non richiede alcuna infrastruttura AD CS né connettività di rete.
+
+---
+
+## 📡 Endpoint REST Utente
+
+|Metodo|Endpoint|Descrizione|Autorizzazione|
+|-|-|-|-|
+|GET|`/api/cas`|Elenco delle CA configurate con i relativi template.|Utente autenticato|
+|GET|`/api/templates/{caId}`|Elenco template per una CA specifica (filtro RBAC applicato).|Utente autenticato|
+|POST|`/api/certificates/request`|Sottomissione CSR per firma (workflow Hold se configurato).|Utente autenticato|
+|GET|`/api/certificates/status/{caId}/{requestId}`|Stato/ritiro certificato (controllo proprietà).|Autenticato (richiedente originale o amministratore)|
+|GET|`/api/certificates/my-requests/{caId}`|Elenco ultime richieste dell'utente corrente.|Utente autenticato|
+
+---
+
+## 📋 Riferimento Configurazione Template
+
+|Campo|Tipo|Default|Descrizione|
+|-|-|-|-|
+|`Name`|string|—|Nome di sistema del template in AD CS (es. `WebServer`).|
+|`DisplayName`|string|—|Nome visualizzato all'utente.|
+|`Description`|string|—|Breve descrizione mostrata nel portale.|
+|`RequiresApproval`|bool|`false`|Se `true`, i certificati emessi vengono trattenuti per approvazione admin.|
+|`ValidityDays`|int|`365`|Validità del certificato in giorni (sola lettura se scoperto dalla CA).|
+|`AllowedKeyTypes`|string[]|`["RSA-2048","RSA-4096","ECDSA-P256"]`|Algoritmi chiave ammessi. Supporta anche `RSA-3072` e `ECDSA-P384`.|
+|`KeyUsages`|string[]|`["DigitalSignature","KeyEncipherment"]`|Valori X.509 Key Usage.|
+|`ExtendedKeyUsages`|string[]|`["ServerAuthentication"]`|OID/nomi X.509 Extended Key Usage.|
+|`AllowedGroups`|string[]|`[]` (tutti)|Gruppi Active Directory autorizzati all'uso del template (RBAC).|
+
+---
+
 ## 👤 Autore
 
 **Alessandro Tanino** ([alessandro.tanino@hotmail.com](mailto:alessandro.tanino@hotmail.com))
+
 

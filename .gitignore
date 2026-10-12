@@ -9,7 +9,8 @@ secrets/
 credentials/
 config.local.*
 appsettings.json
-*.docuwiki
+*.dokuwiki
+DOCUMENTATION.dokuwiki
 
 # File temporanei e database locali
 *.log

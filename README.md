@@ -10,7 +10,7 @@ Modern web portal built with **HTML5** and **ASP.NET Core 8 (C#)**, designed to 
 
 1. **Client-Side Key Generation (HTML5 Web Crypto)**:
 
-   * The key pair (RSA 2048/3072/4096 or ECC) is generated in memory directly inside the browser (`window.crypto.subtle`).
+   * The key pair (RSA 2048/3072/4096 or ECC P-256/P-384) is generated in memory directly inside the browser (`window.crypto.subtle`).
    * The **private key never travels over the network and never touches the server**.
    * When AD CS issues the certificate, the browser generates a password-encrypted **PKCS#12 (.pfx)** package using a password chosen by the user, ready to be installed on Windows/IIS.
 2. **Existing CSR Upload (Base64 / File)**:
@@ -34,6 +34,7 @@ Modern web portal built with **HTML5** and **ASP.NET Core 8 (C#)**, designed to 
 
    * Ability to enable `RequiresApproval: true` on sensitive templates.
    * Issued certificates are securely intercepted, stored in `held-requests.json` in `PendingApproval` state, and released only upon administrator authorization.
+   * Users can attach **optional notes** to their requests to provide context for administrators.
 7. **Role-Based Access Control (Template RBAC)**:
 
    * Granular assignment of certificate templates to specific Active Directory groups (`AllowedGroups`). Users outside authorized groups are restricted from issuing certificates with those templates.
@@ -386,7 +387,85 @@ For simulator CAs, validity is taken from the mock template definitions.
 
 ---
 
+## 🔑 Template RBAC (Role-Based Access Control)
+
+Access to individual certificate templates can be restricted to specific Active Directory groups using the `AllowedGroups` field in the template configuration:
+
+```json
+{
+  "Name": "WebServer-Secure",
+  "DisplayName": "Restricted Web Server Template",
+  "Description": "Only members of PKI-Admins can use this template",
+  "RequiresApproval": true,
+  "ValidityDays": 365,
+  "AllowedKeyTypes": ["RSA-2048", "RSA-4096"],
+  "KeyUsages": ["DigitalSignature", "KeyEncipherment"],
+  "ExtendedKeyUsages": ["ServerAuthentication"],
+  "AllowedGroups": ["CONTOSO\\PKI-Admins"]
+}
+```
+
+When `AllowedGroups` contains one or more groups, only users belonging to those groups can see and use the template. Unauthorized users see the template disabled with a lock icon in the portal UI.
+
+---
+
+## 🧪 Simulator Mode (Development & Testing)
+
+For development, testing, and offline demo environments, enable the built-in simulator by setting `"UseSimulator": true` on a CA entry:
+
+```json
+{
+  "Id": "ca-test",
+  "DisplayName": "Simulated CA (Test/Demo)",
+  "ForestOrDomain": "test.local",
+  "ConfigString": "simulator",
+  "IsDefault": true,
+  "UseSimulator": true,
+  "AuthMode": "LocalIdentity",
+  "Templates": []
+}
+```
+
+The simulator:
+
+* Generates self-signed certificates using the .NET `CertificateRequest` API.
+* Produces realistic PKCS#7 (P7B) responses with the issued certificate and a mock Root CA.
+* Supports simulated templates with predefined names, display names, and validity periods.
+* Fully implements the `RequiresApproval` workflow (manual approval).
+* Requires no AD CS infrastructure or network connectivity.
+
+---
+
+## 📡 User REST Endpoints
+
+|Method|Endpoint|Description|Permission|
+|-|-|-|-|
+|GET|`/api/cas`|Lists all configured CAs with their templates.|Authenticated user|
+|GET|`/api/templates/{caId}`|Lists templates for a specific CA (RBAC filtering applied).|Authenticated user|
+|POST|`/api/certificates/request`|Submits a CSR for signing (Hold workflow applies if configured).|Authenticated user|
+|GET|`/api/certificates/status/{caId}/{requestId}`|Checks certificate status and retrieves the issued certificate.|Authenticated (original requester or administrator)|
+|GET|`/api/certificates/my-requests/{caId}`|Lists the current user's recent certificate requests.|Authenticated user|
+
+---
+
+## 📋 Template Configuration Reference
+
+|Field|Type|Default|Description|
+|-|-|-|-|
+|`Name`|string|—|System name of the template in AD CS (e.g. `WebServer`).|
+|`DisplayName`|string|—|User-facing display name.|
+|`Description`|string|—|Short description shown in the portal.|
+|`RequiresApproval`|bool|`false`|When `true`, issued certificates are held for admin approval.|
+|`ValidityDays`|int|`365`|Certificate validity in days (read-only when discovered from CA).|
+|`AllowedKeyTypes`|string[]|`["RSA-2048","RSA-4096","ECDSA-P256"]`|Allowed key algorithms. Also supports `RSA-3072` and `ECDSA-P384`.|
+|`KeyUsages`|string[]|`["DigitalSignature","KeyEncipherment"]`|X.509 Key Usage values.|
+|`ExtendedKeyUsages`|string[]|`["ServerAuthentication"]`|X.509 Extended Key Usage OIDs or names.|
+|`AllowedGroups`|string[]|`[]` (all users)|Active Directory groups allowed to use this template (RBAC).|
+
+---
+
 ## 👤 Author
 
 **Alessandro Tanino** ([alessandro.tanino@hotmail.com](mailto:alessandro.tanino@hotmail.com))
+
 
