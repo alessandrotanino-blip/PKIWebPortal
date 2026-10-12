@@ -107,35 +107,80 @@ param(
 )
 
 # ============================================================================
-# FUNZIONI DI SUPPORTO
+# RILEVAMENTO LINGUA / LOCALIZATION (i18n)
+# ============================================================================
+# Se la lingua dell'OS non è l'italiano ("it"), tutti i messaggi dello script
+# sono mostrati in lingua inglese.
+$script:IsItalian = $false
+try {
+    $uiCulture = [System.Globalization.CultureInfo]::CurrentUICulture.TwoLetterISOLanguageName
+    $installedCulture = [System.Globalization.CultureInfo]::InstalledUICulture.TwoLetterISOLanguageName
+    if ($uiCulture -eq "it" -or $installedCulture -eq "it") {
+        $script:IsItalian = $true
+    }
+} catch {
+    $script:IsItalian = $false
+}
+
+function Msg {
+    param(
+        [Parameter(Mandatory=$true, Position=0)][string]$It,
+        [Parameter(Mandatory=$true, Position=1)][string]$En
+    )
+    if ($script:IsItalian) { $It } else { $En }
+}
+
+# ============================================================================
+# FUNZIONI DI SUPPORTO / LOGGING
 # ============================================================================
 
 function Write-Step {
-    param([string]$Message, [string]$Color = "Cyan")
+    param(
+        [Parameter(Position=0)][string]$Message,
+        [Parameter(Position=1)][string]$EnMessage = "",
+        [Parameter(Position=2)][string]$Color = "Cyan"
+    )
+    $msg = if ($EnMessage -and -not $script:IsItalian) { $EnMessage } else { $Message }
     Write-Host ""
     Write-Host "===============================================================" -ForegroundColor $Color
-    Write-Host "  $Message" -ForegroundColor White
+    Write-Host "  $msg" -ForegroundColor White
     Write-Host "===============================================================" -ForegroundColor $Color
 }
 
 function Write-Info {
-    param([string]$Message)
-    Write-Host "  [INFO] $Message" -ForegroundColor Gray
+    param(
+        [Parameter(Position=0)][string]$Message,
+        [Parameter(Position=1)][string]$EnMessage = ""
+    )
+    $msg = if ($EnMessage -and -not $script:IsItalian) { $EnMessage } else { $Message }
+    Write-Host "  [INFO] $msg" -ForegroundColor Gray
 }
 
 function Write-OK {
-    param([string]$Message)
-    Write-Host "  [OK]   $Message" -ForegroundColor Green
+    param(
+        [Parameter(Position=0)][string]$Message,
+        [Parameter(Position=1)][string]$EnMessage = ""
+    )
+    $msg = if ($EnMessage -and -not $script:IsItalian) { $EnMessage } else { $Message }
+    Write-Host "  [OK]   $msg" -ForegroundColor Green
 }
 
 function Write-Warn {
-    param([string]$Message)
-    Write-Host "  [WARN] $Message" -ForegroundColor Yellow
+    param(
+        [Parameter(Position=0)][string]$Message,
+        [Parameter(Position=1)][string]$EnMessage = ""
+    )
+    $msg = if ($EnMessage -and -not $script:IsItalian) { $EnMessage } else { $Message }
+    Write-Host "  [WARN] $msg" -ForegroundColor Yellow
 }
 
 function Write-Fail {
-    param([string]$Message)
-    Write-Host "  [FAIL] $Message" -ForegroundColor Red
+    param(
+        [Parameter(Position=0)][string]$Message,
+        [Parameter(Position=1)][string]$EnMessage = ""
+    )
+    $msg = if ($EnMessage -and -not $script:IsItalian) { $EnMessage } else { $Message }
+    Write-Host "  [FAIL] $msg" -ForegroundColor Red
 }
 
 function Test-IsAdmin {
@@ -168,21 +213,21 @@ function Grant-BatchLogonRight {
                     $content = $content -replace "SeBatchLogonRight\s*=.*", "SeBatchLogonRight = $newRights"
                     [System.IO.File]::WriteAllText($tempCfg, $content, [System.Text.Encoding]::Unicode)
                     secedit /configure /db $tempDb /cfg $tempCfg /areas USER_RIGHTS | Out-Null
-                    Write-OK "Diritto 'Accesso come processo batch' (SeBatchLogonRight) assegnato a '$Account'."
+                    Write-OK "Diritto 'Accesso come processo batch' (SeBatchLogonRight) assegnato a '$Account'." "'Log on as a batch job' right (SeBatchLogonRight) granted to '$Account'."
                 } else {
-                    Write-OK "Diritto 'Accesso come processo batch' (SeBatchLogonRight) già presente per '$Account'."
+                    Write-OK "Diritto 'Accesso come processo batch' (SeBatchLogonRight) già presente per '$Account'." "'Log on as a batch job' right (SeBatchLogonRight) already granted to '$Account'."
                 }
             } else {
                 $content = $content -replace "\[Privilege Rights\]", "[Privilege Rights]`r`nSeBatchLogonRight = $accountTarget"
                 [System.IO.File]::WriteAllText($tempCfg, $content, [System.Text.Encoding]::Unicode)
                 secedit /configure /db $tempDb /cfg $tempCfg /areas USER_RIGHTS | Out-Null
-                Write-OK "Diritto 'Accesso come processo batch' (SeBatchLogonRight) assegnato a '$Account'."
+                Write-OK "Diritto 'Accesso come processo batch' (SeBatchLogonRight) assegnato a '$Account'." "'Log on as a batch job' right (SeBatchLogonRight) granted to '$Account'."
             }
         }
     } catch {
-        Write-Warn "Verifica SeBatchLogonRight: $($_.Exception.Message)"
-        Write-Info "Se l'Application Pool non dovesse avviarsi (errore WAS 5021), verificare nei Criteri Locali (secpol.msc)"
-        Write-Info "che l'account '$Account' abbia il diritto 'Accesso come processo batch'."
+        Write-Warn "Verifica SeBatchLogonRight: $($_.Exception.Message)" "SeBatchLogonRight check: $($_.Exception.Message)"
+        Write-Info "Se l'Application Pool non dovesse avviarsi (errore WAS 5021), verificare nei Criteri Locali (secpol.msc)" "If Application Pool fails to start (WAS 5021 error), check Local Security Policy (secpol.msc)"
+        Write-Info "che l'account '$Account' abbia il diritto 'Accesso come processo batch'." "that account '$Account' is granted 'Log on as a batch job' right."
     } finally {
         Remove-Item $tempCfg, $tempDb -Force -ErrorAction SilentlyContinue
     }
@@ -193,8 +238,8 @@ function Grant-BatchLogonRight {
 # ============================================================================
 
 if (-not (Test-IsAdmin)) {
-    Write-Fail "Questo script deve essere eseguito come Amministratore."
-    Write-Fail "Fare clic destro su PowerShell -> 'Esegui come amministratore', quindi rieseguire lo script."
+    Write-Fail "Questo script deve essere eseguito come Amministratore." "This script must be run as Administrator."
+    Write-Fail "Fare clic destro su PowerShell -> 'Esegui come amministratore', quindi rieseguire lo script." "Right-click PowerShell -> 'Run as administrator', then rerun the script."
     exit 1
 }
 
@@ -237,75 +282,81 @@ try {
 
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Cyan
-Write-Host "  INSTALLAZIONE PORTALE PKI WEB ENROLLMENT (AD CS Modern)         " -ForegroundColor White
-Write-Host "  Installazione a fianco di Microsoft certsrv (non intrusiva)     " -ForegroundColor Gray
+if ($script:IsItalian) {
+    Write-Host "  INSTALLAZIONE PORTALE PKI WEB ENROLLMENT (AD CS Modern) v2.0.11 " -ForegroundColor White
+    Write-Host "  Installazione a fianco di Microsoft certsrv (non intrusiva)     " -ForegroundColor Gray
+} else {
+    Write-Host "  PKI WEB ENROLLMENT PORTAL INSTALLATION (AD CS Modern) v2.0.11   " -ForegroundColor White
+    Write-Host "  Side-by-side with Microsoft certsrv (non-intrusive)             " -ForegroundColor Gray
+}
 Write-Host "==================================================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Info "Nome Sito IIS:        $SiteName"
-Write-Info "Porta:                $SitePort"
-Write-Info "Host Header:          $(if ($SiteHostHeader) { $SiteHostHeader } else { '(tutti)' })"
-Write-Info "Percorso Installazione: $InstallPath"
-Write-Info "App Pool Identity:    $AppPoolIdentity $(if ($isAccountGMSA) { '(gMSA - Group Managed Service Account)' })"
-Write-Info "Protocollo:           $(if ($UseHttps) { 'HTTPS' } else { 'HTTP' })"
-Write-Info "Sorgente Progetto:    $SourcePath"
+Write-Info "Nome Sito IIS:          $SiteName" "IIS Site Name:         $SiteName"
+Write-Info "Porta:                  $SitePort" "Port:                  $SitePort"
+Write-Info "Host Header:            $(if ($SiteHostHeader) { $SiteHostHeader } else { (Msg '(tutti)' '(all)') })" "Host Header:            $(if ($SiteHostHeader) { $SiteHostHeader } else { (Msg '(tutti)' '(all)') })"
+Write-Info "Percorso Installazione: $InstallPath" "Install Path:          $InstallPath"
+Write-Info "App Pool Identity:      $AppPoolIdentity $(if ($isAccountGMSA) { (Msg '(gMSA - Group Managed Service Account)' '(gMSA - Group Managed Service Account)') })" "App Pool Identity:      $AppPoolIdentity $(if ($isAccountGMSA) { (Msg '(gMSA - Group Managed Service Account)' '(gMSA - Group Managed Service Account)') })"
+Write-Info "Protocollo:             $(if ($UseHttps) { 'HTTPS' } else { 'HTTP' })" "Protocol:              $(if ($UseHttps) { 'HTTPS' } else { 'HTTP' })"
+Write-Info "Sorgente Progetto:      $SourcePath" "Project Source:        $SourcePath"
 Write-Host ""
 
 # ============================================================================
 # STEP 1: Verifica e Installazione Feature IIS Necessarie
 # ============================================================================
 
-Write-Step "STEP 1: Verifica prerequisiti IIS (senza modificare certsrv)"
+Write-Step "STEP 1: Verifica prerequisiti IIS (senza modificare certsrv)" "STEP 1: Verifying IIS prerequisites (without modifying certsrv)"
 
 # Elenco delle feature IIS necessarie per ASP.NET Core hosting.
 # NON includiamo Web-Cert-Auth o Web-Windows-Auth per non interferire con certsrv.
 # Includiamo solo i moduli di base necessari per l'hosting di un sito ASP.NET Core.
 $requiredFeatures = @(
-    @{ Name = "Web-Server";             Desc = "Ruolo Web Server (IIS)" },
-    @{ Name = "Web-Common-Http";        Desc = "Funzionalità HTTP comuni" },
-    @{ Name = "Web-Default-Doc";        Desc = "Documenti predefiniti" },
-    @{ Name = "Web-Static-Content";     Desc = "Contenuto statico" },
-    @{ Name = "Web-Http-Errors";        Desc = "Errori HTTP personalizzati" },
-    @{ Name = "Web-Http-Logging";       Desc = "Logging HTTP" },
-    @{ Name = "Web-Request-Monitor";    Desc = "Monitor richieste" },
-    @{ Name = "Web-Filtering";          Desc = "Filtro richieste" },
-    @{ Name = "Web-Stat-Compression";   Desc = "Compressione statica" },
-    @{ Name = "Web-Dyn-Compression";    Desc = "Compressione dinamica" },
-    @{ Name = "Web-Mgmt-Console";       Desc = "Console di gestione IIS" }
+    @{ Name = "Web-Server";             Desc = "Ruolo Web Server (IIS)";       DescEn = "Web Server Role (IIS)" },
+    @{ Name = "Web-Common-Http";        Desc = "Funzionalità HTTP comuni";     DescEn = "Common HTTP Features" },
+    @{ Name = "Web-Default-Doc";        Desc = "Documenti predefiniti";         DescEn = "Default Document" },
+    @{ Name = "Web-Static-Content";     Desc = "Contenuto statico";            DescEn = "Static Content" },
+    @{ Name = "Web-Http-Errors";        Desc = "Errori HTTP personalizzati";   DescEn = "Custom HTTP Errors" },
+    @{ Name = "Web-Http-Logging";       Desc = "Logging HTTP";                 DescEn = "HTTP Logging" },
+    @{ Name = "Web-Request-Monitor";    Desc = "Monitor richieste";            DescEn = "Request Monitor" },
+    @{ Name = "Web-Filtering";          Desc = "Filtro richieste";             DescEn = "Request Filtering" },
+    @{ Name = "Web-Stat-Compression";   Desc = "Compressione statica";         DescEn = "Static Content Compression" },
+    @{ Name = "Web-Dyn-Compression";    Desc = "Compressione dinamica";        DescEn = "Dynamic Content Compression" },
+    @{ Name = "Web-Mgmt-Console";       Desc = "Console di gestione IIS";      DescEn = "IIS Management Console" }
 )
 
 $installedFeatures = 0
 $alreadyInstalled = 0
 
 foreach ($feature in $requiredFeatures) {
+    $fDesc = if ($script:IsItalian) { $feature.Desc } else { $feature.DescEn }
     $state = Get-WindowsFeature -Name $feature.Name -ErrorAction SilentlyContinue
     if ($null -eq $state) {
-        Write-Warn "$($feature.Desc) ($($feature.Name)) - Feature non trovata su questo sistema (possibile edizione senza Server Manager)"
+        Write-Warn "$fDesc ($($feature.Name)) - Feature non trovata su questo sistema (possibile edizione senza Server Manager)" "$fDesc ($($feature.Name)) - Feature not found on this system (possible non-Server Manager edition)"
         continue
     }
 
     if ($state.Installed) {
-        Write-OK "$($feature.Desc) - già installata"
+        Write-OK "$fDesc - già installata" "$fDesc - already installed"
         $alreadyInstalled++
     }
     else {
-        Write-Info "Installazione in corso: $($feature.Desc) ($($feature.Name))..."
+        Write-Info "Installazione in corso: $fDesc ($($feature.Name))..." "Installing: $fDesc ($($feature.Name))..."
         try {
             Install-WindowsFeature -Name $feature.Name -IncludeManagementTools -ErrorAction Stop | Out-Null
-            Write-OK "$($feature.Desc) - installata con successo"
+            Write-OK "$fDesc - installata con successo" "$fDesc - installed successfully"
             $installedFeatures++
         }
         catch {
-            Write-Warn "Impossibile installare $($feature.Name): $($_.Exception.Message)"
+            Write-Warn "Impossibile installare $($feature.Name): $($_.Exception.Message)" "Unable to install $($feature.Name): $($_.Exception.Message)"
         }
     }
 }
 
-Write-Info "Feature già presenti: $alreadyInstalled, Nuove installate: $installedFeatures"
+Write-Info "Feature già presenti: $alreadyInstalled, Nuove installate: $installedFeatures" "Features already present: $alreadyInstalled, Newly installed: $installedFeatures"
 
 # Importa modulo WebAdministration (necessario per gestione siti IIS via PowerShell)
 Import-Module WebAdministration -ErrorAction SilentlyContinue
 if (-not (Get-Module WebAdministration -ErrorAction SilentlyContinue)) {
-    Write-Warn "Il modulo PowerShell 'WebAdministration' non è disponibile. Tentativo con IISAdministration..."
+    Write-Warn "Il modulo PowerShell 'WebAdministration' non è disponibile. Tentativo con IISAdministration..." "PowerShell module 'WebAdministration' is not available. Trying IISAdministration..."
     Import-Module IISAdministration -ErrorAction SilentlyContinue
 }
 
@@ -313,33 +364,33 @@ if (-not (Get-Module WebAdministration -ErrorAction SilentlyContinue)) {
 # STEP 2: Verifica e Installazione .NET 8 ASP.NET Core Hosting Bundle
 # ============================================================================
 
-Write-Step "STEP 2: Verifica .NET 8 ASP.NET Core Hosting Bundle"
+Write-Step "STEP 2: Verifica .NET 8 ASP.NET Core Hosting Bundle" "STEP 2: Verifying .NET 8 ASP.NET Core Hosting Bundle"
 
 $aspnetModuleInstalled = $false
 
 # Verifica se il modulo ASP.NET Core è registrato in IIS
 $aspnetModule = Get-WebGlobalModule -Name "AspNetCoreModuleV2" -ErrorAction SilentlyContinue
 if ($aspnetModule) {
-    Write-OK "ASP.NET Core Module V2 è già registrato in IIS."
+    Write-OK "ASP.NET Core Module V2 è già registrato in IIS." "ASP.NET Core Module V2 is already registered in IIS."
     $aspnetModuleInstalled = $true
 }
 
 # Verifica anche la presenza del runtime .NET 8 x64
 $dotnetRuntimes = & "C:\Program Files\dotnet\dotnet.exe" --list-runtimes 2>&1 | Select-String "Microsoft.AspNetCore.App 8\."
 if ($dotnetRuntimes) {
-    Write-OK "Runtime ASP.NET Core 8.x trovato: $($dotnetRuntimes -join ', ')"
+    Write-OK "Runtime ASP.NET Core 8.x trovato: $($dotnetRuntimes -join ', ')" "ASP.NET Core 8.x runtime found: $($dotnetRuntimes -join ', ')"
 }
 else {
-    Write-Warn "Runtime ASP.NET Core 8.x non trovato."
+    Write-Warn "Runtime ASP.NET Core 8.x non trovato." "ASP.NET Core 8.x runtime not found."
 }
 
 if (-not $aspnetModuleInstalled) {
-    Write-Info "Il modulo ASP.NET Core non è registrato in IIS."
-    Write-Info "È necessario installare il '.NET 8 Hosting Bundle' da:"
+    Write-Info "Il modulo ASP.NET Core non è registrato in IIS." "ASP.NET Core Module is not registered in IIS."
+    Write-Info "È necessario installare il '.NET 8 Hosting Bundle' da:" "The '.NET 8 Hosting Bundle' must be installed from:"
     Write-Host ""
     Write-Host "  https://dotnet.microsoft.com/download/dotnet/8.0" -ForegroundColor Yellow
     Write-Host ""
-    Write-Info "Scaricando l'installer automaticamente..."
+    Write-Info "Scaricando l'installer automaticamente..." "Downloading installer automatically..."
 
     $hostingBundleUrl = "https://download.visualstudio.microsoft.com/download/pr/hosting-bundle-8.0-latest-win-x64.exe"
     $hostingBundlePath = Join-Path $env:TEMP "dotnet-hosting-8.0-win.exe"
@@ -350,28 +401,34 @@ if (-not $aspnetModuleInstalled) {
         Invoke-WebRequest -Uri "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.0/dotnet-hosting-8.0.0-win.exe" `
             -OutFile $hostingBundlePath -UseBasicParsing -ErrorAction Stop
 
-        Write-Info "Download completato. Avvio installazione silenziosa..."
+        Write-Info "Download completato. Avvio installazione silenziosa..." "Download complete. Starting silent installation..."
         $process = Start-Process -FilePath $hostingBundlePath -ArgumentList "/install", "/quiet", "/norestart" `
             -Wait -PassThru -NoNewWindow
         if ($process.ExitCode -eq 0) {
-            Write-OK "Hosting Bundle .NET 8 installato con successo."
-            Write-Warn "Potrebbe essere necessario riavviare IIS dopo l'installazione (iisreset)."
+            Write-OK "Hosting Bundle .NET 8 installato con successo." ".NET 8 Hosting Bundle installed successfully."
+            Write-Warn "Potrebbe essere necessario riavviare IIS dopo l'installazione (iisreset)." "An IIS restart (iisreset) may be required after installation."
         }
         else {
-            Write-Warn "L'installer è terminato con codice: $($process.ExitCode)"
+            Write-Warn "L'installer è terminato con codice: $($process.ExitCode)" "Installer exited with code: $($process.ExitCode)"
         }
     }
     catch {
-        Write-Warn "Download automatico fallito: $($_.Exception.Message)"
+        Write-Warn "Download automatico fallito: $($_.Exception.Message)" "Automatic download failed: $($_.Exception.Message)"
         Write-Host ""
-        Write-Host "  AZIONE RICHIESTA: Scaricare manualmente il .NET 8 Hosting Bundle da:" -ForegroundColor Red
-        Write-Host "  https://dotnet.microsoft.com/download/dotnet/8.0 -> Hosting Bundle (Windows)" -ForegroundColor Yellow
-        Write-Host "  Installarlo ed eseguire nuovamente questo script." -ForegroundColor Red
+        if ($script:IsItalian) {
+            Write-Host "  AZIONE RICHIESTA: Scaricare manualmente il .NET 8 Hosting Bundle da:" -ForegroundColor Red
+            Write-Host "  https://dotnet.microsoft.com/download/dotnet/8.0 -> Hosting Bundle (Windows)" -ForegroundColor Yellow
+            Write-Host "  Installarlo ed eseguire nuovamente questo script." -ForegroundColor Red
+        } else {
+            Write-Host "  ACTION REQUIRED: Manually download .NET 8 Hosting Bundle from:" -ForegroundColor Red
+            Write-Host "  https://dotnet.microsoft.com/download/dotnet/8.0 -> Hosting Bundle (Windows)" -ForegroundColor Yellow
+            Write-Host "  Install it and rerun this script." -ForegroundColor Red
+        }
         Write-Host ""
 
-        $continueChoice = Read-Host "Continuare comunque? (S/N)"
-        if ($continueChoice -ne "S") {
-            Write-Fail "Installazione interrotta."
+        $continueChoice = Read-Host (Msg "Continuare comunque? (S/N)" "Continue anyway? (Y/N)")
+        if ($continueChoice -notmatch '^[sSyY]$') {
+            Write-Fail "Installazione interrotta." "Installation aborted."
             exit 1
         }
     }
@@ -381,35 +438,35 @@ if (-not $aspnetModuleInstalled) {
 # STEP 3: Verifica che certsrv non venga toccato
 # ============================================================================
 
-Write-Step "STEP 3: Verifica integrità sito certsrv (Microsoft Web Enrollment)"
+Write-Step "STEP 3: Verifica integrità sito certsrv (Microsoft Web Enrollment)" "STEP 3: Verifying certsrv site integrity (Microsoft Web Enrollment)"
 
 $defaultWebSite = Get-Website -Name "Default Web Site" -ErrorAction SilentlyContinue
 if ($defaultWebSite) {
-    Write-OK "Sito 'Default Web Site' trovato (stato: $($defaultWebSite.State))"
+    Write-OK "Sito 'Default Web Site' trovato (stato: $($defaultWebSite.State))" "'Default Web Site' found (state: $($defaultWebSite.State))"
 
     $certsrvApp = Get-WebApplication -Site "Default Web Site" -Name "CertSrv" -ErrorAction SilentlyContinue
     if ($certsrvApp) {
-        Write-OK "Applicazione certsrv trovata sotto Default Web Site: $($certsrvApp.PhysicalPath)"
-        Write-Info "certsrv NON verrà modificato. Il portale PKI verrà installato come sito IIS SEPARATO."
+        Write-OK "Applicazione certsrv trovata sotto Default Web Site: $($certsrvApp.PhysicalPath)" "certsrv application found under Default Web Site: $($certsrvApp.PhysicalPath)"
+        Write-Info "certsrv NON verrà modificato. Il portale PKI verrà installato come sito IIS SEPARATO." "certsrv will NOT be modified. PKI Portal will be installed as a SEPARATE IIS site."
     }
     else {
-        Write-Info "Applicazione certsrv non trovata sotto Default Web Site (potrebbe essere già rimossa o non installata)."
+        Write-Info "Applicazione certsrv non trovata sotto Default Web Site (potrebbe essere già rimossa o non installata)." "certsrv application not found under Default Web Site (may already be removed or not installed)."
     }
 }
 else {
-    Write-Info "'Default Web Site' non trovato. Procedendo con la creazione del nuovo sito."
+    Write-Info "'Default Web Site' non trovato. Procedendo con la creazione del nuovo sito." "'Default Web Site' not found. Proceeding with new site creation."
 }
 
 # Verifica che il nome del sito non esista già
 $existingSite = Get-Website -Name $SiteName -ErrorAction SilentlyContinue
 if ($existingSite) {
-    Write-Warn "Il sito '$SiteName' esiste già in IIS."
-    $overwrite = Read-Host "  Sovrascrivere la configurazione del sito esistente? (S/N)"
-    if ($overwrite -ne "S") {
-        Write-Fail "Installazione interrotta dall'utente."
+    Write-Warn "Il sito '$SiteName' esiste già in IIS." "Site '$SiteName' already exists in IIS."
+    $overwrite = Read-Host (Msg "  Sovrascrivere la configurazione del sito esistente? (S/N)" "  Overwrite existing site configuration? (Y/N)")
+    if ($overwrite -notmatch '^[sSyY]$') {
+        Write-Fail "Installazione interrotta dall'utente." "Installation aborted by user."
         exit 1
     }
-    Write-Info "Rimozione del sito IIS esistente '$SiteName'..."
+    Write-Info "Rimozione del sito IIS esistente '$SiteName'..." "Removing existing IIS site '$SiteName'..."
     Remove-Website -Name $SiteName -ErrorAction SilentlyContinue
 }
 
@@ -419,8 +476,8 @@ $portInUse = Get-WebBinding | Where-Object {
     (Get-Website | Where-Object { $_.Name -ne $SiteName -and $_.Bindings.Collection.bindingInformation -contains $_.bindingInformation })
 }
 if ($portInUse) {
-    Write-Warn "La porta $SitePort potrebbe essere già in uso da un altro sito IIS."
-    Write-Warn "Valutare una porta diversa con il parametro -SitePort."
+    Write-Warn "La porta $SitePort potrebbe essere già in uso da un altro sito IIS." "Port $SitePort may already be in use by another IIS site."
+    Write-Warn "Valutare una porta diversa con il parametro -SitePort." "Consider using a different port with the -SitePort parameter."
 }
 
 # ============================================================================
@@ -434,7 +491,8 @@ $appcmd = "$env:SystemRoot\system32\inetsrv\appcmd.exe"
 $appOfflineFile = Join-Path $InstallPath "app_offline.htm"
 if (Test-Path $InstallPath) {
     try {
-        Set-Content -Path $appOfflineFile -Value "<html><body><h3>Aggiornamento Portale PKI in corso...</h3></body></html>" -Force -ErrorAction SilentlyContinue
+        $offlineMsg = Msg "Aggiornamento Portale PKI in corso..." "PKI Portal update in progress..."
+        Set-Content -Path $appOfflineFile -Value "<html><body><h3>$offlineMsg</h3></body></html>" -Force -ErrorAction SilentlyContinue
     } catch { }
 }
 
@@ -443,21 +501,21 @@ $appPoolExists = Test-Path "IIS:\AppPools\$appPoolName"
 $existingAppPool = if ($appPoolExists) { Get-WebAppPoolState -Name $appPoolName -ErrorAction SilentlyContinue } else { $null }
 
 if ($existingSite -or $existingAppPool -or (Test-Path $InstallPath)) {
-    Write-Step "STEP 3b: Arresto sito e App Pool esistenti per aggiornamento"
+    Write-Step "STEP 3b: Arresto sito e App Pool esistenti per aggiornamento" "STEP 3b: Stopping existing site and App Pool for update"
 
     # Arresta il sito
     if ($existingSite -and $existingSite.State -eq 'Started') {
         try {
             Stop-Website -Name $SiteName -ErrorAction Stop
-            Write-OK "Sito '$SiteName' arrestato."
+            Write-OK "Sito '$SiteName' arrestato." "Site '$SiteName' stopped."
         }
         catch {
-            Write-Warn "Impossibile arrestare il sito '$SiteName' via PowerShell. Tentativo con appcmd..."
+            Write-Warn "Impossibile arrestare il sito '$SiteName' via PowerShell. Tentativo con appcmd..." "Unable to stop site '$SiteName' via PowerShell. Trying appcmd..."
             if (Test-Path $appcmd) { & $appcmd stop site /site.name:"$SiteName" 2>$null }
         }
     }
     elseif ($existingSite) {
-        Write-Info "Sito '$SiteName' già in stato '$($existingSite.State)'."
+        Write-Info "Sito '$SiteName' già in stato '$($existingSite.State)'." "Site '$SiteName' already in '$($existingSite.State)' state."
     }
 
     # Arresta l'App Pool
@@ -485,26 +543,26 @@ if ($existingSite -or $existingAppPool -or (Test-Path $InstallPath)) {
             $_.CommandLine -like "*$appPoolName*"
         }
         foreach ($proc in $w3wpProcesses) {
-            Write-Warn "Worker process w3wp.exe (PID $($proc.ProcessId)) ancora attivo. Terminazione forzata..."
+            Write-Warn "Worker process w3wp.exe (PID $($proc.ProcessId)) ancora attivo. Terminazione forzata..." "Worker process w3wp.exe (PID $($proc.ProcessId)) still active. Forcing termination..."
             Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
         }
     } catch { }
 
-    Write-OK "Sito e Application Pool pronti per l'aggiornamento dei file."
+    Write-OK "Sito e Application Pool pronti per l'aggiornamento dei file." "Site and Application Pool ready for file updates."
 }
 else {
-    Write-Info "Nessun sito/pool '$SiteName' esistente da arrestare (prima installazione)."
+    Write-Info "Nessun sito/pool '$SiteName' esistente da arrestare (prima installazione)." "No existing site/pool '$SiteName' to stop (initial installation)."
 }
 
 # ============================================================================
 # STEP 4: Compilazione e Pubblicazione dell'applicazione
 # ============================================================================
 
-Write-Step "STEP 4: Compilazione e pubblicazione applicazione ASP.NET Core"
+Write-Step "STEP 4: Compilazione e pubblicazione applicazione ASP.NET Core" "STEP 4: Building and publishing ASP.NET Core application"
 
 if ($SkipDotnetPublish) {
-    Write-Info "Fase di pubblicazione saltata (-SkipDotnetPublish specificato)."
-    Write-Info "I file applicativi devono già essere presenti in: $InstallPath"
+    Write-Info "Fase di pubblicazione saltata (-SkipDotnetPublish specificato)." "Publish stage skipped (-SkipDotnetPublish specified)."
+    Write-Info "I file applicativi devono già essere presenti in: $InstallPath" "Application files must already be present in: $InstallPath"
 }
 else {
     # Individua il dotnet CLI (x64)
@@ -513,24 +571,24 @@ else {
         $dotnetExe = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
     }
     if (-not $dotnetExe -or -not (Test-Path $dotnetExe)) {
-        Write-Fail "Impossibile trovare dotnet.exe. Installare .NET 8 SDK o Hosting Bundle."
+        Write-Fail "Impossibile trovare dotnet.exe. Installare .NET 8 SDK o Hosting Bundle." "Unable to find dotnet.exe. Install .NET 8 SDK or Hosting Bundle."
         exit 1
     }
-    Write-Info "CLI .NET trovato: $dotnetExe"
+    Write-Info "CLI .NET trovato: $dotnetExe" ".NET CLI found: $dotnetExe"
 
     # Verifica che il progetto esista nel percorso sorgente
     $csprojPath = Join-Path $SourcePath "PkiPortal.csproj"
     if (-not (Test-Path $csprojPath)) {
-        Write-Fail "File di progetto non trovato: $csprojPath"
-        Write-Fail "Specificare il percorso corretto con il parametro -SourcePath."
+        Write-Fail "File di progetto non trovato: $csprojPath" "Project file not found: $csprojPath"
+        Write-Fail "Specificare il percorso corretto con il parametro -SourcePath." "Specify the correct path using -SourcePath parameter."
         exit 1
     }
-    Write-OK "File di progetto trovato: $csprojPath"
+    Write-OK "File di progetto trovato: $csprojPath" "Project file found: $csprojPath"
 
     # Creazione cartella di destinazione
     if (-not (Test-Path $InstallPath)) {
         New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
-        Write-OK "Cartella di installazione creata: $InstallPath"
+        Write-OK "Cartella di installazione creata: $InstallPath" "Installation directory created: $InstallPath"
     }
 
     # Backup preventivo dei file di configurazione esistenti in destinazione:
@@ -546,17 +604,17 @@ else {
         if (Test-Path $destSettings) {
             $backupSettingsPath = Join-Path ([System.IO.Path]::GetTempPath()) "pki_backup_appsettings_$([Guid]::NewGuid().ToString('N')).json"
             Copy-Item -Path $destSettings -Destination $backupSettingsPath -Force
-            Write-Info "Backup di sicurezza di appsettings.json esistente: $backupSettingsPath"
+            Write-Info "Backup di sicurezza di appsettings.json esistente: $backupSettingsPath" "Safety backup of existing appsettings.json: $backupSettingsPath"
         }
         if (Test-Path $destWebConfig) {
             $backupWebConfigPath = Join-Path ([System.IO.Path]::GetTempPath()) "pki_backup_webconfig_$([Guid]::NewGuid().ToString('N')).xml"
             Copy-Item -Path $destWebConfig -Destination $backupWebConfigPath -Force
-            Write-Info "Backup di sicurezza di web.config esistente: $backupWebConfigPath"
+            Write-Info "Backup di sicurezza di web.config esistente: $backupWebConfigPath" "Safety backup of existing web.config: $backupWebConfigPath"
         }
     }
 
     # Pubblicazione
-    Write-Info 'Pubblicazione in corso (Release - non self-contained)...'
+    Write-Info 'Pubblicazione in corso (Release - non self-contained)...' 'Publishing in progress (Release - non-self-contained)...'
     $publishArgs = @(
         "publish"
         $csprojPath
@@ -587,12 +645,6 @@ else {
     }
 
     # Esecuzione della pubblicazione
-    # NOTA: In Windows PowerShell 5.1, reindirizzare '2>&1' quando $ErrorActionPreference = 'Stop'
-    # trasforma qualsiasi riga scritta su stderr (anche semplici warning di compilazione) in una
-    # eccezione terminante 'NativeCommandError'.
-    # Eseguiamo il comando impostando temporaneamente $ErrorActionPreference = 'Continue'
-    # e controllando direttamente $LASTEXITCODE. Ogni riga viene convertita in stringa
-    # (le righe di stderr sono ErrorRecord) per poterle stampare in modo uniforme.
     $prevEA = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
@@ -607,7 +659,7 @@ else {
     }
 
     if ($publishExitCode -ne 0) {
-        Write-Fail "Errore durante la pubblicazione (codice di uscita: $publishExitCode):"
+        Write-Fail "Errore durante la pubblicazione (codice di uscita: $publishExitCode):" "Publish error (exit code: $publishExitCode):"
         $publishOutput | Where-Object { $_ -and $_.Trim() } | ForEach-Object {
             Write-Host "    $_" -ForegroundColor Red
         }
@@ -615,55 +667,64 @@ else {
         # Errori di restore NuGet (pacchetti non risolvibili / sorgente non raggiungibile)
         if (($publishOutput -join "`n") -match 'NU1100|NU1101|NU1102|NU1301') {
             Write-Host ""
-            Write-Warn "Il restore NuGet non riesce a ottenere i pacchetti richiesti (targeting pack / apphost .NET)."
-            Write-Info "Causa probabile: l'SDK installato è più recente del framework di destinazione del progetto"
-            Write-Info "e deve scaricare i pack da NuGet, ma nessuna sorgente NuGet è raggiungibile o configurata."
-            Write-Info "Soluzioni possibili:"
-            Write-Info "  1. Verificare le sorgenti con 'dotnet nuget list source' e abilitare nuget.org se manca."
-            Write-Info "  2. Server isolato da Internet: compilare (dotnet publish) su un PC con accesso a NuGet,"
-            Write-Info "     copiare l'output in $InstallPath e rieseguire lo script con -SkipDotnetPublish."
-            Write-Info "  3. Server isolato: copiare in una cartella i .nupkg indicati nell'errore (stessa versione)"
-            Write-Info "     e rieseguire con -NuGetSource <cartella>. Servono: Microsoft.NETCore.App.Ref,"
-            Write-Info "     Microsoft.AspNetCore.App.Ref, Microsoft.NETCore.App.Host.win-x64."
-            Write-Info "  4. In alternativa, impostare <TargetFramework>net10.0</TargetFramework> nel .csproj"
-            Write-Info "     (i pack .NET 10 sono inclusi nell'SDK 10) e installare l'Hosting Bundle .NET 10."
+            Write-Warn "Il restore NuGet non riesce a ottenere i pacchetti richiesti (targeting pack / apphost .NET)." "NuGet restore cannot acquire required packages (targeting pack / apphost .NET)."
+            Write-Info "Causa probabile: l'SDK installato è più recente del framework di destinazione del progetto" "Probable cause: installed SDK is newer than project target framework"
+            Write-Info "e deve scaricare i pack da NuGet, ma nessuna sorgente NuGet è raggiungibile o configurata." "and requires downloading packs from NuGet, but no NuGet source is reachable."
+            if ($script:IsItalian) {
+                Write-Info "Soluzioni possibili:"
+                Write-Info "  1. Verificare le sorgenti con 'dotnet nuget list source' e abilitare nuget.org se manca."
+                Write-Info "  2. Server isolato da Internet: compilare (dotnet publish) su un PC con accesso a NuGet,"
+                Write-Info "     copiare l'output in $InstallPath e rieseguire lo script con -SkipDotnetPublish."
+                Write-Info "  3. Server isolato: copiare in una cartella i .nupkg indicati nell'errore (stessa versione)"
+                Write-Info "     e rieseguire con -NuGetSource <cartella>. Servono: Microsoft.NETCore.App.Ref,"
+                Write-Info "     Microsoft.AspNetCore.App.Ref, Microsoft.NETCore.App.Host.win-x64."
+                Write-Info "  4. In alternativa, impostare <TargetFramework>net10.0</TargetFramework> nel .csproj"
+                Write-Info "     (i pack .NET 10 sono inclusi nell'SDK 10) e installare l'Hosting Bundle .NET 10."
+            } else {
+                Write-Info "Possible solutions:"
+                Write-Info "  1. Check sources via 'dotnet nuget list source' and enable nuget.org if missing."
+                Write-Info "  2. Air-gapped server: build (dotnet publish) on a machine with internet access,"
+                Write-Info "     copy output to $InstallPath and rerun with -SkipDotnetPublish."
+                Write-Info "  3. Air-gapped server: place required .nupkg packages in a folder"
+                Write-Info "     and rerun with -NuGetSource <folder>."
+                Write-Info "  4. Alternatively update target framework or install matching Hosting Bundle."
+            }
         }
         exit 1
     }
 
-    Write-OK "Applicazione pubblicata con successo in: $InstallPath"
+    Write-OK "Applicazione pubblicata con successo in: $InstallPath" "Application published successfully to: $InstallPath"
 
-    # Gestione appsettings.json: se esisteva prima del publish e non è stato richiesto -OverwriteConfig,
-    # ripristiniamo il file precedente. Altrimenti lasciamo quello generato/copiato dal publish.
+    # Gestione appsettings.json
     $customSettings = Join-Path $SourcePath "appsettings.json"
     if ($backupSettingsPath -and (Test-Path $backupSettingsPath)) {
         Copy-Item -Path $backupSettingsPath -Destination $destSettings -Force
         Remove-Item -Path $backupSettingsPath -Force -ErrorAction SilentlyContinue
-        Write-OK "File appsettings.json di produzione ESISTENTE PRESERVATO (non sovrascritto). Usare -OverwriteConfig per sovrascriverlo."
+        Write-OK "File appsettings.json di produzione ESISTENTE PRESERVATO (non sovrascritto). Usare -OverwriteConfig per sovrascriverlo." "Existing production appsettings.json PRESERVED (not overwritten). Use -OverwriteConfig to overwrite."
     }
     elseif ($OverwriteConfig -and (Test-Path $customSettings)) {
         Copy-Item -Path $customSettings -Destination $destSettings -Force
-        Write-OK "File di configurazione appsettings.json sovrascritto dal sorgente (-OverwriteConfig specificato)."
+        Write-OK "File di configurazione appsettings.json sovrascritto dal sorgente (-OverwriteConfig specificato)." "Configuration file appsettings.json overwritten from source (-OverwriteConfig specified)."
     }
     elseif (-not (Test-Path $destSettings) -and (Test-Path $customSettings)) {
         Copy-Item -Path $customSettings -Destination $destSettings -Force
-        Write-OK "File di configurazione appsettings.json copiato (prima installazione)."
+        Write-OK "File di configurazione appsettings.json copiato (prima installazione)." "Configuration file appsettings.json copied (initial installation)."
     }
 
-    # Gestione web.config: stessa logica di preservazione
+    # Gestione web.config
     $customWebConfig = Join-Path $SourcePath "web.config"
     if ($backupWebConfigPath -and (Test-Path $backupWebConfigPath)) {
         Copy-Item -Path $backupWebConfigPath -Destination $destWebConfig -Force
         Remove-Item -Path $backupWebConfigPath -Force -ErrorAction SilentlyContinue
-        Write-OK "File web.config ESISTENTE PRESERVATO (non sovrascritto). Usare -OverwriteConfig per sovrascriverlo."
+        Write-OK "File web.config ESISTENTE PRESERVATO (non sovrascritto). Usare -OverwriteConfig per sovrascriverlo." "Existing web.config PRESERVED (not overwritten). Use -OverwriteConfig to overwrite."
     }
     elseif ($OverwriteConfig -and (Test-Path $customWebConfig)) {
         Copy-Item -Path $customWebConfig -Destination $destWebConfig -Force
-        Write-OK "File web.config sovrascritto dal sorgente (-OverwriteConfig specificato)."
+        Write-OK "File web.config sovrascritto dal sorgente (-OverwriteConfig specificato)." "File web.config overwritten from source (-OverwriteConfig specified)."
     }
     elseif (-not (Test-Path $destWebConfig) -and (Test-Path $customWebConfig)) {
         Copy-Item -Path $customWebConfig -Destination $destWebConfig -Force
-        Write-OK "File web.config copiato (prima installazione)."
+        Write-OK "File web.config copiato (prima installazione)." "File web.config copied (initial installation)."
     }
     # Rimuovi app_offline.htm per consentire l'avvio della nuova versione
     $appOfflineFile = Join-Path $InstallPath "app_offline.htm"
@@ -676,19 +737,19 @@ else {
 $logPath = Join-Path $InstallPath "logs"
 if (-not (Test-Path $logPath)) {
     New-Item -ItemType Directory -Path $logPath -Force | Out-Null
-    Write-OK "Cartella log creata: $logPath"
+    Write-OK "Cartella log creata: $logPath" "Log folder created: $logPath"
 }
 
 # Creazione cartella protetta App_Data per custodia sicura di chiavi, held-requests ed entropia
 $appDataPath = Join-Path $InstallPath "App_Data"
 if (-not (Test-Path $appDataPath)) {
     New-Item -ItemType Directory -Path $appDataPath -Force | Out-Null
-    Write-OK "Cartella sicura App_Data creata: $appDataPath"
+    Write-OK "Cartella sicura App_Data creata: $appDataPath" "Secure App_Data folder created: $appDataPath"
 }
 $appDataTempPath = Join-Path $appDataPath "Temp"
 if (-not (Test-Path $appDataTempPath)) {
     New-Item -ItemType Directory -Path $appDataTempPath -Force | Out-Null
-    Write-OK "Cartella temporanea sicura creata: $appDataTempPath"
+    Write-OK "Cartella temporanea sicura creata: $appDataTempPath" "Secure temporary folder created: $appDataTempPath"
 }
 
 # Migrazione file sensibili legacy da root di installazione verso App_Data
@@ -696,33 +757,33 @@ $legacyHeld = Join-Path $InstallPath "held-requests.json"
 $targetHeld = Join-Path $appDataPath "held-requests.json"
 if ((Test-Path $legacyHeld) -and -not (Test-Path $targetHeld)) {
     Move-Item -Path $legacyHeld -Destination $targetHeld -Force
-    Write-Info "Spostato held-requests.json legacy nella cartella protetta App_Data"
+    Write-Info "Spostato held-requests.json legacy nella cartella protetta App_Data" "Moved legacy held-requests.json into secure App_Data folder"
 }
 
 $legacyEntropy = Join-Path $InstallPath "store-entropy.bin"
 $targetEntropy = Join-Path $appDataPath "store-entropy.bin"
 if ((Test-Path $legacyEntropy) -and -not (Test-Path $targetEntropy)) {
     Move-Item -Path $legacyEntropy -Destination $targetEntropy -Force
-    Write-Info "Spostato store-entropy.bin legacy nella cartella protetta App_Data"
+    Write-Info "Spostato store-entropy.bin legacy nella cartella protetta App_Data" "Moved legacy store-entropy.bin into secure App_Data folder"
 }
 
 # ============================================================================
 # STEP 5: Creazione Application Pool dedicato
 # ============================================================================
 
-Write-Step "STEP 5: Creazione Application Pool IIS dedicato"
+Write-Step "STEP 5: Creazione Application Pool IIS dedicato" "STEP 5: Creating dedicated IIS Application Pool"
 
 $appPoolName = "${SiteName}_Pool"
 $appcmd = "$env:SystemRoot\system32\inetsrv\appcmd.exe"
 
 $existingPool = & $appcmd list apppool /name:"$appPoolName"
 if (-not $existingPool) {
-    Write-Info "Creazione Application Pool: $appPoolName"
+    Write-Info "Creazione Application Pool: $appPoolName" "Creating Application Pool: $appPoolName"
     & $appcmd add apppool /name:"$appPoolName" | Out-Null
-    Write-OK "Application Pool '$appPoolName' creato."
+    Write-OK "Application Pool '$appPoolName' creato." "Application Pool '$appPoolName' created."
 }
 else {
-    Write-OK "Application Pool '$appPoolName' gia' esistente."
+    Write-OK "Application Pool '$appPoolName' gia' esistente." "Application Pool '$appPoolName' already exists."
 }
 
 # Configurazione pool
@@ -731,18 +792,18 @@ else {
 # Configurazione identita
 if ($AppPoolIdentity -eq "ApplicationPoolIdentity") {
     & $appcmd set apppool /apppool.name:"$appPoolName" /processModel.identityType:ApplicationPoolIdentity | Out-Null
-    Write-OK "Identita pool: ApplicationPoolIdentity (predefinita)"
+    Write-OK "Identita pool: ApplicationPoolIdentity (predefinita)" "Pool identity: ApplicationPoolIdentity (default)"
 }
 elseif ($AppPoolIdentity -eq "NetworkService") {
     & $appcmd set apppool /apppool.name:"$appPoolName" /processModel.identityType:NetworkService | Out-Null
-    Write-OK "Identita pool: NetworkService"
+    Write-OK "Identita pool: NetworkService" "Pool identity: NetworkService"
 }
 elseif ($AppPoolIdentity -eq "LocalSystem") {
     & $appcmd set apppool /apppool.name:"$appPoolName" /processModel.identityType:LocalSystem | Out-Null
-    Write-OK "Identita pool: LocalSystem"
+    Write-OK "Identita pool: LocalSystem" "Pool identity: LocalSystem"
 }
 elseif ($isAccountGMSA) {
-    Write-Info "Configurazione identita pool come gMSA: $AppPoolIdentity (senza password)"
+    Write-Info "Configurazione identita pool come gMSA: $AppPoolIdentity (senza password)" "Configuring pool identity as gMSA: $AppPoolIdentity (without password)"
     & $appcmd set config /section:applicationPools "/[name='$appPoolName'].processModel.identityType:SpecificUser" "/[name='$appPoolName'].processModel.userName:$AppPoolIdentity" "/[name='$appPoolName'].processModel.password:" /commit:apphost | Out-Null
 
     # Assegnazione / verifica del diritto 'Accesso come processo batch' (SeBatchLogonRight) necessario a WAS/IIS
@@ -754,17 +815,17 @@ elseif ($isAccountGMSA) {
         try {
             $testRes = Test-ADServiceAccount -Identity $samName -ErrorAction SilentlyContinue
             if ($testRes -eq $true) {
-                Write-OK "Verifica gMSA: questo server è autorizzato a utilizzare l'account '$AppPoolIdentity'."
+                Write-OK "Verifica gMSA: questo server è autorizzato a utilizzare l'account '$AppPoolIdentity'." "gMSA check: this server is authorized to use account '$AppPoolIdentity'."
             } elseif ($testRes -eq $false) {
-                Write-Warn "Verifica gMSA: 'Test-ADServiceAccount -Identity $samName' ha restituito False."
-                Write-Info "Se l'Application Pool non dovesse avviarsi, verificare in Active Directory che questo server sia"
-                Write-Info "membro del gruppo autorizzato (PrincipalsAllowedToRetrieveManagedPassword) e lanciare:"
-                Write-Info "Install-ADServiceAccount -Identity $samName"
+                Write-Warn "Verifica gMSA: 'Test-ADServiceAccount -Identity $samName' ha restituito False." "gMSA check: 'Test-ADServiceAccount -Identity $samName' returned False."
+                Write-Info "Se l'Application Pool non dovesse avviarsi, verificare in Active Directory che questo server sia" "If Application Pool fails to start, verify in Active Directory that this server is"
+                Write-Info "membro del gruppo autorizzato (PrincipalsAllowedToRetrieveManagedPassword) e lanciare:" "member of authorized group (PrincipalsAllowedToRetrieveManagedPassword) and run:"
+                Write-Info "Install-ADServiceAccount -Identity $samName" "Install-ADServiceAccount -Identity $samName"
             }
         } catch { }
     }
 
-    Write-OK "Identità pool: $AppPoolIdentity (gMSA)"
+    Write-OK "Identità pool: $AppPoolIdentity (gMSA)" "Pool identity: $AppPoolIdentity (gMSA)"
 }
 else {
     # Account utente di dominio standard con password
@@ -778,26 +839,26 @@ else {
         Set-ItemProperty "IIS:\AppPools\$appPoolName" -Name "processModel.password" -Value $plainPassword
         $plainPassword = $null
     }
-    Write-OK "Identità pool: $AppPoolIdentity (account utente di dominio)"
+    Write-OK "Identità pool: $AppPoolIdentity (account utente di dominio)" "Pool identity: $AppPoolIdentity (domain user account)"
 }
 
-Write-Info "Pool configurato: startMode=AlwaysRunning, idleTimeout=0, 64-bit, No Managed Runtime."
+Write-Info "Pool configurato: startMode=AlwaysRunning, idleTimeout=0, 64-bit, No Managed Runtime." "Pool configured: startMode=AlwaysRunning, idleTimeout=0, 64-bit, No Managed Runtime."
 
 # ============================================================================
 # STEP 6: Creazione Sito IIS
 # ============================================================================
 
-Write-Step "STEP 6: Creazione Sito IIS '$SiteName' (porta $SitePort)"
+Write-Step "STEP 6: Creazione Sito IIS '$SiteName' (porta $SitePort)" "STEP 6: Creating IIS Site '$SiteName' (port $SitePort)"
 
 $protocol = if ($UseHttps) { "https" } else { "http" }
 $bindingInfo = "*:${SitePort}:${SiteHostHeader}"
 
-Write-Info "Binding: $protocol su $bindingInfo"
+Write-Info "Binding: $protocol su $bindingInfo" "Binding: $protocol on $bindingInfo"
 
 if ($UseHttps) {
     if ([string]::IsNullOrWhiteSpace($CertThumbprint)) {
-        Write-Warn "Binding HTTPS richiesto ma nessun -CertThumbprint specificato."
-        Write-Info "Ricerca di un certificato valido nello store locale..."
+        Write-Warn "Binding HTTPS richiesto ma nessun -CertThumbprint specificato." "HTTPS binding requested but no -CertThumbprint specified."
+        Write-Info "Ricerca di un certificato valido nello store locale..." "Searching for a valid certificate in local machine store..."
 
         # Tentativo di trovare un certificato con il nome server
         $serverCerts = Get-ChildItem Cert:\LocalMachine\My |
@@ -806,16 +867,16 @@ if ($UseHttps) {
 
         if ($serverCerts.Count -gt 0) {
             $CertThumbprint = $serverCerts[0].Thumbprint
-            Write-Info "Trovato certificato: $($serverCerts[0].Subject) (Thumbprint: $CertThumbprint)"
-            $useCert = Read-Host "  Utilizzare questo certificato? (S/N)"
-            if ($useCert -ne "S") {
-                Write-Fail "Specificare un thumbprint con -CertThumbprint oppure usare -UseHttps:$false"
+            Write-Info "Trovato certificato: $($serverCerts[0].Subject) (Thumbprint: $CertThumbprint)" "Found certificate: $($serverCerts[0].Subject) (Thumbprint: $CertThumbprint)"
+            $useCert = Read-Host (Msg "  Utilizzare questo certificato? (S/N)" "  Use this certificate? (Y/N)")
+            if ($useCert -notmatch '^[sSyY]$') {
+                Write-Fail "Specificare un thumbprint con -CertThumbprint oppure usare -UseHttps:`$false" "Specify a thumbprint with -CertThumbprint or use -UseHttps:`$false"
                 exit 1
             }
         }
         else {
-            Write-Fail "Nessun certificato SSL trovato nello store LocalMachine\My."
-            Write-Fail "Installare un certificato SSL e specificare il thumbprint con -CertThumbprint."
+            Write-Fail "Nessun certificato SSL trovato nello store LocalMachine\My." "No SSL certificates found in LocalMachine\My store."
+            Write-Fail "Installare un certificato SSL e specificare il thumbprint con -CertThumbprint." "Install an SSL certificate and specify its thumbprint using -CertThumbprint."
             exit 1
         }
     }
@@ -833,20 +894,24 @@ if ($UseHttps) {
     $binding = Get-WebBinding -Name $SiteName -Protocol "https"
     if ($binding) {
         $binding.AddSslCertificate($CertThumbprint, "My")
-        Write-OK "Certificato SSL associato al binding HTTPS (Thumbprint: $CertThumbprint)"
+        Write-OK "Certificato SSL associato al binding HTTPS (Thumbprint: $CertThumbprint)" "SSL certificate bound to HTTPS binding (Thumbprint: $CertThumbprint)"
     }
 }
 else {
-    # SECURITY: HTTP in chiaro + Windows Authentication = NTLM negoziabile in
-    # chiaro sulla rete (capture degli hash, NTLM relay). Richiede la conferma
-    # esplicita dell'operatore; in produzione usare -UseHttps -CertThumbprint.
+    # SECURITY: HTTP in chiaro + Windows Authentication
     Write-Host "" -ForegroundColor Red
-    Write-Host "  [ATTENZIONE] Stai per installare il portale su HTTP IN CHIARO con Windows Authentication." -ForegroundColor Red
-    Write-Host "  NTLM viaggia in chiaro sulla rete: rischio capture degli hash e NTLM relay." -ForegroundColor Red
-    Write-Host "  In produzione usare: -UseHttps -CertThumbprint <thumbprint> (e abilitare EPAL/EAAL)." -ForegroundColor Red
-    $httpConfirm = Read-Host "  Continuare comunque con HTTP in chiaro? (s/N)"
-    if ($httpConfirm -ne 's' -and $httpConfirm -ne 'S') {
-        Write-Fail "Installazione interrotta: HTTP in chiaro non confermato. Ripetere con -UseHttps -CertThumbprint <thumbprint>."
+    if ($script:IsItalian) {
+        Write-Host "  [ATTENZIONE] Stai per installare il portale su HTTP IN CHIARO con Windows Authentication." -ForegroundColor Red
+        Write-Host "  NTLM viaggia in chiaro sulla rete: rischio capture degli hash e NTLM relay." -ForegroundColor Red
+        Write-Host "  In produzione usare: -UseHttps -CertThumbprint <thumbprint> (e abilitare EPAL/EAAL)." -ForegroundColor Red
+    } else {
+        Write-Host "  [WARNING] You are installing the portal over UNENCRYPTED HTTP with Windows Authentication." -ForegroundColor Red
+        Write-Host "  NTLM travels in cleartext across the network: risk of hash capture and NTLM relay." -ForegroundColor Red
+        Write-Host "  In production use: -UseHttps -CertThumbprint <thumbprint> (and enable EPAL/EAAL)." -ForegroundColor Red
+    }
+    $httpConfirm = Read-Host (Msg "  Continuare comunque con HTTP in chiaro? (s/N)" "  Continue anyway with unencrypted HTTP? (y/N)")
+    if ($httpConfirm -ne 's' -and $httpConfirm -ne 'S' -and $httpConfirm -ne 'y' -and $httpConfirm -ne 'Y') {
+        Write-Fail "Installazione interrotta: HTTP in chiaro non confermato. Ripetere con -UseHttps -CertThumbprint <thumbprint>." "Installation aborted: unencrypted HTTP not confirmed. Rerun with -UseHttps -CertThumbprint <thumbprint>."
         exit 1
     }
 
@@ -859,26 +924,26 @@ else {
         -Force | Out-Null
 }
 
-# Configurazione autenticazione a livello di sito IIS (evitando sezioni bloccate in web.config)
+# Configurazione autenticazione a livello di sito IIS
 try {
     & $appCmd set config "$SiteName" -section:system.webServer/security/authentication/anonymousAuthentication /enabled:"True" /commit:apphost | Out-Null
     & $appCmd set config "$SiteName" -section:system.webServer/security/authentication/windowsAuthentication /enabled:"True" /commit:apphost | Out-Null
-    Write-OK "Autenticazione Anonymous e Windows abilitate sul sito IIS '$SiteName'."
+    Write-OK "Autenticazione Anonymous e Windows abilitate sul sito IIS '$SiteName'." "Anonymous and Windows authentication enabled on IIS site '$SiteName'."
 }
 catch {
-    Write-Warn "Configurazione autenticazione IIS: $($_.Exception.Message)"
+    Write-Warn "Configurazione autenticazione IIS: $($_.Exception.Message)" "IIS authentication configuration: $($_.Exception.Message)"
 }
 
-Write-OK "Sito IIS '$SiteName' creato con successo."
-Write-Info "  Physical Path:     $InstallPath"
-Write-Info "  Application Pool:  $appPoolName"
-Write-Info "  Binding:           ${protocol}://*:${SitePort}${SiteHostHeader}"
+Write-OK "Sito IIS '$SiteName' creato con successo." "IIS site '$SiteName' created successfully."
+Write-Info "  Physical Path:     $InstallPath" "  Physical Path:     $InstallPath"
+Write-Info "  Application Pool:  $appPoolName" "  Application Pool:  $appPoolName"
+Write-Info "  Binding:           ${protocol}://*:${SitePort}${SiteHostHeader}" "  Binding:           ${protocol}://*:${SitePort}${SiteHostHeader}"
 
 # ============================================================================
 # STEP 7: Permessi sul File System
 # ============================================================================
 
-Write-Step "STEP 7: Configurazione permessi file system"
+Write-Step "STEP 7: Configurazione permessi file system" "STEP 7: Configuring file system permissions"
 
 # L'identità dell'app pool necessita di FullControl sulla cartella applicativa
 # e di accesso esclusivo (senza ereditarietà) su App_Data e logs
@@ -901,10 +966,9 @@ try {
     )
     $acl.AddAccessRule($fullControlRule)
     Set-Acl $InstallPath $acl
-    Write-OK "Permessi FullControl concessi a '$identityAccount' su $InstallPath"
+    Write-OK "Permessi FullControl concessi a '$identityAccount' su $InstallPath" "FullControl permissions granted to '$identityAccount' on $InstallPath"
 
-    # 2. Configurazione di MASSIMA SICUREZZA per App_Data (chiavi private, entropia DPAPI, richieste trattenute)
-    # Disabilita l'ereditarieta' e rimuove regole ereditate (nessun accesso per Users, Authenticated Users, Everyone o IIS_IUSRS)
+    # 2. Configurazione di MASSIMA SICUREZZA per App_Data
     $ruleSystem = New-Object System.Security.AccessControl.FileSystemAccessRule("NT AUTHORITY\SYSTEM", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
     $ruleAdmins = New-Object System.Security.AccessControl.FileSystemAccessRule("BUILTIN\Administrators", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
     $ruleAppPool = New-Object System.Security.AccessControl.FileSystemAccessRule($identityAccount, "Modify", "ContainerInherit,ObjectInherit", "None", "Allow")
@@ -915,7 +979,7 @@ try {
     $appDataSec.AddAccessRule($ruleAdmins)
     $appDataSec.AddAccessRule($ruleAppPool)
     Set-Acl -Path $appDataPath -AclObject $appDataSec
-    Write-OK "Cartella protetta App_Data blindata (accesso esclusivo a SYSTEM, Administrators e '$identityAccount')."
+    Write-OK "Cartella protetta App_Data blindata (accesso esclusivo a SYSTEM, Administrators e '$identityAccount')." "Protected App_Data folder secured (exclusive access to SYSTEM, Administrators, and '$identityAccount')."
 
     # 3. Permessi dedicati e protetti sulla cartella logs
     $logSec = New-Object System.Security.AccessControl.DirectorySecurity
@@ -924,22 +988,22 @@ try {
     $logSec.AddAccessRule($ruleAdmins)
     $logSec.AddAccessRule($ruleAppPool)
     Set-Acl -Path $logPath -AclObject $logSec
-    Write-OK "Cartella logs protetta: accesso ristretto a SYSTEM, Administrators e '$identityAccount'."
+    Write-OK "Cartella logs protetta: accesso ristretto a SYSTEM, Administrators e '$identityAccount'." "Protected logs folder secured: restricted to SYSTEM, Administrators, and '$identityAccount'."
 
     # 4. Se appsettings.json non esiste ma esiste appsettings.example.json, rinomina il file esempio
     $appSettingsPath = Join-Path $InstallPath "appsettings.json"
     $appSettingsExamplePath = Join-Path $InstallPath "appsettings.example.json"
     if (-not (Test-Path $appSettingsPath) -and (Test-Path $appSettingsExamplePath)) {
         Rename-Item -Path $appSettingsExamplePath -NewName "appsettings.json" -Force
-        Write-OK "File appsettings.example.json rinominato in appsettings.json (prima installazione)."
+        Write-OK "File appsettings.example.json rinominato in appsettings.json (prima installazione)." "File appsettings.example.json renamed to appsettings.json (initial installation)."
     }
     elseif (Test-Path $appSettingsPath) {
-        Write-Info "File appsettings.json già presente, appsettings.example.json non rinominato."
+        Write-Info "File appsettings.json già presente, appsettings.example.json non rinominato." "File appsettings.json already present, appsettings.example.json not renamed."
     }
 }
 catch {
-    Write-Warn "Errore durante la configurazione dei permessi: $($_.Exception.Message)"
-    Write-Warn "Verificare manualmente che '$identityAccount' abbia accesso a $InstallPath e $appDataPath"
+    Write-Warn "Errore durante la configurazione dei permessi: $($_.Exception.Message)" "Error configuring permissions: $($_.Exception.Message)"
+    Write-Warn "Verificare manualmente che '$identityAccount' abbia accesso a $InstallPath e $appDataPath" "Manually verify '$identityAccount' has access to $InstallPath and $appDataPath"
 }
 
 # ============================================================================
@@ -947,75 +1011,76 @@ catch {
 # ============================================================================
 
 if (-not $SkipFirewall) {
-    Write-Step "STEP 8: Configurazione regola Windows Firewall"
+    Write-Step "STEP 8: Configurazione regola Windows Firewall" "STEP 8: Configuring Windows Firewall rule"
 
     $fwRuleName = "PKI Web Enrollment Portal (Porta $SitePort)"
 
     $existingRule = Get-NetFirewallRule -DisplayName $fwRuleName -ErrorAction SilentlyContinue
     if ($existingRule) {
-        Write-OK "Regola firewall '$fwRuleName' già presente."
+        Write-OK "Regola firewall '$fwRuleName' già presente." "Firewall rule '$fwRuleName' already exists."
     }
     else {
         try {
+            $fwDesc = Msg "Consente il traffico in ingresso al Portale PKI Web Enrollment (ASP.NET Core)" "Allows inbound traffic to PKI Web Enrollment Portal (ASP.NET Core)"
             New-NetFirewallRule -DisplayName $fwRuleName `
                 -Direction Inbound `
                 -Protocol TCP `
                 -LocalPort $SitePort `
                 -Action Allow `
                 -Profile Domain,Private `
-                -Description "Consente il traffico in ingresso al Portale PKI Web Enrollment (ASP.NET Core)" `
+                -Description $fwDesc `
                 -ErrorAction Stop | Out-Null
 
-            Write-OK "Regola firewall creata: '$fwRuleName' (TCP $SitePort, profili Domain+Private)"
+            Write-OK "Regola firewall creata: '$fwRuleName' (TCP $SitePort, profili Domain+Private)" "Firewall rule created: '$fwRuleName' (TCP $SitePort, Domain+Private profiles)"
         }
         catch {
-            Write-Warn "Impossibile creare la regola firewall: $($_.Exception.Message)"
-            Write-Warn "Creare manualmente una regola per la porta TCP $SitePort."
+            Write-Warn "Impossibile creare la regola firewall: $($_.Exception.Message)" "Unable to create firewall rule: $($_.Exception.Message)"
+            Write-Warn "Creare manualmente una regola per la porta TCP $SitePort." "Manually create a rule for TCP port $SitePort."
         }
     }
 }
 else {
-    Write-Info "Creazione regola firewall saltata (-SkipFirewall specificato)."
+    Write-Info "Creazione regola firewall saltata (-SkipFirewall specificato)." "Firewall rule creation skipped (-SkipFirewall specified)."
 }
 
 # ============================================================================
 # STEP 9: Avvio del sito e verifica
 # ============================================================================
 
-Write-Step "STEP 9: Avvio sito e verifica"
+Write-Step "STEP 9: Avvio sito e verifica" "STEP 9: Starting site and verification"
 
 try {
     # Avvio del pool e del sito
     Start-WebAppPool -Name $appPoolName -ErrorAction SilentlyContinue
     Start-Website -Name $SiteName -ErrorAction SilentlyContinue
-    Write-OK "Sito '$SiteName' e Application Pool '$appPoolName' avviati."
+    Write-OK "Sito '$SiteName' e Application Pool '$appPoolName' avviati." "Site '$SiteName' and Application Pool '$appPoolName' started."
 }
 catch {
-    Write-Warn "Errore durante l'avvio: $($_.Exception.Message)"
+    Write-Warn "Errore durante l'avvio: $($_.Exception.Message)" "Startup error: $($_.Exception.Message)"
 }
 
 # Tentativo di verifica HTTP
 Start-Sleep -Seconds 2
 $testUrl = "${protocol}://localhost:${SitePort}/api/config"
-Write-Info "Verifica connettività: $testUrl"
+Write-Info "Verifica connettività: $testUrl" "Verifying connectivity: $testUrl"
 
 try {
     $response = Invoke-RestMethod -Uri $testUrl -TimeoutSec 10 -ErrorAction Stop
-    Write-OK "Il portale risponde correttamente!"
-    Write-OK "  Titolo:   $($response.portalTitle)"
-    Write-OK "  Modalità: $($response.portalMode)"
-    Write-OK "  CA configurate: $($response.cas.Count)"
+    Write-OK "Il portale risponde correttamente!" "Portal responded successfully!"
+    Write-OK "  Titolo:   $($response.portalTitle)" "  Title:   $($response.portalTitle)"
+    Write-OK "  Modalità: $($response.portalMode)" "  Mode:    $($response.portalMode)"
+    Write-OK "  CA configurate: $($response.cas.Count)" "  Configured CAs: $($response.cas.Count)"
 }
 catch {
-    Write-Warn "Il portale non risponde ancora su $testUrl"
-    Write-Warn "Verificare i log in: $logPath"
-    Write-Warn "Potrebbe essere necessario eseguire 'iisreset' o verificare il modulo ASP.NET Core."
+    Write-Warn "Il portale non risponde ancora su $testUrl" "Portal is not yet responding on $testUrl"
+    Write-Warn "Verificare i log in: $logPath" "Check logs in: $logPath"
+    Write-Warn "Potrebbe essere necessario eseguire 'iisreset' o verificare il modulo ASP.NET Core." "An 'iisreset' may be required, or verify ASP.NET Core module."
 }
 
 # Verifica integrità certsrv
 $defaultWs = Get-Website -Name "Default Web Site" -ErrorAction SilentlyContinue
 if ($defaultWs -and $defaultWs.State -eq "Started") {
-    Write-OK "Sito 'Default Web Site' (certsrv) è ancora attivo e funzionante."
+    Write-OK "Sito 'Default Web Site' (certsrv) è ancora attivo e funzionante." "Site 'Default Web Site' (certsrv) is still active and operational."
 }
 
 # ============================================================================
@@ -1024,27 +1089,43 @@ if ($defaultWs -and $defaultWs.State -eq "Started") {
 
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Green
-Write-Host "  INSTALLAZIONE COMPLETATA                                        " -ForegroundColor White
+if ($script:IsItalian) {
+    Write-Host "  INSTALLAZIONE COMPLETATA (v2.0.11)                              " -ForegroundColor White
+} else {
+    Write-Host "  INSTALLATION COMPLETED (v2.0.11)                                " -ForegroundColor White
+}
 Write-Host "==================================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Portale PKI:     ${protocol}://localhost:${SitePort}" -ForegroundColor Cyan
+Write-Host "  $(Msg 'Portale PKI:' 'PKI Portal:')     ${protocol}://localhost:${SitePort}" -ForegroundColor Cyan
 if ($SiteHostHeader) {
-    Write-Host "  URL Hostname:    ${protocol}://${SiteHostHeader}:${SitePort}" -ForegroundColor Cyan
+    Write-Host "  $(Msg 'URL Hostname:' 'Hostname URL:')    ${protocol}://${SiteHostHeader}:${SitePort}" -ForegroundColor Cyan
 }
-Write-Host "  Sito IIS:        $SiteName" -ForegroundColor White
-Write-Host "  App Pool:        $appPoolName" -ForegroundColor White
-Write-Host "  Percorso Fisico: $InstallPath" -ForegroundColor White
-Write-Host "  Log:             $logPath" -ForegroundColor White
-Write-Host "  certsrv:         Non modificato [OK]" -ForegroundColor Green
+Write-Host "  $(Msg 'Sito IIS:' 'IIS Site:')        $SiteName" -ForegroundColor White
+Write-Host "  $(Msg 'App Pool:' 'App Pool:')        $appPoolName" -ForegroundColor White
+Write-Host "  $(Msg 'Percorso Fisico:' 'Physical Path:') $InstallPath" -ForegroundColor White
+Write-Host "  $(Msg 'Log:' 'Logs:')             $logPath" -ForegroundColor White
+Write-Host "  certsrv:         $(Msg 'Non modificato [OK]' 'Unmodified [OK]')" -ForegroundColor Green
 Write-Host ""
-Write-Host "  PROSSIMI PASSI:" -ForegroundColor Yellow
-Write-Host "    1. Modificare $InstallPath\appsettings.json con le vere Sub-CA e i template" -ForegroundColor White
-Write-Host "    2. Impostare UseSimulator = false per le CA reali" -ForegroundColor White
-Write-Host "    3. Verificare che l'identità del pool ($identityAccount) abbia" -ForegroundColor White
-Write-Host "       permessi 'Request Certificates' sui template ADCS" -ForegroundColor White
-if (-not $UseHttps) {
-    Write-Host '    4. Configurare un binding HTTPS con un certificato SSL valido' -ForegroundColor White
-    Write-Host '       (rieseguire con -UseHttps -CertThumbprint "THUMBPRINT")' -ForegroundColor White
+if ($script:IsItalian) {
+    Write-Host "  PROSSIMI PASSI:" -ForegroundColor Yellow
+    Write-Host "    1. Modificare $InstallPath\appsettings.json con le vere Sub-CA e i template" -ForegroundColor White
+    Write-Host "    2. Impostare UseSimulator = false per le CA reali" -ForegroundColor White
+    Write-Host "    3. Verificare che l'identità del pool ($identityAccount) abbia" -ForegroundColor White
+    Write-Host "       permessi 'Request Certificates' sui template ADCS" -ForegroundColor White
+    if (-not $UseHttps) {
+        Write-Host '    4. Configurare un binding HTTPS con un certificato SSL valido' -ForegroundColor White
+        Write-Host '       (rieseguire con -UseHttps -CertThumbprint "THUMBPRINT")' -ForegroundColor White
+    }
+} else {
+    Write-Host "  NEXT STEPS:" -ForegroundColor Yellow
+    Write-Host "    1. Configure $InstallPath\appsettings.json with real Sub-CAs and templates" -ForegroundColor White
+    Write-Host "    2. Set UseSimulator = false for real CAs" -ForegroundColor White
+    Write-Host "    3. Verify pool identity ($identityAccount) has" -ForegroundColor White
+    Write-Host "       'Request Certificates' permissions on AD CS templates" -ForegroundColor White
+    if (-not $UseHttps) {
+        Write-Host '    4. Configure an HTTPS binding with a valid SSL certificate' -ForegroundColor White
+        Write-Host '       (rerun with -UseHttps -CertThumbprint "THUMBPRINT")' -ForegroundColor White
+    }
 }
 Write-Host ""
 

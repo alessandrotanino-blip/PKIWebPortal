@@ -6,6 +6,17 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.0.11] - 2026-10-12
+
+### Aggiunto & Migliorato
+- **Internazionalizzazione Script di Installazione (`Install-PkiPortal.ps1`)**:
+  - Rilevamento automatico della lingua del sistema operativo (`CurrentUICulture` / `InstalledUICulture`).
+  - Se la lingua del sistema non è l'italiano (`it`), tutti i messaggi, le intestazioni dei passaggi, i warning di sicurezza, i prompt interattivi (`Read-Host`) e il riepilogo finale vengono visualizzati automaticamente in **lingua inglese**.
+  - Accettazione unificata degli input utente per le conferme interattive (`S/N` per italiano, `Y/N` per inglese).
+- **Versioning**: bump a `2.0.11` su progetto .NET (`PkiPortal.csproj`), badge UI navbar (`index.html`, `admin.html`) e cache-busting delle risorse.
+
+---
+
 ## [2.0.10] - 2026-10-12
 
 ### Corretto & Migliorato

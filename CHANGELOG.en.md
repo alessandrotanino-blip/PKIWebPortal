@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.11] - 2026-10-12
+
+### Added & Improved
+- **IIS Installation Script Internationalization (`Install-PkiPortal.ps1`)**:
+  - Automatic detection of Operating System culture (`CurrentUICulture` / `InstalledUICulture`).
+  - When the OS display language is not Italian (`it`), all script logs, step banners, security warnings, interactive prompts (`Read-Host`), and the final summary are displayed in **English**.
+  - Unified confirmation inputs supporting both Italian (`S/N`) and English (`Y/N`) user responses.
+- **Versioning**: bump to `2.0.11` across the .NET project (`PkiPortal.csproj`), UI navigation badges (`index.html`, `admin.html`), and asset cache-busting strings.
+
+---
+
 ## [2.0.10] - 2026-10-12
 
 ### Fixed & Improved
