@@ -880,8 +880,8 @@ Write-Info "  Binding:           ${protocol}://*:${SitePort}${SiteHostHeader}"
 
 Write-Step "STEP 7: Configurazione permessi file system"
 
-# L'identità dell'app pool necessita di Read/Execute sulla cartella applicativa
-# e di Write sulla cartella logs
+# L'identità dell'app pool necessita di FullControl sulla cartella applicativa
+# e di accesso esclusivo (senza ereditarietà) su App_Data e logs
 $identityAccount = switch ($AppPoolIdentity) {
     "ApplicationPoolIdentity" { "IIS APPPOOL\$appPoolName" }
     "NetworkService"          { "NT AUTHORITY\NETWORK SERVICE" }
@@ -890,18 +890,18 @@ $identityAccount = switch ($AppPoolIdentity) {
 }
 
 try {
-    # 1. Permessi di lettura/esecuzione sulla cartella radice dell'app
+    # 1. Permessi FullControl sulla cartella radice dell'app per l'identità del pool
     $acl = Get-Acl $InstallPath
-    $readRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+    $fullControlRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
         $identityAccount,
-        "ReadAndExecute",
+        "FullControl",
         "ContainerInherit,ObjectInherit",
         "None",
         "Allow"
     )
-    $acl.AddAccessRule($readRule)
+    $acl.AddAccessRule($fullControlRule)
     Set-Acl $InstallPath $acl
-    Write-OK "Permessi ReadAndExecute concessi a '$identityAccount' su $InstallPath"
+    Write-OK "Permessi FullControl concessi a '$identityAccount' su $InstallPath"
 
     # 2. Configurazione di MASSIMA SICUREZZA per App_Data (chiavi private, entropia DPAPI, richieste trattenute)
     # Disabilita l'ereditarieta' e rimuove regole ereditate (nessun accesso per Users, Authenticated Users, Everyone o IIS_IUSRS)
@@ -926,23 +926,15 @@ try {
     Set-Acl -Path $logPath -AclObject $logSec
     Write-OK "Cartella logs protetta: accesso ristretto a SYSTEM, Administrators e '$identityAccount'."
 
-    # 4. Permessi di scrittura su appsettings.json (necessario per il salvataggio dalla pagina admin)
+    # 4. Se appsettings.json non esiste ma esiste appsettings.example.json, rinomina il file esempio
     $appSettingsPath = Join-Path $InstallPath "appsettings.json"
-    if (Test-Path $appSettingsPath) {
-        $aclSettings = Get-Acl $appSettingsPath
-        $settingsRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-            $identityAccount,
-            "Modify",
-            "None",
-            "None",
-            "Allow"
-        )
-        $aclSettings.AddAccessRule($settingsRule)
-        Set-Acl $appSettingsPath $aclSettings
-        Write-OK "Permessi Modify concessi a '$identityAccount' su $appSettingsPath"
+    $appSettingsExamplePath = Join-Path $InstallPath "appsettings.example.json"
+    if (-not (Test-Path $appSettingsPath) -and (Test-Path $appSettingsExamplePath)) {
+        Rename-Item -Path $appSettingsExamplePath -NewName "appsettings.json" -Force
+        Write-OK "File appsettings.example.json rinominato in appsettings.json (prima installazione)."
     }
-    else {
-        Write-Warn "File $appSettingsPath non trovato, i permessi di scrittura andranno configurati manualmente."
+    elseif (Test-Path $appSettingsPath) {
+        Write-Info "File appsettings.json già presente, appsettings.example.json non rinominato."
     }
 }
 catch {

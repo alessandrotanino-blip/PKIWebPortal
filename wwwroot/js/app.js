@@ -352,7 +352,7 @@
 
       showProgress(
         window.I18N ? window.I18N.t('progress_crypto_local_title', 'Generazione Crittografica Locale') : 'Generazione Crittografica Locale',
-        window.I18N ? window.I18N.t('progress_crypto_local_desc', 'Creazione della coppia di chiavi RSA/ECC nel browser tramite Web Crypto...') : 'Creazione della coppia di chiavi RSA/ECC nel browser tramite Web Crypto...'
+        window.I18N ? window.I18N.t('progress_crypto_local_desc', 'Creazione della coppia di chiavi RSA/ECC nel browser (potrebbe richiedere alcuni secondi)...') : 'Creazione della coppia di chiavi RSA/ECC nel browser (potrebbe richiedere alcuni secondi)...'
       );
 
       try {

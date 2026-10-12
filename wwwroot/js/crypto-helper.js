@@ -8,6 +8,56 @@ window.CryptoHelper = (function () {
     'use strict';
 
     /**
+     * Genera una coppia di chiavi RSA tramite forge.js.
+     * Tenta prima con Web Workers (generazione parallela, più veloce);
+     * se i workers non rispondono entro il timeout (es. IE ESC su Windows Server
+     * che blocca blob: URL), ripete la generazione in single-thread (workers: 0).
+     */
+    function generateKeyPairWithFallback(keyBits) {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            let workerTimeout = null;
+
+            // Tentativo 1: con Web Workers (timeout 15 secondi)
+            try {
+                workerTimeout = setTimeout(() => {
+                    if (!settled) {
+                        settled = true;
+                        console.warn('[CryptoHelper] Web Workers non hanno risposto entro 15s, fallback a single-thread...');
+                        // Tentativo 2: senza workers (single-thread, sempre funzionante)
+                        forge.pki.rsa.generateKeyPair({ bits: keyBits, workers: 0 }, function (err, keypair) {
+                            if (err) return reject(new Error('Errore generazione chiavi (single-thread): ' + err.message));
+                            console.info('[CryptoHelper] Chiavi generate con successo in modalità single-thread.');
+                            resolve(keypair);
+                        });
+                    }
+                }, 15000);
+
+                forge.pki.rsa.generateKeyPair({ bits: keyBits, workers: -1 }, function (err, keypair) {
+                    if (settled) return; // Il timeout ha già attivato il fallback
+                    settled = true;
+                    clearTimeout(workerTimeout);
+                    if (err) return reject(new Error('Errore generazione chiavi (workers): ' + err.message));
+                    console.info('[CryptoHelper] Chiavi generate con successo tramite Web Workers.');
+                    resolve(keypair);
+                });
+            } catch (workerErr) {
+                // I Web Workers non sono proprio disponibili (es. contesto non supportato)
+                if (!settled) {
+                    settled = true;
+                    if (workerTimeout) clearTimeout(workerTimeout);
+                    console.warn('[CryptoHelper] Web Workers non disponibili:', workerErr.message, '- fallback a single-thread...');
+                    forge.pki.rsa.generateKeyPair({ bits: keyBits, workers: 0 }, function (err, keypair) {
+                        if (err) return reject(new Error('Errore generazione chiavi (single-thread): ' + err.message));
+                        console.info('[CryptoHelper] Chiavi generate con successo in modalità single-thread.');
+                        resolve(keypair);
+                    });
+                }
+            }
+        });
+    }
+
+    /**
      * Genera una coppia di chiavi e un CSR PKCS#10 conforme alle specifiche RFC 2986
      */
     async function generateCsr(params) {
@@ -22,78 +72,68 @@ window.CryptoHelper = (function () {
             keyType = 'RSA-2048'
         } = params;
 
-        return new Promise((resolve, reject) => {
-            try {
-                let keyBits = 2048;
-                if (keyType === 'RSA-4096') keyBits = 4096;
-                else if (keyType === 'RSA-3072') keyBits = 3072;
+        let keyBits = 2048;
+        if (keyType === 'RSA-4096') keyBits = 4096;
+        else if (keyType === 'RSA-3072') keyBits = 3072;
 
-                // Generazione asincrona coppia di chiavi RSA nel client
-                forge.pki.rsa.generateKeyPair({ bits: keyBits, workers: -1 }, function (err, keypair) {
-                    if (err) {
-                        return reject(new Error('Errore durante la generazione della coppia di chiavi: ' + err.message));
-                    }
+        // Generazione chiavi con fallback automatico workers -> single-thread
+        const keypair = await generateKeyPairWithFallback(keyBits);
 
-                    try {
-                        const csr = forge.pki.createCertificationRequest();
-                        csr.publicKey = keypair.publicKey;
+        try {
+            const csr = forge.pki.createCertificationRequest();
+            csr.publicKey = keypair.publicKey;
 
-                        // Costruzione del Subject Distinguished Name (DN)
-                        const attrs = [];
-                        if (commonName) attrs.push({ name: 'commonName', value: commonName });
-                        if (organization) attrs.push({ name: 'organizationName', value: organization });
-                        if (organizationalUnit) attrs.push({ name: 'organizationalUnitName', value: organizationalUnit });
-                        if (country) attrs.push({ name: 'countryName', value: country });
-                        if (state) attrs.push({ name: 'stateOrProvinceName', value: state });
-                        if (locality) attrs.push({ name: 'localityName', value: locality });
+            // Costruzione del Subject Distinguished Name (DN)
+            const attrs = [];
+            if (commonName) attrs.push({ name: 'commonName', value: commonName });
+            if (organization) attrs.push({ name: 'organizationName', value: organization });
+            if (organizationalUnit) attrs.push({ name: 'organizationalUnitName', value: organizationalUnit });
+            if (country) attrs.push({ name: 'countryName', value: country });
+            if (state) attrs.push({ name: 'stateOrProvinceName', value: state });
+            if (locality) attrs.push({ name: 'localityName', value: locality });
 
-                        csr.setSubject(attrs);
+            csr.setSubject(attrs);
 
-                        // Aggiunta estensione Subject Alternative Name (SAN) se presente
-                        if (sans && sans.length > 0) {
-                            const altNames = sans.map(s => {
-                                const typeUpper = (s.type || 'DNS').toUpperCase();
-                                if (typeUpper === 'IP') {
-                                    return { type: 7, ip: s.value.trim() }; // IPAddress = tag 7
-                                } else if (typeUpper === 'EMAIL') {
-                                    return { type: 1, value: s.value.trim() }; // rfc822Name = tag 1
-                                } else if (typeUpper === 'URI') {
-                                    return { type: 6, value: s.value.trim() }; // uniformResourceIdentifier = tag 6
-                                } else {
-                                    return { type: 2, value: s.value.trim() }; // dNSName = tag 2
-                                }
-                            });
-
-                            csr.setAttributes([{
-                                name: 'extensionRequest',
-                                extensions: [{
-                                    name: 'subjectAltName',
-                                    altNames: altNames
-                                }]
-                            }]);
-                        }
-
-                        // Firma del CSR con la chiave privata creata nel browser
-                        csr.sign(keypair.privateKey, forge.md.sha256.create());
-
-                        // Conversione in PEM
-                        const csrPem = forge.pki.certificationRequestToPem(csr);
-
-                        resolve({
-                            csrPem: csrPem,
-                            privateKey: keypair.privateKey,
-                            publicKey: keypair.publicKey,
-                            keyType: keyType,
-                            keySize: keyBits
-                        });
-                    } catch (csrErr) {
-                        reject(new Error('Errore creazione PKCS#10: ' + csrErr.message));
+            // Aggiunta estensione Subject Alternative Name (SAN) se presente
+            if (sans && sans.length > 0) {
+                const altNames = sans.map(s => {
+                    const typeUpper = (s.type || 'DNS').toUpperCase();
+                    if (typeUpper === 'IP') {
+                        return { type: 7, ip: s.value.trim() }; // IPAddress = tag 7
+                    } else if (typeUpper === 'EMAIL') {
+                        return { type: 1, value: s.value.trim() }; // rfc822Name = tag 1
+                    } else if (typeUpper === 'URI') {
+                        return { type: 6, value: s.value.trim() }; // uniformResourceIdentifier = tag 6
+                    } else {
+                        return { type: 2, value: s.value.trim() }; // dNSName = tag 2
                     }
                 });
-            } catch (ex) {
-                reject(ex);
+
+                csr.setAttributes([{
+                    name: 'extensionRequest',
+                    extensions: [{
+                        name: 'subjectAltName',
+                        altNames: altNames
+                    }]
+                }]);
             }
-        });
+
+            // Firma del CSR con la chiave privata creata nel browser
+            csr.sign(keypair.privateKey, forge.md.sha256.create());
+
+            // Conversione in PEM
+            const csrPem = forge.pki.certificationRequestToPem(csr);
+
+            return {
+                csrPem: csrPem,
+                privateKey: keypair.privateKey,
+                publicKey: keypair.publicKey,
+                keyType: keyType,
+                keySize: keyBits
+            };
+        } catch (csrErr) {
+            throw new Error('Errore creazione PKCS#10: ' + csrErr.message);
+        }
     }
 
     /**
