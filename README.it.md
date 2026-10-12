@@ -123,14 +123,15 @@ dove è attivo Microsoft Web Enrollment (certsrv), **senza modificare né interr
 3. Compila e pubblica l'applicazione nella cartella di destinazione.
 4. Crea un **Application Pool dedicato** (separato da DefaultAppPool/certsrv).
 5. Crea un **nuovo sito IIS** su porta e hostname configurabili.
-6. Configura permessi file system e regola firewall.
-7. Verifica che certsrv resti inalterato e funzionante.
+6. Configura permessi file system (**FullControl** per l'Application Pool su tutta la cartella di deploy) e gestisce la configurazione iniziale (rinomina automatica di `appsettings.example.json` in `appsettings.json` se non già presente).
+7. Configura la regola Windows Firewall e verifica che certsrv resti inalterato e funzionante.
 
 ### Prerequisiti
 
 * Windows Server 2016 o successivo con ruolo IIS
 * Privilegi di amministratore locale
 * .NET 8 SDK (per la compilazione) o .NET 8 Hosting Bundle (per il solo runtime)
+* **Certificato SSL / Binding HTTPS (Fortemente raccomandato / Requisito per client remoti)**: Per policy di sicurezza W3C (*Secure Context*), le Web Crypto API e i Web Worker nel browser richiedono connessione HTTPS (o `localhost`) per generare le chiavi crittografiche nel client. In HTTP puro su FQDN/IP remoti la generazione client-side viene bloccata dai browser.
 
 ### Esempi di installazione
 
@@ -303,7 +304,7 @@ Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 
 ## 🔒 Sicurezza e Best Practice
 
-* **HTTPS**: In ambiente di produzione, usare sempre HTTPS. Lo script di installazione supporta il parametro `-UseHttps -CertThumbprint`.
+* **HTTPS e Contesto Sicuro (W3C Secure Context)**: In produzione, usare sempre HTTPS. Oltre alla cifratura del traffico e alla protezione delle sessioni, HTTPS è **indispensabile** affinché i browser moderni consentano l'esecuzione sicura dei Web Worker (Blob URL) e delle API crittografiche per la generazione client-side delle chiavi private e dei CSR. Su HTTP puro (da IP o hostname remoto), i browser bloccano queste API o provocano blocchi/lentezza estrema.
 * **Service Account**: L'Application Pool di IIS deve eseguire con un account che abbia i permessi *Request Certificates* (Enroll) sui template ADCS desiderati. Per la modalità Standalone all'interno della foresta, `NetworkService` o un Managed Service Account è sufficiente.
 * **Hardening ESC8**: Questo portale non espone l'endpoint `certsrv` tradizionale. **Nota importante:** il default di installazione risponde su HTTP in chiaro con Windows Authentication (NTLM negoziabile in chiaro sulla rete, rischio relay) e lo script di installazione richiede ora conferma esplicita per il percorso HTTP. In produzione installare **sempre** con `-UseHttps -CertThumbprint` e abilitare Extended Protection for Authentication (EAAL/EPAL) per mitigare il relay.
 * **Separazione da certsrv**: Il portale utilizza un sito IIS e un Application Pool completamente separati, garantendo che un problema sul portale non impatti certsrv e viceversa.
@@ -451,6 +452,25 @@ Il simulatore:
 |`KeyUsages`|string[]|`["DigitalSignature","KeyEncipherment"]`|Valori X.509 Key Usage.|
 |`ExtendedKeyUsages`|string[]|`["ServerAuthentication"]`|OID/nomi X.509 Extended Key Usage.|
 |`AllowedGroups`|string[]|`[]` (tutti)|Gruppi Active Directory autorizzati all'uso del template (RBAC).|
+
+---
+
+## 🛠️ Risoluzione dei Problemi (Troubleshooting)
+
+### 1. Il browser resta bloccato su "Generazione Crittografica Locale"
+* **Sintomo**: L'interfaccia mostra il cerchio di caricamento e la dicitura *"Creazione della coppia di chiavi RSA/ECC nel browser..."* senza avanzare.
+* **Causa**: Il portale è stato aperto tramite protocollo HTTP non sicuro su un IP o nome host remoto (es. `http://nomeserver:81/`). I browser web applicano le specifiche W3C Secure Contexts, che limitano o bloccano i Web Worker instanziati da Blob URL e le relative API crittografiche se non ci si trova sotto HTTPS (o `localhost`).
+* **Soluzione**:
+  * Configurare il binding **HTTPS** su IIS associando un certificato SSL valido (parametro `-UseHttps -CertThumbprint` in `Install-PkiPortal.ps1`, oppure da IIS Manager).
+  * Il client include inoltre un fallback di sicurezza: dopo 15 secondi di attesa dei Web Worker, passa automaticamente alla modalità single-thread garantendo il completamento.
+
+### 2. Errore durante l'installazione: "Cannot find path 'IIS:\AppPools\...' because it does not exist"
+* **Causa**: Nelle installazioni pulite su nuove macchine, lo script tentava di verificare lo stato del pool IIS prima della sua creazione.
+* **Soluzione**: Gestito nello script `Install-PkiPortal.ps1` con controllo preventivo di esistenza `Test-Path`.
+
+### 3. Permessi dell'Application Pool e prima installazione
+* Lo script di installazione attribuisce automaticamente all'identità dell'Application Pool (`$identityAccount`, inclusi gMSA o utenti di dominio) i permessi di **FullControl** con ereditarietà su tutta la cartella `$InstallPath`.
+* Se alla prima installazione il file `appsettings.json` non è presente, lo script provvede a rinominare in automatico `appsettings.example.json` in `appsettings.json`.
 
 ---
 

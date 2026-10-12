@@ -6,6 +6,21 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.0.10] - 2026-10-12
+
+### Corretto & Migliorato
+- **Script di Installazione IIS (`Install-PkiPortal.ps1`)**:
+  - Risolto l'errore `Cannot find path 'IIS:\AppPools\...' because it does not exist` al primo avvio su installazioni pulite, proteggendo la verifica dello stato con `Test-Path`.
+  - Assegnazione automatica dei permessi NTFS di **FullControl** all'identità dell'Application Pool (inclusi account gMSA) sull'intera cartella di installazione (`$InstallPath`).
+  - Auto-inizializzazione del file di configurazione: se `appsettings.json` non è presente (nuova installazione), lo script rinomina in automatico `appsettings.example.json` in `appsettings.json`.
+- **Generazione Crittografica Locale nel Browser (`crypto-helper.js`)**:
+  - Implementato un meccanismo di auto-recovery e timeout (15s): se i Web Worker non rispondono (es. restrizioni policy o IE ESC su Windows Server), il modulo commuta automaticamente in generazione single-thread (`workers: 0`), sbloccando la generazione della coppia di chiavi e del CSR.
+  - Aggiornati i messaggi di avanzamento e le traduzioni i18n in 5 lingue (it, en, fr, de, es).
+- **Documentazione (`README.md`, `README.it.md`, `DOCUMENTATION.dokuwiki`)**:
+  - Inserite sezioni di **Risoluzione dei Problemi (Troubleshooting)** dedicate al vincolo del **W3C Secure Context (HTTPS)** per le API Web Crypto / Web Worker, ai permessi IIS e alle nuove installazioni.
+
+---
+
 ## [2.0.9] - 2026-10-11
 
 ### Corretto

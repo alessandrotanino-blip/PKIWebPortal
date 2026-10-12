@@ -122,14 +122,15 @@ The `Install-PkiPortal.ps1` script installs the portal as a **separate IIS websi
 3. Builds and publishes the application to the destination directory.
 4. Creates a **dedicated Application Pool**, separate from `DefaultAppPool`/certsrv.
 5. Creates a **new IIS website** on a configurable port and hostname.
-6. Configures file-system permissions and the firewall rule.
-7. Verifies that certsrv remains unchanged and operational.
+6. Configures file-system permissions (**FullControl** for the Application Pool identity across the installation folder) and performs initial configuration (automatically renaming `appsettings.example.json` to `appsettings.json` if not already present).
+7. Configures the Windows Firewall rule and verifies that certsrv remains unchanged and operational.
 
 ### Prerequisites
 
 * Windows Server 2016 or later with the IIS role installed.
 * Local administrator privileges.
 * .NET 8 SDK for compilation, or the .NET 8 Hosting Bundle for runtime-only installations.
+* **SSL Certificate / HTTPS Binding (Strongly recommended / Required for remote clients)**: Per W3C *Secure Context* specifications, web browsers require an HTTPS connection (or `localhost`) to enable Web Workers (Blob URLs) and native Web Crypto APIs for in-browser client-side key generation. Over plain HTTP on remote hostnames/IP addresses, client-side cryptographic generation is blocked or restricted by modern browsers.
 
 ### Installation examples
 
@@ -308,7 +309,7 @@ Then open a browser at:
 
 ## 🔒 Security and Best Practices
 
-* **HTTPS**: Always use HTTPS in production. The installation script supports the `-UseHttps -CertThumbprint` parameters.
+* **HTTPS and W3C Secure Context**: Always use HTTPS in production. Beyond encrypting traffic and securing authentication, HTTPS is **mandatory** for modern web browsers to grant access to Web Workers (Blob URLs) and native Web Crypto APIs for in-browser client-side keypair and CSR generation. Over unencrypted HTTP from remote IP addresses or hostnames, browsers restrict these APIs and will cause client-side cryptographic generation to hang or experience substantial delays.
 * **Service Account**: The IIS Application Pool must run under an account that has *Request Certificates* (Enroll) permissions on the desired AD CS templates. For Standalone Mode within the forest, `NetworkService` or a Managed Service Account is sufficient.
 * **ESC8 Hardening**: This portal does not expose the traditional `certsrv` endpoint. **Important note:** the default installation responds over plain HTTP with Windows Authentication (NTLM may be negotiated in cleartext across the network, creating a relay risk), and the installation script now requires explicit confirmation for the HTTP path. In production, **always** install with `-UseHttps -CertThumbprint` and enable Extended Protection for Authentication (EPA/EPAL) to mitigate relay attacks.
 * **Separation from certsrv**: The portal uses a completely separate IIS website and Application Pool, ensuring that an issue with the portal does not affect certsrv, and vice versa.
@@ -461,6 +462,25 @@ The simulator:
 |`KeyUsages`|string[]|`["DigitalSignature","KeyEncipherment"]`|X.509 Key Usage values.|
 |`ExtendedKeyUsages`|string[]|`["ServerAuthentication"]`|X.509 Extended Key Usage OIDs or names.|
 |`AllowedGroups`|string[]|`[]` (all users)|Active Directory groups allowed to use this template (RBAC).|
+
+---
+
+## 🛠️ Troubleshooting
+
+### 1. Browser hangs on "Local Cryptographic Generation"
+* **Symptom**: The browser displays a spinner stating *"Creating RSA/ECC keypair in browser..."* and never progresses to CSR submission.
+* **Root Cause**: The portal is being accessed over plain HTTP via a remote IP address or hostname (e.g., `http://myserver:81/`). Modern browsers implement the W3C Secure Contexts specification, which restricts or disables Web Workers created from Blob URLs and native Web Crypto APIs unless loaded from an HTTPS origin or `localhost`.
+* **Resolution**:
+  * Bind an SSL certificate and access the portal via **HTTPS** (use `-UseHttps -CertThumbprint` with `Install-PkiPortal.ps1`, or configure bindings in IIS Manager).
+  * A client-side resilience fallback is included: after 15 seconds without a response from Web Workers, the script automatically falls back to single-thread key generation mode.
+
+### 2. Installation error: "Cannot find path 'IIS:\AppPools\...' because it does not exist"
+* **Root Cause**: On clean server installations, previous script versions queried `Get-WebAppPoolState` before the Application Pool had been created.
+* **Resolution**: Handled in `Install-PkiPortal.ps1` by performing a `Test-Path` existence check before querying the IIS provider state.
+
+### 3. Application Pool Permissions and First Installation
+* The installation script automatically grants **FullControl** inheritance to the Application Pool identity (`$identityAccount`, including gMSA or standard domain service accounts) across the `$InstallPath` directory.
+* On new installations where `appsettings.json` is not yet present, the script automatically copies/renames `appsettings.example.json` to `appsettings.json`, ensuring the site can start immediately.
 
 ---
 

@@ -6,6 +6,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.10] - 2026-10-12
+
+### Fixed & Improved
+- **IIS Installation Script (`Install-PkiPortal.ps1`)**:
+  - Fixed `Cannot find path 'IIS:\AppPools\...' because it does not exist` error during clean installs by guarding application pool status check with `Test-Path`.
+  - Automatically grants **FullControl** NTFS permissions with inheritance to the Application Pool identity (`$identityAccount`, including gMSA accounts) across `$InstallPath`.
+  - Auto-initialization of configuration file: if `appsettings.json` is missing on initial setup, the script automatically renames `appsettings.example.json` to `appsettings.json`.
+- **Client-Side Cryptographic Key Generation (`crypto-helper.js`)**:
+  - Implemented automatic resilience fallback (15s timeout): if Web Workers fail to respond (e.g. restrictive policies or IE ESC on Windows Server), key generation seamlessly switches to single-thread mode (`workers: 0`), preventing indefinite UI hangs.
+  - Updated progress dialog descriptions and localized i18n strings across all 5 languages (en, it, fr, de, es).
+- **Documentation (`README.md`, `README.it.md`, `DOCUMENTATION.dokuwiki`)**:
+  - Added dedicated **Troubleshooting** sections explaining the **W3C Secure Context (HTTPS)** requirement for browser Web Crypto / Web Workers, IIS permissions, and first-time installation steps.
+
+---
+
 ## [2.0.9] - 2026-10-11
 
 ### Fixed
