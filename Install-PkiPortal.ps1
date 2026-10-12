@@ -439,7 +439,8 @@ if (Test-Path $InstallPath) {
 }
 
 $existingSite = Get-Website -Name $SiteName -ErrorAction SilentlyContinue
-$existingAppPool = Get-WebAppPoolState -Name $appPoolName -ErrorAction SilentlyContinue
+$appPoolExists = Test-Path "IIS:\AppPools\$appPoolName"
+$existingAppPool = if ($appPoolExists) { Get-WebAppPoolState -Name $appPoolName -ErrorAction SilentlyContinue } else { $null }
 
 if ($existingSite -or $existingAppPool -or (Test-Path $InstallPath)) {
     Write-Step "STEP 3b: Arresto sito e App Pool esistenti per aggiornamento"
@@ -471,6 +472,7 @@ if ($existingSite -or $existingAppPool -or (Test-Path $InstallPath)) {
     $timeout = 10
     $elapsed = 0
     while ($elapsed -lt $timeout) {
+        if (-not (Test-Path "IIS:\AppPools\$appPoolName")) { break }
         $state = (Get-WebAppPoolState -Name $appPoolName -ErrorAction SilentlyContinue).Value
         if ($state -ne 'Started' -and $state -ne 'Stopping') { break }
         Start-Sleep -Seconds 1
