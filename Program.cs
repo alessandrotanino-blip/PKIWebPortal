@@ -23,6 +23,9 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+// Inizializzazione immediata dello store richieste trattenute e verifica crittografica all'avvio
+_ = app.Services.GetRequiredService<IHeldRequestStore>();
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 

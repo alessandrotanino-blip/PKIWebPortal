@@ -8,11 +8,12 @@ Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostit
 
 ## 🌟 Caratteristiche Principali
 
-1. **Generazione Chiavi Client-Side (HTML5 Web Crypto)**:
+1. **Generazione Chiavi Client-Side e Custodia Cifrata a Riposo (HTML5 Web Crypto)**:
 
    * La coppia di chiavi (RSA 2048/3072/4096 o ECC P-256/P-384) viene generata in memoria direttamente all'interno del browser (`window.crypto.subtle`).
-   * La **chiave privata non viaggia mai sulla rete né tocca il server**.
-   * All'emissione del certificato da parte di AD CS, il browser genera un pacchetto **PKCS#12 (.pfx)** cifrato con password scelta dall'utente, pronto per essere installato su Windows/IIS.
+   * Quando si utilizza il **Wizard del portale**, per consentire il ritiro posticipato, il workflow di approvazione amministrativa (Hold & Review) e la generazione dell'archivio PKCS#12 (.pfx), la chiave privata viene trasmessa su canale sicuro HTTPS e **custodita sul server rigorosamente cifrata a riposo** tramite DPAPI machine-scope (`CRYPTPROTECT_LOCAL_MACHINE` con entropia a 256 bit) e AES-256-GCM nella cartella protetta `App_Data/held-requests.json`. La chiave privata **non viene mai salvata in chiaro sul server**.
+   * Quando si utilizza la scheda **Caricamento CSR Esistente** (o l'automazione REST via CSR), la chiave privata risiede unicamente sulla macchina richiedente e non tocca mai il server.
+   * All'emissione del certificato da parte di AD CS, viene generato il pacchetto **PKCS#12 (.pfx)** protetto da password scelta dall'utente, pronto per essere installato su Windows/IIS.
 2. **Caricamento CSR Esistente (Base64 / File)**:
 
    * Supporto per file `.csr` / `.req` generati esternamente (es. server Linux, firewall, switch, apparati di rete).
@@ -33,7 +34,7 @@ Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostit
 6. **Workflow di Approvazione Manuale (Hold & Review)**:
 
    * Possibilità di impostare `RequiresApproval: true` sui template sensibili.
-   * Il certificato generato viene trattenuto dal portale in stato `PendingApproval` e rilasciato all'utente solo dopo l'autorizzazione di un amministratore.
+   * Il certificato generato e la relativa chiave privata (per rigenerare il pacchetto PFX) vengono trattenuti dal portale cifrati a riposo in `App_Data/held-requests.json` in stato `PendingApproval` e rilasciati all'utente solo dopo l'autorizzazione di un amministratore.
    * Gli utenti possono allegare **note opzionali** alle proprie richieste per fornire contesto agli amministratori.
 7. **Controllo Accessi Basato sui Ruoli (RBAC sui Template)**:
 
@@ -337,7 +338,7 @@ Quando un template ha `RequiresApproval: true`:
 
 1. L'utente invia la richiesta tramite Web Crypto o CSR esterno.
 2. AD CS elabora la richiesta ed emette tecnicamente il certificato.
-3. Il portale intercetta il certificato, lo archivia cifrato/protetto in `held-requests.json` e contrassegna la richiesta come `PendingApproval`.
+3. Il portale intercetta il certificato, lo archivia con la chiave privata cifrata a riposo in `App_Data/held-requests.json` e contrassegna la richiesta come `PendingApproval`.
 4. L'utente riceve un Hold ID univoco e viene informato che la richiesta è in attesa di approvazione.
 5. Il certificato non può essere scaricato finché un amministratore autorizzato non lo approva dal pannello admin.
 

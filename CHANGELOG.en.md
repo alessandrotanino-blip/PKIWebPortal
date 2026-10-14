@@ -6,6 +6,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.12] - 2026-10-14
+
+### Security & Cryptographic Architecture
+- **Mandatory At-Rest Encryption for Private Keys (`HeldRequestStore.cs`)**:
+  - Completely eliminated any cleartext persistence of private keys: all private keys stored for deferred retrieval or PFX bundle generation are now strictly encrypted at rest.
+  - Implemented DPAPI machine-scope encryption (`CRYPTPROTECT_LOCAL_MACHINE` with persistent 256-bit entropy in `App_Data/store-entropy.bin`) with prefix `PKEY1:`.
+  - Fixed Win32 P/Invoke signatures on `crypt32.dll` (`CryptProtectData`, `CryptUnprotectData`) using `CharSet = CharSet.Unicode` and proper unmanaged deallocation with `LocalFree` (`kernel32.dll`), preventing ANSI marshaling bugs and heap corruption.
+  - Added an authenticated cross-platform / fallback encryption provider based on **AES-256-GCM** (prefix `AESGCM1:`) with an installation key stored in `App_Data/store-key.bin`.
+  - Cryptographic DPAPI self-test at application startup: validates DPAPI operation before enabling it, automatically falling back to AES-256-GCM if unavailable.
+  - Strict cleartext prevention: if no cryptographic provider is operational, persistence safely aborts with an exception rather than writing unencrypted keys to disk.
+  - **Automatic legacy migration**: on startup, any unencrypted legacy records from earlier versions are automatically detected, decrypted in memory, re-encrypted with DPAPI/AES, and rewritten to `App_Data/held-requests.json`, while cleaning up legacy plaintext root files.
+
+### Documentation & Transparency
+- **Documentation Updates (`README.md`, `README.it.md`, `DOCUMENTATION.dokuwiki`)**:
+  - Corrected private key lifecycle descriptions: transparently clarified that when using the wizard with PFX generation or deferred administrator approvals (Hold & Review), the private key is transmitted over secure HTTPS and kept strongly encrypted at rest on the server solely to permit authorized requester PFX assembly.
+  - Clarified that the pure *Zero-Knowledge* model (private key never leaves the client or touches the server) applies to the Existing CSR Upload tab and REST CSR automation.
+  - Updated technical DokuWiki documentation (sections 1.1, file tree, 8.5, and 12.2) detailing DPAPI, AES-256-GCM, and security guarantees.
+- **User Interface & i18n Strings (`index.html`, `i18n.js`)**:
+  - Updated Step 4 wizard subtitle across all 5 languages (en, it, fr, de, es) to accurately describe in-memory generation and secure at-rest server custody.
+- **Installation Script & Versioning (`Install-PkiPortal.ps1`, `PkiPortal.csproj`)**:
+  - Added migration support for `store-key.bin` to protected `App_Data`.
+  - Bumped version to `2.0.12` across `.csproj`, PowerShell installer, navbar badges, and asset cache-busting parameters.
+
+---
+
 ## [2.0.11] - 2026-10-12
 
 ### Added & Improved

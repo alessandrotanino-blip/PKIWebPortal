@@ -20,11 +20,15 @@ public class HeldRequestStore : IHeldRequestStore
     private readonly SemaphoreSlim _saveLock = new(1, 1);
     private readonly object _stateLock = new();
 
-    // Entropia DPAPI persistente (32 byte casuali, generati una sola volta): vincola
-    // la cifratura at-rest delle private key a questa specifica installazione.
+    // Prefissi di formato cifratura a riposo:
+    // PKEY1:   = DPAPI machine-scope + entropia crittografica locale
+    // AESGCM1: = AES-256-GCM con chiave crittografica di installazione (App_Data/store-key.bin)
     private const string DpapiPrefix = "PKEY1:";
+    private const string AesGcmPrefix = "AESGCM1:";
+
     private readonly byte[]? _dpapiEntropy;
     private readonly bool _dpapiAvailable;
+    private readonly byte[]? _aesKey;
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -49,107 +53,184 @@ public class HeldRequestStore : IHeldRequestStore
 
         _persistencePath = Path.Combine(appDataDir, "held-requests.json");
         var entropyPath = Path.Combine(appDataDir, "store-entropy.bin");
+        var keyPath = Path.Combine(appDataDir, "store-key.bin");
 
         // Migrazione automatica da vecchia directory radice se presente
-        var legacyPersistencePath = Path.Combine(AppContext.BaseDirectory, "held-requests.json");
-        var legacyEntropyPath = Path.Combine(AppContext.BaseDirectory, "store-entropy.bin");
+        MigrateLegacyFile(Path.Combine(AppContext.BaseDirectory, "store-entropy.bin"), entropyPath);
+        MigrateLegacyFile(Path.Combine(AppContext.BaseDirectory, "store-key.bin"), keyPath);
+        MigrateLegacyFile(Path.Combine(AppContext.BaseDirectory, "held-requests.json"), _persistencePath);
 
-        if (File.Exists(legacyEntropyPath) && !File.Exists(entropyPath))
+        // Controllo aggiuntivo su Directory.GetCurrentDirectory() se diverso da BaseDirectory
+        if (!string.Equals(Directory.GetCurrentDirectory(), AppContext.BaseDirectory, StringComparison.OrdinalIgnoreCase))
         {
-            try
-            {
-                File.Move(legacyEntropyPath, entropyPath);
-                _logger.LogInformation("Migrato store-entropy.bin in {Destination}", entropyPath);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Impossibile spostare store-entropy.bin in App_Data/, fallback a copia.");
-                try { File.Copy(legacyEntropyPath, entropyPath, true); } catch { }
-            }
+            MigrateLegacyFile(Path.Combine(Directory.GetCurrentDirectory(), "store-entropy.bin"), entropyPath);
+            MigrateLegacyFile(Path.Combine(Directory.GetCurrentDirectory(), "store-key.bin"), keyPath);
+            MigrateLegacyFile(Path.Combine(Directory.GetCurrentDirectory(), "held-requests.json"), _persistencePath);
         }
 
-        if (File.Exists(legacyPersistencePath) && !File.Exists(_persistencePath))
+        // Inizializzazione chiave AES-256-GCM (sempre disponibile come fallback o difesa in profondità)
+        try
         {
-            try
-            {
-                File.Move(legacyPersistencePath, _persistencePath);
-                _logger.LogInformation("Migrato held-requests.json in {Destination}", _persistencePath);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Impossibile spostare held-requests.json in App_Data/, fallback a copia.");
-                try { File.Copy(legacyPersistencePath, _persistencePath, true); } catch { }
-            }
+            _aesKey = LoadOrCreateKey(keyPath, 32);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Impossibile inizializzare la chiave AES-256-GCM in {Path}.", keyPath);
         }
 
+        // Inizializzazione e self-test DPAPI su Windows
         if (OperatingSystem.IsWindows())
         {
             try
             {
-                _dpapiEntropy = LoadOrCreateEntropy(entropyPath);
-                _dpapiAvailable = true;
-                _logger.LogInformation("Cifratura DPAPI (machine-scope) abilitata per le private key a riposo.");
+                _dpapiEntropy = LoadOrCreateKey(entropyPath, 32);
+                if (VerifyDpapi(_dpapiEntropy, _logger))
+                {
+                    _dpapiAvailable = true;
+                    _logger.LogInformation("Cifratura DPAPI (machine-scope) inizializzata e verificata con successo per le private key a riposo.");
+                }
+                else
+                {
+                    _logger.LogWarning("Self-test DPAPI fallito: le private key a riposo verranno protette tramite AES-256-GCM.");
+                }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Impossibile inizializzare DPAPI: le private key verranno persistite in chiaro. Verificare il sistema.");
+                _logger.LogError(ex, "Impossibile inizializzare DPAPI: fallback su cifratura AES-256-GCM.");
             }
         }
         else
         {
-            _logger.LogWarning("DPAPI non disponibile su questa piattaforma: le private key nel file di persistenza non saranno cifrate (solo sviluppo).");
+            _logger.LogInformation("Piattaforma non-Windows: protezione delle private key a riposo gestita tramite AES-256-GCM.");
+        }
+
+        if (!_dpapiAvailable && _aesKey == null)
+        {
+            _logger.LogCritical("NESSUN PROVIDER CRITTOGRAFICO DISPONIBILE! Le private key non potranno essere persistite.");
         }
 
         LoadFromDisk();
     }
 
-    private static byte[] LoadOrCreateEntropy(string path)
+    private void MigrateLegacyFile(string source, string destination)
+    {
+        if (File.Exists(source) && !File.Exists(destination))
+        {
+            try
+            {
+                File.Move(source, destination);
+                _logger.LogInformation("Migrato {Source} in cartella sicura {Destination}", source, destination);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Impossibile spostare {Source} in {Destination}, fallback a copia.", source, destination);
+                try { File.Copy(source, destination, true); } catch { }
+            }
+        }
+    }
+
+    private static byte[] LoadOrCreateKey(string path, int byteCount)
     {
         if (File.Exists(path))
         {
             var existing = File.ReadAllBytes(path);
-            if (existing.Length == 32)
+            if (existing.Length == byteCount)
             {
                 return existing;
             }
         }
 
-        var fresh = RandomNumberGenerator.GetBytes(32);
+        var fresh = RandomNumberGenerator.GetBytes(byteCount);
         File.WriteAllBytes(path, fresh);
         return fresh;
     }
 
-    /// <summary>Cifra la private key per la persistenza (DPAPI machine-scope + entropia locale).</summary>
+    private static bool VerifyDpapi(byte[] entropy, ILogger logger)
+    {
+        try
+        {
+            var probe = "DPAPI-SELFTEST-" + Guid.NewGuid();
+            var enc = DpapiInterop.Protect(probe, entropy);
+            var dec = DpapiInterop.Unprotect(enc, entropy);
+            return string.Equals(probe, dec, StringComparison.Ordinal);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Verifica funzionale DPAPI non riuscita.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Cifra la private key per la persistenza a riposo.
+    /// Ordine di priorità: DPAPI machine-scope + entropia locale, fallback AES-256-GCM.
+    /// Non scrive MAI una private key in chiaro su disco.
+    /// </summary>
     private string EncryptAtRest(string pem)
     {
-        if (string.IsNullOrEmpty(pem) || !_dpapiAvailable || _dpapiEntropy == null)
+        if (string.IsNullOrEmpty(pem))
         {
             return pem;
         }
 
-        return DpapiPrefix + DpapiInterop.Protect(pem, _dpapiEntropy);
+        if (_dpapiAvailable && _dpapiEntropy != null)
+        {
+            try
+            {
+                return DpapiPrefix + DpapiInterop.Protect(pem, _dpapiEntropy);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Cifratura DPAPI fallita; fallback su AES-256-GCM.");
+            }
+        }
+
+        if (_aesKey != null)
+        {
+            return AesGcmPrefix + AesGcmHelper.Protect(pem, _aesKey);
+        }
+
+        throw new CryptographicException("Nessun provider crittografico at-rest disponibile. Rifiutata la scrittura della private key in chiaro su disco.");
     }
 
-    /// <summary>Decifra una private key letta dal disco. I record legacy in chiaro restano invariati.</summary>
+    /// <summary>
+    /// Decifra una private key letta dal disco.
+    /// Supporta i prefissi PKEY1: (DPAPI), AESGCM1: (AES-256-GCM) e formati legacy in chiaro.
+    /// </summary>
     private string? DecryptFromRest(string? stored)
     {
-        if (string.IsNullOrEmpty(stored) || !stored.StartsWith(DpapiPrefix, StringComparison.Ordinal))
+        if (string.IsNullOrEmpty(stored))
         {
             return stored;
         }
 
-        if (_dpapiEntropy == null)
+        if (stored.StartsWith(DpapiPrefix, StringComparison.Ordinal))
         {
-            _logger.LogError("Record cifrato presente ma DPAPI non inizializzato: la private key della richiesta non è recuperabile.");
-            return null;
+            if (!_dpapiAvailable || _dpapiEntropy == null)
+            {
+                _logger.LogError("Record cifrato con DPAPI presente ma DPAPI non inizializzato o non disponibile.");
+                return null;
+            }
+            return DpapiInterop.Unprotect(stored[DpapiPrefix.Length..], _dpapiEntropy);
         }
 
-        return DpapiInterop.Unprotect(stored[DpapiPrefix.Length..], _dpapiEntropy);
+        if (stored.StartsWith(AesGcmPrefix, StringComparison.Ordinal))
+        {
+            if (_aesKey == null)
+            {
+                _logger.LogError("Record cifrato con AES-256-GCM presente ma chiave di installazione non disponibile.");
+                return null;
+            }
+            return AesGcmHelper.Unprotect(stored[AesGcmPrefix.Length..], _aesKey);
+        }
+
+        // Record legacy in chiaro: restituito per uso immediato ma segnalato per migrazione
+        return stored;
     }
 
     /// <summary>
     /// Cifratura DPAPI via P/Invoke su crypt32.dll (machine-scope: CRYPTPROTECT_LOCAL_MACHINE).
-    /// Nessun pacchetto NuGet aggiuntivo richiesto. Solo Windows.
+    /// Con CharSet Unicode e deallocazione LocalFree conformi alle specifiche Win32.
     /// </summary>
     private static class DpapiInterop
     {
@@ -164,18 +245,20 @@ public class HeldRequestStore : IHeldRequestStore
             public uint dwReserved;
         }
 
-        // NOTA: pOptionalEntropy è un puntatore a CRYPTOIDATA_BLOB (non un buffer raw).
-        [DllImport("crypt32.dll", SetLastError = true, EntryPoint = "CryptProtectData")]
+        [DllImport("crypt32.dll", SetLastError = true, EntryPoint = "CryptProtectData", CharSet = CharSet.Unicode)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool CryptProtectData(
             ref CRYPTOIDATA_BLOB pDataIn, string? szDataDescr, ref CRYPTOIDATA_BLOB pOptionalEntropy,
             IntPtr pvReserved, IntPtr pPromptStruct, uint dwFlags, ref CRYPTOIDATA_BLOB pDataOut);
 
-        [DllImport("crypt32.dll", SetLastError = true, EntryPoint = "CryptUnprotectData")]
+        [DllImport("crypt32.dll", SetLastError = true, EntryPoint = "CryptUnprotectData", CharSet = CharSet.Unicode)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool CryptUnprotectData(
-            ref CRYPTOIDATA_BLOB pDataIn, out string? pszDataDescr, ref CRYPTOIDATA_BLOB pOptionalEntropy,
+            ref CRYPTOIDATA_BLOB pDataIn, IntPtr pszDataDescr, ref CRYPTOIDATA_BLOB pOptionalEntropy,
             IntPtr pvReserved, IntPtr pPromptStruct, uint dwFlags, ref CRYPTOIDATA_BLOB pDataOut);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr LocalFree(IntPtr hMem);
 
         public static string Protect(string plainText, byte[] entropy)
         {
@@ -205,7 +288,7 @@ public class HeldRequestStore : IHeldRequestStore
 
                 bool ok = protect
                     ? CryptProtectData(ref inBlob, "PkiPortal.PrivateKey", ref entBlob, IntPtr.Zero, IntPtr.Zero, flags, ref outBlob)
-                    : CryptUnprotectData(ref inBlob, out _, ref entBlob, IntPtr.Zero, IntPtr.Zero, flags, ref outBlob);
+                    : CryptUnprotectData(ref inBlob, IntPtr.Zero, ref entBlob, IntPtr.Zero, IntPtr.Zero, flags, ref outBlob);
 
                 if (!ok)
                 {
@@ -214,7 +297,7 @@ public class HeldRequestStore : IHeldRequestStore
 
                 var output = new byte[outBlob.cbData];
                 Marshal.Copy(outBlob.pbData, output, 0, output.Length);
-                Marshal.FreeHGlobal(outBlob.pbData);
+                LocalFree(outBlob.pbData);
                 return output;
             }
             finally
@@ -222,6 +305,58 @@ public class HeldRequestStore : IHeldRequestStore
                 Marshal.FreeHGlobal(inPtr);
                 Marshal.FreeHGlobal(entPtr);
             }
+        }
+    }
+
+    /// <summary>
+    /// Helper crittografico per cifratura autenticata AES-256-GCM.
+    /// Formato payload Base64: [Nonce 12B][Tag 16B][Ciphertext].
+    /// </summary>
+    private static class AesGcmHelper
+    {
+        private const int NonceSize = 12; // 96-bit nonce standard NIST
+        private const int TagSize = 16;   // 128-bit authentication tag
+
+        public static string Protect(string plainText, byte[] key)
+        {
+            var plainBytes = Encoding.UTF8.GetBytes(plainText);
+            var nonce = RandomNumberGenerator.GetBytes(NonceSize);
+            var tag = new byte[TagSize];
+            var cipher = new byte[plainBytes.Length];
+
+            using var aes = new AesGcm(key, TagSize);
+            aes.Encrypt(nonce, plainBytes, cipher, tag);
+
+            var combined = new byte[NonceSize + TagSize + cipher.Length];
+            Buffer.BlockCopy(nonce, 0, combined, 0, NonceSize);
+            Buffer.BlockCopy(tag, 0, combined, NonceSize, TagSize);
+            Buffer.BlockCopy(cipher, 0, combined, NonceSize + TagSize, cipher.Length);
+
+            return Convert.ToBase64String(combined);
+        }
+
+        public static string Unprotect(string base64Cipher, byte[] key)
+        {
+            var combined = Convert.FromBase64String(base64Cipher);
+            if (combined.Length < NonceSize + TagSize)
+            {
+                throw new CryptographicException("Ciphertext AES-GCM corrotto o dimensione insufficiente.");
+            }
+
+            var nonce = new byte[NonceSize];
+            var tag = new byte[TagSize];
+            int cipherSize = combined.Length - NonceSize - TagSize;
+            var cipher = new byte[cipherSize];
+            var plainBytes = new byte[cipherSize];
+
+            Buffer.BlockCopy(combined, 0, nonce, 0, NonceSize);
+            Buffer.BlockCopy(combined, NonceSize, tag, 0, TagSize);
+            Buffer.BlockCopy(combined, NonceSize + TagSize, cipher, 0, cipherSize);
+
+            using var aes = new AesGcm(key, TagSize);
+            aes.Decrypt(nonce, cipher, tag, plainBytes);
+
+            return Encoding.UTF8.GetString(plainBytes);
         }
     }
 
@@ -405,22 +540,38 @@ public class HeldRequestStore : IHeldRequestStore
             var items = JsonSerializer.Deserialize<List<HeldCertificateRequest>>(json, _jsonOptions);
             if (items != null)
             {
+                bool legacyUnencryptedFound = false;
                 foreach (var item in items)
                 {
-                    try
+                    if (!string.IsNullOrEmpty(item.PrivateKeyPem))
                     {
-                        item.PrivateKeyPem = DecryptFromRest(item.PrivateKeyPem);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Il fallimento di decifrazione non deve far perdere l'intera
-                        // richiesta: la richiesta resta disponibile, senza la chiave.
-                        _logger.LogError(ex, "Impossibile decifrare la private key della richiesta {HoldId}: la richiesta resta disponibile senza chiave.", item.HoldId);
-                        item.PrivateKeyPem = null;
+                        bool wasEncrypted = item.PrivateKeyPem.StartsWith(DpapiPrefix, StringComparison.Ordinal) ||
+                                           item.PrivateKeyPem.StartsWith(AesGcmPrefix, StringComparison.Ordinal);
+                        try
+                        {
+                            item.PrivateKeyPem = DecryptFromRest(item.PrivateKeyPem);
+                            if (!wasEncrypted)
+                            {
+                                legacyUnencryptedFound = true;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            // Il fallimento di decifrazione non deve far perdere l'intera
+                            // richiesta: la richiesta resta disponibile, senza la chiave.
+                            _logger.LogError(ex, "Impossibile decifrare la private key della richiesta {HoldId}: la richiesta resta disponibile senza chiave.", item.HoldId);
+                            item.PrivateKeyPem = null;
+                        }
                     }
                     _store[item.HoldId] = item;
                 }
                 _logger.LogInformation("Caricate {Count} richieste trattenute dal file di persistenza ({Path}).", items.Count, path);
+
+                if (legacyUnencryptedFound)
+                {
+                    _logger.LogWarning("Rilevati record legacy con private key in chiaro in {Path}: migrazione immediata a cifratura a riposo...", path);
+                    _ = SaveToDiskAsync();
+                }
             }
         }
         catch (Exception ex)
@@ -454,6 +605,13 @@ public class HeldRequestStore : IHeldRequestStore
             var tmp = _persistencePath + ".tmp";
             await File.WriteAllTextAsync(tmp, json);
             File.Move(tmp, _persistencePath, overwrite: true);
+
+            // Se esistono copie legacy in chiaro nella root applicativa, bonifichiamole
+            CleanupLegacyRootFile(Path.Combine(AppContext.BaseDirectory, "held-requests.json"));
+            if (!string.Equals(Directory.GetCurrentDirectory(), AppContext.BaseDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                CleanupLegacyRootFile(Path.Combine(Directory.GetCurrentDirectory(), "held-requests.json"));
+            }
         }
         catch (Exception ex)
         {
@@ -462,6 +620,22 @@ public class HeldRequestStore : IHeldRequestStore
         finally
         {
             _saveLock.Release();
+        }
+    }
+
+    private void CleanupLegacyRootFile(string legacyPath)
+    {
+        try
+        {
+            if (File.Exists(legacyPath) && !string.Equals(Path.GetFullPath(legacyPath), Path.GetFullPath(_persistencePath), StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(legacyPath);
+                _logger.LogInformation("Rimosso file legacy obsoleto: {Path}", legacyPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Impossibile eliminare file legacy {Path}", legacyPath);
         }
     }
 

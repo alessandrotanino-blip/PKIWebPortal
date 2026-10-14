@@ -18,6 +18,9 @@ DOCUMENTATION.dokuwiki
 *.temp
 *.bak
 held-requests.json
+store-entropy.bin
+store-key.bin
+App_Data/
 
 # Directory di compilazione .NET
 bin/
