@@ -6,6 +6,31 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.0.12] - 2026-10-14
+
+### Sicurezza & Architettura Crittografica
+- **Cifratura Obbligatoria a Riposo delle Chiavi Private (`HeldRequestStore.cs`)**:
+  - Eliminata qualsiasi persistenza in chiaro della chiave privata: tutte le chiavi archiviate per la generazione o il ritiro differito del file PFX sono ora rigorosamente cifrate a riposo.
+  - Implementata cifratura DPAPI (machine-scope `CRYPTPROTECT_LOCAL_MACHINE` con entropia casuale a 256 bit in `App_Data/store-entropy.bin`) con prefisso `PKEY1:`.
+  - Corretti i P/Invoke Win32 su `crypt32.dll` (`CryptProtectData`, `CryptUnprotectData`) con `CharSet = CharSet.Unicode` e rilascio corretto della memoria non gestita tramite `LocalFree` (`kernel32.dll`), prevenendo corruzioni heap o errori di marshaling ANSI.
+  - Aggiunto provider crittografico autenticato di fallback / cross-platform basato su **AES-256-GCM** (prefisso `AESGCM1:`) e chiave crittografica a 256 bit in `App_Data/store-key.bin`.
+  - Self-test crittografico DPAPI all'avvio: il portale valida l'operatività di DPAPI prima di abilitarlo, commutando automaticamente su AES-256-GCM in caso di anomalie.
+  - Rifiuto di salvataggio in chiaro: se nessun modulo crittografico è disponibile, la scrittura su disco della chiave fallisce in modo sicuro con eccezione senza divulgare dati sensibili.
+  - **Migrazione automatica trasparente**: all'avvio, eventuali record legacy non cifrati presenti sul disco vengono automaticamente letti, cifrati e riscritti nello store protetto `App_Data/held-requests.json`, bonificando ed eliminando contestualmente copie legacy non protette nella root dell'applicazione.
+
+### Documentazione & Trasparenza
+- **Aggiornamento Documentazione (`README.md`, `README.it.md`, `DOCUMENTATION.dokuwiki`)**:
+  - Rettificata la descrizione della gestione della chiave privata: chiarito in modo trasparente che, nel wizard con richiesta di pacchetto PFX o approvazione differita, la chiave privata transita su HTTPS protetto ed è custodita a riposo cifrata sul server esclusivamente per consentire al richiedente autorizzato la generazione o il ritiro del pacchetto `.pfx`.
+  - Specificato che l'approccio *Zero-Knowledge* (nessun passaggio o tocco sul server della chiave privata) si applica all'invio di CSR generati esternamente (scheda CSR / automazioni REST).
+  - Aggiornata la documentazione tecnica DokuWiki (sezioni 1.1, albero file, 8.5 e 12.2) con i dettagli architetturali di DPAPI, AES-256-GCM e le relative garanzie di sicurezza.
+- **Interfaccia Utente & Traduzioni i18n (`index.html`, `i18n.js`)**:
+  - Aggiornato il sottotitolo dello Step 4 del wizard in tutte le 5 lingue (it, en, fr, de, es) per rispecchiare con precisione la generazione in memoria e la custodia cifrata a riposo sul server.
+- **Script di Installazione & Versioning (`Install-PkiPortal.ps1`, `PkiPortal.csproj`)**:
+  - Aggiunta la migrazione verso `App_Data` del file chiave `store-key.bin`.
+  - Bump versione a `2.0.12` su `.csproj`, script di installazione, navbar e cache-busting dei file statici.
+
+---
+
 ## [2.0.11] - 2026-10-12
 
 ### Aggiunto & Migliorato

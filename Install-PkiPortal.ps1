@@ -283,10 +283,10 @@ try {
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Cyan
 if ($script:IsItalian) {
-    Write-Host "  INSTALLAZIONE PORTALE PKI WEB ENROLLMENT (AD CS Modern) v2.0.11 " -ForegroundColor White
+    Write-Host "  INSTALLAZIONE PORTALE PKI WEB ENROLLMENT (AD CS Modern) v2.0.12 " -ForegroundColor White
     Write-Host "  Installazione a fianco di Microsoft certsrv (non intrusiva)     " -ForegroundColor Gray
 } else {
-    Write-Host "  PKI WEB ENROLLMENT PORTAL INSTALLATION (AD CS Modern) v2.0.11   " -ForegroundColor White
+    Write-Host "  PKI WEB ENROLLMENT PORTAL INSTALLATION (AD CS Modern) v2.0.12   " -ForegroundColor White
     Write-Host "  Side-by-side with Microsoft certsrv (non-intrusive)             " -ForegroundColor Gray
 }
 Write-Host "==================================================================" -ForegroundColor Cyan
@@ -767,6 +767,13 @@ if ((Test-Path $legacyEntropy) -and -not (Test-Path $targetEntropy)) {
     Write-Info "Spostato store-entropy.bin legacy nella cartella protetta App_Data" "Moved legacy store-entropy.bin into secure App_Data folder"
 }
 
+$legacyKey = Join-Path $InstallPath "store-key.bin"
+$targetKey = Join-Path $appDataPath "store-key.bin"
+if ((Test-Path $legacyKey) -and -not (Test-Path $targetKey)) {
+    Move-Item -Path $legacyKey -Destination $targetKey -Force
+    Write-Info "Spostato store-key.bin legacy nella cartella protetta App_Data" "Moved legacy store-key.bin into secure App_Data folder"
+}
+
 # ============================================================================
 # STEP 5: Creazione Application Pool dedicato
 # ============================================================================
@@ -1090,9 +1097,9 @@ if ($defaultWs -and $defaultWs.State -eq "Started") {
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Green
 if ($script:IsItalian) {
-    Write-Host "  INSTALLAZIONE COMPLETATA (v2.0.11)                              " -ForegroundColor White
+    Write-Host "  INSTALLAZIONE COMPLETATA (v2.0.12)                              " -ForegroundColor White
 } else {
-    Write-Host "  INSTALLATION COMPLETED (v2.0.11)                                " -ForegroundColor White
+    Write-Host "  INSTALLATION COMPLETED (v2.0.12)                                " -ForegroundColor White
 }
 Write-Host "==================================================================" -ForegroundColor Green
 Write-Host ""
