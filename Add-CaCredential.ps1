@@ -72,29 +72,29 @@ if (-not $UserName) {
 Write-Host ""
 Write-Host "Registrazione credenziale per il target: $Target" -ForegroundColor Cyan
 Write-Host "Account: $UserName" -ForegroundColor White
-Write-Host "Inserire la password (i caratteri saranno mascherati):" -ForegroundColor Yellow
 
-$securePass = Read-Host -AsSecureString "Password"
-$bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePass)
-$plainPass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-
+# SECURITY (2.1.0): la password NON viene più passata come argomento a cmdkey
+# (precedentemente /pass:$plainPass la lasciava visibile nella command line del
+# processo, leggibile localmente da altri account amministratore e dai log del
+# shell). Con "/pass:" VUOTO, cmdkey chiede la password a prompt interattivo:
+# il valore non appare mai in variabili PowerShell, command line o log.
 try {
-    # Registrazione tramite cmdkey (archiviata nel Credential Vault di Windows)
-    $proc = Start-Process -FilePath "cmdkey.exe" `
-        -ArgumentList "/generic:$Target", "/user:$UserName", "/pass:$plainPass" `
-        -NoNewWindow -Wait -PassThru
+    Write-Host "Imminente prompt interattivo di cmdkey: inserire la password (input mascherato)." -ForegroundColor Yellow
+    # Invocazione diretta nel processo corrente (no Start-Process): la password
+    # viene letta da cmdkey direttamente dalla console.
+    & cmdkey.exe "/generic:$Target" "/user:$UserName" "/pass:"
+    $exitCode = $LASTEXITCODE
 
-    if ($proc.ExitCode -eq 0) {
+    if ($exitCode -eq 0) {
         Write-Host ""
         Write-Host "✅ [SUCCESSO] Credenziale registrata con successo nel Windows Credential Manager!" -ForegroundColor Green
         Write-Host "   Target:  $Target" -ForegroundColor White
         Write-Host "   Account: $UserName" -ForegroundColor White
         Write-Host "   La password è protetta a livello di sistema operativo dal DPAPI di Windows." -ForegroundColor Gray
-        Write-Host "   Nessuna password in chiaro è stata salvata su file." -ForegroundColor Green
+        Write-Host "   Nessuna password in chiaro è stata salvata su file, in variabili o in command line." -ForegroundColor Green
     } else {
-        Write-Host "❌ Errore durante la registrazione con cmdkey (Codice uscita: $($proc.ExitCode))" -ForegroundColor Red
+        Write-Host "❌ Errore durante la registrazione con cmdkey (Codice uscita: $exitCode)" -ForegroundColor Red
     }
-} finally {
-    $plainPass = $null
+} catch {
+    Write-Host "❌ Errore imprevisto durante la registrazione: $($_.Exception.Message)" -ForegroundColor Red
 }

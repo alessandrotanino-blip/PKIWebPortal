@@ -6,6 +6,46 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.1.0] - 2026-10-15
+
+### Sicurezza (hardening su tutte le aree del portale)
+
+**Installazione e configurazione IIS (`Install-PkiPortal.ps1`, `web.config`)**
+- **HTTP in chiaro bloccato by default**: l'installazione senza `-UseHttps` si arresta ora con errore. Per proseguire serve lo switch esplicito `-AllowInsecureHttp` (riservato ad ambienti di test isolati). Con Windows Authentication l'HTTP in chiaro espone gli hash NTLM (capture/relay) e i carichi sensibili del portale (CSR e, nei flussi con approvazione, private key).
+- **Extended Protection per NTLM (EPAL)**: `windowsAuthentication` configurato con `extendedProtection:outbound` per proteggere le credenziali da NTLM relay verso altri servizi della LAN.
+- **Autenticazione anonima disabilitata** sul sito IIS: ogni richiesta (inclusi i file statici) attraversa il challenge NTLM/Kerberos; il pannello di amministrazione non è più raggiungibile in modo anonimo.
+- **Minimo privilegio sul file system**: l'identità dell'App Pool riceve `ReadAndExecute` sulla cartella applicativa (niente più `FullControl` sui binari: impedisce il DLL swap) e `Modify` solo su `appsettings.json` (salvataggio config a runtime), `App_Data` e `logs` (già blindate con ACL esclusive).
+- **Header di sicurezza in `web.config`**: `Strict-Transport-Security` (HSTS) e `Content-Security-Policy` restrittiva (solo same-origin, nessun script inline: il preloader del tema e l'handler del pulsante "Annulla Modifiche" sono stati spostati in file esterni, `js/theme-init.js`).
+
+**Esposizione della chiave privata ridotta (`wwwroot/js/app.js`, `wwwroot/js/crypto-helper.js`)**
+- Nei flussi a **emissione immediata** la chiave privata **non viene più inviata al server**: `privateKeyPem` viene trasmesso solo per i template con `RequiresApproval` (flusso hold/ritiro differito del PFX, in cui il server deve custodirla cifrata per il ritiro). Nota: per i template con approvazione manuale a livello CA assicurarsi che `RequiresApproval: true` sia impostato nella configurazione del portale.
+- **PFX con AES-256-CBC** al posto di 3DES (algoritmo deprecato, vulnerabilità SWEET32).
+- **Password del PFX obbligatoria** anche nel flusso "Ritiro Certificati" (prima era opzionale: un PFX con password vuota esponeva la chiave privata).
+- **Guard CSPRNG**: se `window.crypto.getRandomValues` non è disponibile (contesto non sicuro o browser obsoleto) il modulo rifiuta di generare chiavi invece di procedere con entropia non garantita.
+- Aggiornato il commento d'intestazione di `crypto-helper.js` per documentare accuratamente il ciclo di vita della chiave.
+
+**Anti-CSRF per sessione (`Services/CsrfTokenService.cs`, `Program.cs`, `admin.html`)**
+- Il token statico pubblico `"pki-admin"` è stato sostituito da un **token legato all'identità**: payload `utente|scadenza` (30 minuti) firmato con HMAC-SHA256 da un segreto server-side persistito in `App_Data/csrf-secret.bin`. Nuovo endpoint `GET /api/admin/csrf` (solo admin). Il pannello amministrativo ottiene il token all'avvio e lo allega a tutte le richieste mutanti (`X-Pki-Portal-Admin`), con rinnovo automatico prima della scadenza.
+
+**Rate limiting (`Program.cs`)**
+- Limitazione delle richieste **per identità** (fallback IP di origine) per mitigare abuso/DoS: 5 req/min per le sottomissioni certificati (`/api/certificates/request`, che avvia processi certreq/certutil), 20 req/min per il parsing CSR, 120 req/min di default su API portale e admin. Rifiuto con HTTP 429.
+
+**LDAP cifrato (`Services/AdcsService.cs`)**
+- La lettura della validità dei template da AD parte ora da **LDAPS (porta 636)**: in modalità Hub/CredentialManager la password dell'account di servizio non transita più in chiaro sulla rete. Il fallback su LDAP non cifrato (389) è consentito **solo** quando non sono presenti credenziali esplicite (identità del processo, nessuna password in transito).
+
+**Registrazione credenziali CA (`Add-CaCredential.ps1`)**
+- La password non viene più passata come argomento a `cmdkey` (prima `/pass:$plainPass`, visibile nella command line del processo e potenzialmente nei log del shell): con `/pass:` vuoto `cmdkey` chiede la password a prompt interattivo, senza esporla in variabili, command line o log.
+
+**Information disclosure (`Program.cs`)**
+- `GET /api/config` non espone più `AllowedGroups` (nomi dei gruppi AD) a ogni utente autenticato: viene restituita solo la flag `IsAllowed` per template.
+- Gli errori di `PUT /api/admin/config` non restituiscono più `ex.Message` (i dettagli restano solo nel log del server).
+
+### Vari
+- Rimossa dal checkout l'artefatto di sviluppo `.tmp-dpapi-test/`.
+- Bump versione a `2.1.0` su `.csproj`, script di installazione, badge navbar e cache-busting dei file statici.
+
+---
+
 ## [2.0.12] - 2026-10-14
 
 ### Sicurezza & Architettura Crittografica

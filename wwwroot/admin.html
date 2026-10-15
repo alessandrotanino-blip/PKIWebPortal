@@ -4,17 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PKI Portal - Configurazione Amministratore</title>
-  <script>
-    (function() {
-      const savedTheme = localStorage.getItem('pki-theme');
-      if (savedTheme) {
-        document.documentElement.setAttribute('data-theme', savedTheme);
-      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      }
-    })();
-  </script>
-  <link rel="stylesheet" href="/css/styles.css?v=2.0.12">
+  <script src="/js/theme-init.js?v=2.1.0"></script>
+  <link rel="stylesheet" href="/css/styles.css?v=2.1.0">
   <style>
     .admin-container { max-width: 1440px; margin: 2rem auto; padding: 0 2rem; }
     .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
@@ -85,7 +76,7 @@
     .status-rejected { background: #fee2e2; color: #991b1b; }
     .cert-view-box { margin-top: 1rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 0.75rem; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; display: none; }
   </style>
-  <script src="/js/i18n.js?v=2.0.12"></script>
+  <script src="/js/i18n.js?v=2.1.0"></script>
 </head>
 <body>
   <header class="navbar">
@@ -93,7 +84,7 @@
       <div class="brand-icon">PKI</div>
       <div class="brand-text">
         <h1 data-i18n="admin_panel_title">Configurazione Portale PKI</h1>
-        <p><span data-i18n="admin_panel_sub">Pannello di Amministrazione</span> <span class="brand-version">v2.0.12</span></p>
+        <p><span data-i18n="admin_panel_sub">Pannello di Amministrazione</span> <span class="brand-version">v2.1.0</span></p>
       </div>
     </div>
     <div class="nav-actions">
@@ -224,7 +215,7 @@
 
       <!-- Actions -->
       <div style="display:flex; justify-content:flex-end; gap:1rem; margin-top:1rem; margin-bottom:2rem;">
-        <button type="button" class="btn btn-secondary" onclick="location.reload()" data-i18n="btn_cancel_changes">Annulla Modifiche</button>
+        <button type="button" class="btn btn-secondary" id="btn-cancel-changes" data-i18n="btn_cancel_changes">Annulla Modifiche</button>
         <button type="button" class="btn btn-primary" id="btn-save-config" style="padding: 0.85rem 2rem;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           <span data-i18n="btn_save_config">Salva Configurazione</span>
@@ -244,6 +235,13 @@
   <script>
   (function() {
     'use strict';
+
+    // SECURITY (2.1.0): binding via addEventListener al posto di handler inline
+    // (la Content-Security-Policy del portale non ammette script inline).
+    const cancelChangesBtn = document.getElementById('btn-cancel-changes');
+    if (cancelChangesBtn) {
+      cancelChangesBtn.addEventListener('click', () => location.reload());
+    }
 
     function escapeHtml(text) {
       if (!text) return '';
@@ -276,6 +274,29 @@
     let portalConfig = null;
     let currentAdminUser = '';
 
+    // SECURITY (2.1.0): token anti-CSRF legato all'identità (emesso da
+    // GET /api/admin/csrf, vita 30 min). Ogni richiesta mutante (POST/PUT)
+    // lo invia nell'header X-Pki-Portal-Admin. Si rinnova automaticamente
+    // quando resta meno di 5 minuti alla scadenza.
+    let csrfToken = null;
+    let csrfTokenFetchedAt = 0;
+    const CSRF_TTL_MS = 25 * 60 * 1000;
+
+    async function ensureCsrfToken() {
+      const now = Date.now();
+      if (csrfToken && (now - csrfTokenFetchedAt) < CSRF_TTL_MS) {
+        return csrfToken;
+      }
+      const resp = await fetch('/api/admin/csrf');
+      if (!resp.ok) {
+        throw new Error('Impossibile ottenere il token anti-CSRF (HTTP ' + resp.status + ').');
+      }
+      const data = await resp.json();
+      csrfToken = data.token;
+      csrfTokenFetchedAt = now;
+      return csrfToken;
+    }
+
     document.addEventListener('DOMContentLoaded', init);
 
     function updateAdminUserBadge() {
@@ -303,6 +324,8 @@
         }
         currentAdminUser = data.userName;
         updateAdminUserBadge();
+        // SECURITY (2.1.0): ottiene il token anti-CSRF legato a questa identità
+        await ensureCsrfToken();
       } catch (err) {
         const connMsg = window.I18N ? window.I18N.t('admin_conn_error', 'Errore di connessione') : 'Errore di connessione';
         showAccessDenied(connMsg);
@@ -548,7 +571,7 @@
         try {
           const resp = await fetch('/api/admin/templates/discover', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': 'pki-admin' },
+            headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': await ensureCsrfToken() },
             body: JSON.stringify({
               caId: idVal,
               configString: cfgStrVal,
@@ -863,7 +886,7 @@
       try {
         const resp = await fetch('/api/admin/config', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': 'pki-admin' },
+          headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': await ensureCsrfToken() },
           body: JSON.stringify(configToSave)
         });
         const result = await resp.json();
@@ -1093,7 +1116,7 @@
       try {
         const resp = await fetch(`/api/admin/held-requests/${encodeURIComponent(holdId)}/approve`, {
           method: 'POST',
-          headers: { 'X-Pki-Portal-Admin': 'pki-admin' }
+          headers: { 'X-Pki-Portal-Admin': await ensureCsrfToken() }
         });
         const result = await resp.json();
         const successMsg = window.I18N ? window.I18N.t('admin_toast_approved', 'Certificato approvato con successo!') : 'Certificato approvato con successo!';
@@ -1121,7 +1144,7 @@
       try {
         const resp = await fetch(`/api/admin/held-requests/${encodeURIComponent(holdId)}/reject`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': 'pki-admin' },
+          headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': await ensureCsrfToken() },
           body: JSON.stringify({ reason: reason.trim() })
         });
         const result = await resp.json();

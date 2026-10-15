@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using PkiPortal.Models;
 using PkiPortal.Services;
 using System.Security.Claims;
@@ -12,9 +13,64 @@ builder.Services.Configure<PortalConfig>(builder.Configuration.GetSection("Porta
 builder.Services.AddSingleton<ICsrParserService, CsrParserService>();
 builder.Services.AddSingleton<IAdcsService, AdcsService>();
 builder.Services.AddSingleton<IHeldRequestStore, HeldRequestStore>();
+builder.Services.AddSingleton<CsrfTokenService>();
 
 // Supporto file statici e routing
 builder.Services.AddEndpointsApiExplorer();
+
+// SECURITY (2.1.0): rate limiting per identità per mitigare abuso/DoS sugli
+// endpoint che avviano processi esterni (certreq/certutil) o parsing CPU-bound.
+// Partizione per utente autenticato, fallback sull'indirizzo IP remoto.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, _) =>
+    {
+        var response = context.HttpContext.Response;
+        response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await response.WriteAsJsonAsync(new { message = "Troppe richieste: attendi un minuto e riprova." });
+    };
+
+    // Partizione per utente autenticato, fallback sull'indirizzo IP remoto.
+    string GetUserKey(HttpContext ctx)
+    {
+        if (ctx.User?.Identity is { IsAuthenticated: true } identity && !string.IsNullOrWhiteSpace(identity.Name))
+        {
+            return identity.Name;
+        }
+        return ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    }
+
+    // Sottomissioni certificati: avviano processi esterni (30-60s) verso la CA.
+    options.AddPolicy("portal-submit", ctx =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(GetUserKey(ctx), _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+
+    // Parsing CSR: CPU-bound.
+    options.AddPolicy("portal-parse", ctx =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(GetUserKey(ctx), _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 20,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+
+    // Default portale (tutti gli altri endpoint API).
+    options.AddPolicy("portal-default", ctx =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(GetUserKey(ctx), _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 120,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+});
 
 // Configurazione autenticazione (Windows Authentication / Negotiate supportata nativamente da IIS e Kestrel)
 builder.Services.AddAuthentication(Microsoft.AspNetCore.Authentication.Negotiate.NegotiateDefaults.AuthenticationScheme)
@@ -32,8 +88,13 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Endpoint API
-var api = app.MapGroup("/api");
+// SECURITY (2.1.0): rate limiter DOPO l'autenticazione, così la partizione
+// può usare l'identità dell'utente.
+app.UseRateLimiter();
+
+// Endpoint API (limite default: 120 req/min per utente; i singoli endpoint
+// mutanti/CPU-bound hanno politiche più strette)
+var api = app.MapGroup("/api").RequireRateLimiting("portal-default");
 
 // 1. Recupero configurazione portale, CA disponibili e template
 api.MapGet("/config", async (HttpContext ctx, IAdcsService adcsService, IConfiguration config) =>
@@ -68,10 +129,14 @@ api.MapGet("/config", async (HttpContext ctx, IAdcsService adcsService, IConfigu
                 t.Description,
                 t.RequiresApproval,
                 t.ValidityDays,
+                // SECURITY (2.1.0): i nomi dei gruppi AD (AllowedGroups) NON
+                // vengono più esposti a ogni utente autenticato: l'API restituisce
+                // solo IsAllowed (se l'identità corrente può emettere con il
+                // template), evitando di consegnare la mappa dei gruppi di
+                // emissione a chiunque abbia un account di dominio.
                 t.AllowedKeyTypes,
                 t.KeyUsages,
                 t.ExtendedKeyUsages,
-                t.AllowedGroups,
                 IsAllowed = t.AllowedGroups.Count == 0 || IsServerAdmin(ctx) || IsInAnyWindowsGroup(ctx, t.AllowedGroups)
             })
         })
@@ -89,7 +154,8 @@ api.MapPost("/certificates/parse-csr", ([FromBody] CsrParseRequest request, ICsr
 
     var result = parser.ParseCsr(request.CsrPem);
     return Results.Ok(result);
-});
+})
+.RequireRateLimiting("portal-parse");
 
 // Info utente autenticato e ruoli
 api.MapGet("/me", (HttpContext ctx) =>
@@ -173,7 +239,8 @@ api.MapPost("/certificates/request", async ([FromBody] CertificateSubmissionRequ
 
     var fallbackResponse = await adcsService.SubmitCertificateRequestAsync(request);
     return Results.Ok(fallbackResponse);
-});
+})
+.RequireRateLimiting("portal-submit");
 
 // 4. Verifica e recupero certificati in stato Pending o già emessi (con controllo di proprietà)
 api.MapGet("/certificates/status/{caId}/{requestId:int}", async (string caId, int requestId, IAdcsService adcsService, IHeldRequestStore holdStore, HttpContext ctx) =>
@@ -258,13 +325,18 @@ api.MapGet("/certificates/my-requests", async (HttpContext ctx, IHeldRequestStor
 });
 
 // ===== Protezione anti-CSRF per gli endpoint mutanti admin =====
-// Un form HTML cross-site non può impostare header custom: gli endpoint che
-// modificano lo stato richiedono un header noto e, quando presente, l'Origin
-// deve corrispondere al portale. Questo neutralizza il CSRF anche con
-// autenticazione Windows integrata (Kerberos/NTLM), dove le credenziali
-// vengono completate automaticamente dal browser della vittima.
+// Un form HTML cross-site non può impostare header custom né leggere il token
+// di origine diversa: gli endpoint che modificano lo stato richiedono
+// (1) l'header X-Pki-Portal-Admin con un token ANTI-CSRF emesso da
+// GET /api/admin/csrf, legato all'identità autenticata (HMAC + scadenza), e
+// (2) quando presente, un Origin coerente con il portale. Questo neutralizza
+// il CSRF anche con autenticazione Windows integrata (Kerberos/NTLM), dove le
+// credenziali vengono completate automaticamente dal browser della vittima.
+// SECURITY (2.1.0): il precedente valore statico pubblico "pki-admin" è stato
+// sostituito da token per sessione (CsrfTokenService).
 const string CsrfHeaderName = "X-Pki-Portal-Admin";
-const string CsrfHeaderValue = "pki-admin";
+
+var csrfTokenService = app.Services.GetRequiredService<CsrfTokenService>();
 
 bool HasValidCsrf(HttpContext ctx)
 {
@@ -275,8 +347,14 @@ bool HasValidCsrf(HttpContext ctx)
         return true;
     }
 
-    if (!ctx.Request.Headers.TryGetValue(CsrfHeaderName, out var token) ||
-        !string.Equals(token.ToString(), CsrfHeaderValue, StringComparison.Ordinal))
+    if (!ctx.Request.Headers.TryGetValue(CsrfHeaderName, out var token))
+    {
+        return false;
+    }
+
+    string? csrfUser = ctx.User.Identity?.Name;
+    if (string.IsNullOrEmpty(csrfUser) ||
+        !csrfTokenService.ValidateToken(token.ToString(), csrfUser))
     {
         return false;
     }
@@ -307,7 +385,7 @@ IResult CsrfDenied() => Results.Json(
     statusCode: StatusCodes.Status403Forbidden);
 
 // ===== Area Admin - Solo amministratori del server =====
-var admin = app.MapGroup("/api/admin");
+var admin = app.MapGroup("/api/admin").RequireRateLimiting("portal-default");
 
 // Verifica se l'utente del contesto appartiene ad almeno uno dei gruppi indicati.
 // "BUILTIN\Administrators"/"Administrators" vengono risolti come ruolo locale.
@@ -371,6 +449,25 @@ admin.MapGet("/check", (HttpContext ctx) =>
     bool isAdmin = IsServerAdmin(ctx);
     string userName = ctx.User.Identity.Name ?? "Anonimo";
     return Results.Ok(new { isAdmin, userName });
+});
+
+// GET /api/admin/csrf - Emette il token anti-CSRF legato all'identità corrente.
+// Il client (admin.html) lo invia nell'header X-Pki-Portal-Admin su ogni
+// richiesta mutante. SECURITY (2.1.0): sostituisce il token statico pubblico.
+admin.MapGet("/csrf", (HttpContext ctx, CsrfTokenService csrf) =>
+{
+    if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
+        return Results.Challenge();
+
+    if (!IsServerAdmin(ctx))
+        return Results.Forbid();
+
+    string csrfUser = ctx.User.Identity.Name ?? "Anonimo";
+    return Results.Ok(new
+    {
+        token = csrf.IssueTokenForUser(csrfUser),
+        expiresInSeconds = CsrfTokenService.TokenLifetimeMinutes * 60
+    });
 });
 
 // GET /api/admin/config - Legge l'intera configurazione del portale
@@ -468,7 +565,11 @@ admin.MapPut("/config", async (HttpContext ctx, PortalConfig newConfig) =>
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Errore durante il salvataggio: {ex.Message}");
+        // SECURITY (2.1.0): i dettagli dell'eccezione restano solo nel log del
+        // server: la risposta non espone più ex.Message (informazioni interne,
+        // percorsi, dettagli di sistema).
+        app.Logger.LogError(ex, "Errore durante il salvataggio della configurazione del portale.");
+        return Results.Problem("Errore durante il salvataggio della configurazione. I dettagli sono nel log del server.");
     }
     finally
     {

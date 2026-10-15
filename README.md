@@ -312,8 +312,24 @@ Then open a browser at:
 
 * **HTTPS and W3C Secure Context**: Always use HTTPS in production. Beyond encrypting traffic and securing authentication, HTTPS is **mandatory** for modern web browsers to grant access to Web Workers (Blob URLs) and native Web Crypto APIs for in-browser client-side keypair and CSR generation. Over unencrypted HTTP from remote IP addresses or hostnames, browsers restrict these APIs and will cause client-side cryptographic generation to hang or experience substantial delays.
 * **Service Account**: The IIS Application Pool must run under an account that has *Request Certificates* (Enroll) permissions on the desired AD CS templates. For Standalone Mode within the forest, `NetworkService` or a Managed Service Account is sufficient.
-* **ESC8 Hardening**: This portal does not expose the traditional `certsrv` endpoint. **Important note:** the default installation responds over plain HTTP with Windows Authentication (NTLM may be negotiated in cleartext across the network, creating a relay risk), and the installation script now requires explicit confirmation for the HTTP path. In production, **always** install with `-UseHttps -CertThumbprint` and enable Extended Protection for Authentication (EPA/EPAL) to mitigate relay attacks.
+* **ESC8 Hardening**: This portal does not expose the traditional `certsrv` endpoint.
 * **Separation from certsrv**: The portal uses a completely separate IIS website and Application Pool, ensuring that an issue with the portal does not affect certsrv, and vice versa.
+
+### v2.1.0 Hardening
+
+Starting with **2.1.0**, the portal enforces the following controls (details in the changelog):
+
+* **Unencrypted HTTP blocked by default**: `Install-PkiPortal.ps1` without `-UseHttps` now aborts with an error; the `-AllowInsecureHttp` override is reserved for isolated test environments. The site also sets `Strict-Transport-Security` (HSTS).
+* **Extended Protection for Authentication (EPAL)**: the installer configures `windowsAuthentication` with `extendedProtection:outbound` (NTLM relay protection), and anonymous authentication is **disabled** in IIS, so even `/admin.html` and static files require the NTLM/Kerberos challenge.
+* **Least-privilege install layout**: the App Pool identity receives `ReadAndExecute` on the binaries (no more `FullControl`: prevents DLL swap) and `Modify` only on `appsettings.json`, `App_Data`, and `logs` (folders locked down with exclusive ACLs).
+* **Content-Security-Policy**: restrictive CSP header in `web.config` (same-origin only, no inline scripts: theme preloader and button handlers moved to `js/theme-init.js` and the admin panel bundle).
+* **Private key sent to the server only when required**: in immediate-issuance flows the private key **never leaves the browser**; it is transmitted to the portal (over HTTPS, stored encrypted at rest with DPAPI/AES-GCM) only for templates with `RequiresApproval`, to enable deferred PFX retrieval. The PFX password is **mandatory** in every flow and the PFX uses **AES-256-CBC** (3DES dropped). Keypair generation requires the browser's native CSPRNG (`window.crypto.getRandomValues`): in insecure contexts (remote HTTP) generation is refused.
+  - **Configuration note**: if a template has manual approval *at the CA level* (request left Pending by the CA), set `RequiresApproval: true` in the portal configuration so the key is kept for retrieval.
+* **Per-session anti-CSRF**: mutating admin endpoints require an identity-bound token (HMAC-SHA256, 30 minutes, issued by `GET /api/admin/csrf`) in the `X-Pki-Portal-Admin` header; the old public static value is no longer accepted.
+* **Per-identity rate limiting**: 5 req/min on `/api/certificates/request`, 20 req/min on `/api/certificates/parse-csr`, 120 req/min default (HTTP 429 on rejection).
+* **LDAPS for AD template lookups**: the template validity query uses LDAPS (636); with explicit credentials (Hub mode) no cleartext fallback is attempted.
+* **No passwords on the command line**: `Add-CaCredential.ps1` uses `cmdkey`'s interactive prompt (empty `/pass:`) — the password never appears in variables, command line, or logs.
+* **No information disclosure**: `/api/config` no longer exposes AD group names to every authenticated user (only `IsAllowed`); admin errors no longer return exception details.
 
 ## 🛡️ Administrative panel and approval workflow
 
@@ -367,6 +383,7 @@ After approval, the certificate becomes available to the original requester thro
 |Method|Endpoint|Description|Permission|
 |-|-|-|-|
 |GET|`/api/admin/check`|Checks whether the current user is a portal administrator.|Authenticated user|
+|GET|`/api/admin/csrf`|Issues the identity-bound anti-CSRF token (2.1.0).|Administrator|
 |GET|`/api/admin/config`|Returns the complete portal configuration.|Administrator|
 |PUT|`/api/admin/config`|Saves the configuration and reloads it in memory.|Administrator|
 |POST|`/api/admin/templates/discover`|Queries a CA for published certificate templates.|Administrator|

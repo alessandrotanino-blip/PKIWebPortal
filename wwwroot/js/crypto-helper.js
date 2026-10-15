@@ -1,11 +1,36 @@
 /**
- * Modulo Crittografico Client-Side (HTML5 Web Crypto & Forge)
+ * Modulo Crittografico Client-Side (Forge.js + CSPRNG nativo)
  * Consente la generazione di chiavi private, CSR PKCS#10 e packaging PKCS#12 (PFX)
- * direttamente nel browser dell'utente. La chiave privata NON lascia mai il dispositivo.
+ * direttamente nel browser dell'utente.
+ *
+ * GESTIONE DELLA CHIAVE PRIVATA (documentato v2.1.0):
+ *  - La coppia di chiavi nasce nel browser; alla CA va solo il CSR (chiave pubblica).
+ *  - Nei template con approvazione (RequiresApproval) la chiave privata viene inviata
+ *    al portale su HTTPS e custodita a riposo CIFRATA (DPAPI/AES-256-GCM) per il
+ *    ritiro differito del PFX. Nei flussi a emissione immediata NON viene inviata.
+ *  - La generazione richiede il CSPRNG nativo del browser (window.crypto.getRandomValues,
+ *    disponibile solo in contesto sicuro HTTPS/localhost): senza di esso si rifiuta
+ *    di generare chiavi (requireNativeCsprng).
  */
 
 window.CryptoHelper = (function () {
     'use strict';
+
+    /**
+     * SECURITY (2.1.0): verifica che il browser fornisca un CSPRNG nativo
+     * (window.crypto.getRandomValues). Forge.js lo utilizza per seminare il
+     * proprio PRNG; se non è disponibile (contesto non sicuro o browser
+     * obsoleto) la qualità dell'entropia non è garantita e la generazione
+     * delle chiavi viene rifiutata invece di procedere in silenzio.
+     */
+    function requireNativeCsprng() {
+        if (!window.crypto || typeof window.crypto.getRandomValues !== 'function') {
+            throw new Error(
+                'Generazione chiavi rifiutata: il browser non espone il CSPRNG nativo (window.crypto.getRandomValues). ' +
+                'Aprire il portale su HTTPS (o localhost) con un browser moderno.'
+            );
+        }
+    }
 
     /**
      * Genera una coppia di chiavi RSA tramite forge.js.
@@ -61,6 +86,8 @@ window.CryptoHelper = (function () {
      * Genera una coppia di chiavi e un CSR PKCS#10 conforme alle specifiche RFC 2986
      */
     async function generateCsr(params) {
+        requireNativeCsprng();
+
         const {
             commonName,
             organization = '',
@@ -272,7 +299,7 @@ window.CryptoHelper = (function () {
             const p12Asn1 = forge.pkcs12.toPkcs12Asn1(keyObj, certs, password || '', {
                 generateLocalKeyId: true,
                 friendlyName: friendlyName,
-                algorithm: '3des' // Massima compatibilità con Windows / IIS / Android / macOS
+                algorithm: 'aes256' // SECURITY (2.1.0): AES-256-CBC al posto di 3DES (deprecato: SWEET32)
             });
 
             const p12Der = forge.asn1.toDer(p12Asn1).getBytes();

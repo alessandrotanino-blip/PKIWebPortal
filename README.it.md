@@ -307,8 +307,23 @@ Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 
 * **HTTPS e Contesto Sicuro (W3C Secure Context)**: In produzione, usare sempre HTTPS. Oltre alla cifratura del traffico e alla protezione delle sessioni, HTTPS è **indispensabile** affinché i browser moderni consentano l'esecuzione sicura dei Web Worker (Blob URL) e delle API crittografiche per la generazione client-side delle chiavi private e dei CSR. Su HTTP puro (da IP o hostname remoto), i browser bloccano queste API o provocano blocchi/lentezza estrema.
 * **Service Account**: L'Application Pool di IIS deve eseguire con un account che abbia i permessi *Request Certificates* (Enroll) sui template ADCS desiderati. Per la modalità Standalone all'interno della foresta, `NetworkService` o un Managed Service Account è sufficiente.
-* **Hardening ESC8**: Questo portale non espone l'endpoint `certsrv` tradizionale. **Nota importante:** il default di installazione risponde su HTTP in chiaro con Windows Authentication (NTLM negoziabile in chiaro sulla rete, rischio relay) e lo script di installazione richiede ora conferma esplicita per il percorso HTTP. In produzione installare **sempre** con `-UseHttps -CertThumbprint` e abilitare Extended Protection for Authentication (EAAL/EPAL) per mitigare il relay.
 * **Separazione da certsrv**: Il portale utilizza un sito IIS e un Application Pool completamente separati, garantendo che un problema sul portale non impatti certsrv e viceversa.
+
+### Hardening v2.1.0
+
+A partire dalla **2.1.0** il portale applica le seguenti contromisure (dettagli nel changelog):
+
+* **HTTP in chiaro bloccato by default**: `Install-PkiPortal.ps1` senza `-UseHttps` si arresta con errore; l'override `-AllowInsecureHttp` è riservato ad ambienti di test isolati. Il portale imposta inoltre `Strict-Transport-Security` (HSTS).
+* **Extended Protection for Authentication (EPAL)**: lo script di installazione configura `windowsAuthentication` con `extendedProtection:outbound` (protezione da NTLM relay); l'autenticazione anonima su IIS è **disabilitata**, quindi anche `/admin.html` e i file statici richiedono il challenge NTLM/Kerberos.
+* **Minimo privilegio sull'installazione**: l'identità dell'App Pool riceve `ReadAndExecute` sui binari (niente più `FullControl`: impedisce il DLL swap) e `Modify` solo su `appsettings.json`, `App_Data` e `logs` (cartelle blindate con ACL esclusive).
+* **Content-Security-Policy**: header CSP restrittiva in `web.config` (solo same-origin, nessun script inline: preloader del tema e handler sposti in `js/theme-init.js` e nel bundle del pannello admin).
+* **Chiave privata: invio al server solo quando necessario**: nei flussi a emissione immediata la chiave privata **non lascia il browser**; viene trasmessa al portale (su HTTPS, custodita cifrata a riposo con DPAPI/AES-GCM) solo per i template con `RequiresApproval`, per il ritiro differito del PFX. La password del PFX è **obbligatoria** in tutti i flussi e il PFX usa **AES-256-CBC** (più 3DES). La generazione delle chiavi richiede il CSPRNG nativo del browser (`window.crypto.getRandomValues`): in contesti non sicuri (HTTP da host remoto) la generazione viene rifiutata.
+  - **Nota di configurazione**: se un template ha approvazione manuale *a livello CA* (richiesta lasciata in Pending dalla CA), impostare `RequiresApproval: true` nella configurazione del portale, così che la chiave venga custodita per il ritiro.
+* **Anti-CSRF per sessione**: gli endpoint mutanti admin richiedono un token legato all'identità (`HMAC-SHA256`, 30 minuti, emesso da `GET /api/admin/csrf`) nell'header `X-Pki-Portal-Admin`; il valore statico pubblico della 2.0.x non è più accettato.
+* **Rate limiting per identità**: 5 req/min su `/api/certificates/request`, 20 req/min su `/api/certificates/parse-csr`, 120 req/min di default (rifiuto HTTP 429).
+* **LDAPS per la lettura dei template AD**: la query di validità dei template usa LDAPS (636); con credenziali esplicite (modalità Hub) nessun fallback in chiaro.
+* **Nessuna password in command line**: `Add-CaCredential.ps1` usa il prompt interattivo di `cmdkey` (`/pass:` vuoto) — la password non compare in variabili, command line o log.
+* **Nessuna divulgazione di informazione**: `/api/config` non espone più i nomi dei gruppi AD a ogni utente autenticato (solo `IsAllowed`); gli errori admin non restituiscono i dettagli delle eccezioni.
 
 
 
@@ -359,6 +374,7 @@ Dopo l'approvazione, il certificato diventa scaricabile dal richiedente original
 |Metodo|Endpoint|Descrizione|Autorizzazione|
 |-|-|-|-|
 |GET|`/api/admin/check`|Verifica se l'utente corrente è amministratore|Utente autenticato|
+|GET|`/api/admin/csrf`|Emette il token anti-CSRF legato all'identità (2.1.0)|Amministratore|
 |GET|`/api/admin/config`|Legge l'intera configurazione del portale|Amministratore|
 |PUT|`/api/admin/config`|Salva la configurazione e ricarica il provider a caldo|Amministratore|
 |POST|`/api/admin/templates/discover`|Scopre i template pubblicati sulla CA tramite DCOM o LDAP|Amministratore|

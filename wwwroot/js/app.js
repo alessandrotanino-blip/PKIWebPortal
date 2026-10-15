@@ -374,15 +374,25 @@
         );
 
         // Step 2: Sottomissione al backend
+        // SECURITY (2.1.0): la chiave privata viene inviata al portale SOLO quando
+        // il template richiede approvazione (flusso hold: il server la custodisce
+        // cifrata per il ritiro differito del PFX). Nei flussi a emissione
+        // immediata il server non ne ha bisogno: il PFX viene assemblato qui nel
+        // browser e la chiave privata non lascia il dispositivo.
+        const tplRequiresApproval = !!(selectedTemplate.requiresApproval || selectedTemplate.RequiresApproval);
+        const requestBody = {
+          caId: currentCa.id || currentCa.Id || '',
+          templateName: selectedTemplate.name || selectedTemplate.Name || '',
+          csrPem: csrPem
+        };
+        if (tplRequiresApproval) {
+          requestBody.privateKeyPem = privateKeyPem;
+        }
+
         const response = await fetch('/api/certificates/request', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            caId: currentCa.id || currentCa.Id || '',
-            templateName: selectedTemplate.name || selectedTemplate.Name || '',
-            csrPem: csrPem,
-            privateKeyPem: privateKeyPem
-          })
+          body: JSON.stringify(requestBody)
         });
 
         const result = await response.json();
@@ -554,9 +564,16 @@
     const btnCancel = document.getElementById('btn-pfx-modal-cancel');
 
     if (!modal || !pwdInput) {
-      const promptText = window.I18N ? window.I18N.t('pfx_prompt_password', 'Inserisci la password per proteggere il file PFX (opzionale):') : 'Inserisci la password per proteggere il file PFX (opzionale):';
-      const pwd = prompt(promptText, '');
-      if (pwd === null) return;
+      // SECURITY (2.1.0): la password del PFX è OBBLIGATORIA anche nel ritiro:
+      // un PFX senza password esporrebbe la chiave privata a chi trovi il file.
+      const promptText = window.I18N ? window.I18N.t('pfx_prompt_password', 'Inserisci la password per proteggere il file PFX (obbligatoria):') : 'Inserisci la password per proteggere il file PFX (obbligatoria):';
+      let pwd;
+      for (;;) {
+        pwd = prompt(promptText, '');
+        if (pwd === null) return; // annullato dall'utente
+        if (pwd.trim().length > 0) break;
+        alert(window.I18N ? window.I18N.t('err_pfx_pwd_required', 'La password per il file PFX è obbligatoria.') : 'La password per il file PFX è obbligatoria.');
+      }
       doGenerateAndDownloadPfx(privateKeyPem, certPem, chainPem, certCommonName, pwd);
       return;
     }
@@ -574,6 +591,12 @@
 
     function onConfirm() {
       const password = pwdInput.value;
+      // SECURITY (2.1.0): password obbligatoria (stesso criterio del prompt fallback)
+      if (!password || password.trim().length === 0) {
+        alert(window.I18N ? window.I18N.t('err_pfx_pwd_required', 'La password per il file PFX è obbligatoria.') : 'La password per il file PFX è obbligatoria.');
+        pwdInput.focus();
+        return;
+      }
       cleanup();
       doGenerateAndDownloadPfx(privateKeyPem, certPem, chainPem, certCommonName, password);
     }

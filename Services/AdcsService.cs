@@ -1713,22 +1713,70 @@ public class AdcsService : IAdcsService
             : $"DC={domain}";
         string baseDn = $"CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration,{dcPath}";
 
+        // SECURITY (2.1.0): la query LDAP parte da LDAPS (porta 636, cifrato) in
+        // modo che le credenziali esplicite (modalità Hub/CredentialManager) non
+        // transitino MAI in chiaro sulla rete. Il fallback su LDAP non cifrato
+        // (389) è consentito SOLO quando non sono presenti credenziali esplicite
+        // (identità del processo: nessuna password in transito). In tal caso il
+        // fallback è una best-effort opzionale per le validità dei template.
+        DirectoryResponse SendLdapQuery(int port, bool useSsl)
+        {
+            using var conn = new LdapConnection(new LdapDirectoryIdentifier(domain, port, useSsl, false));
+            conn.Timeout = TimeSpan.FromSeconds(15);
+            // In modalità Hub (CredentialManager) usa le credenziali della
+            // foresta remota; altrimenti l'identità del processo (App Pool).
+            conn.Credential = explicitCred ?? new NetworkCredential();
+
+            var req = new SearchRequest(baseDn, filter, SearchScope.OneLevel,
+                new[] { "cn", "pKIExpirationPeriod" });
+            req.SizeLimit = 100;
+            return conn.SendRequest(req, TimeSpan.FromSeconds(15));
+        }
+
         try
         {
             // LdapConnection è bloccante: esegui sul thread pool.
-            var rep = await Task.Run(() =>
-            {
-                using var conn = new LdapConnection(new LdapDirectoryIdentifier(domain));
-                conn.Timeout = TimeSpan.FromSeconds(15);
-                // In modalità Hub (CredentialManager) usa le credenziali della
-                // foresta remota; altrimenti l'identità del processo (App Pool).
-                conn.Credential = explicitCred ?? new NetworkCredential();
+            DirectoryResponse? rep = null;
+            LdapException? sslError = null;
 
-                var req = new SearchRequest(baseDn, filter, SearchScope.OneLevel,
-                    new[] { "cn", "pKIExpirationPeriod" });
-                req.SizeLimit = 100;
-                return conn.SendRequest(req, TimeSpan.FromSeconds(15));
-            }).ConfigureAwait(false);
+            try
+            {
+                rep = await Task.Run(() => SendLdapQuery(636, useSsl: true)).ConfigureAwait(false);
+            }
+            catch (LdapException ex)
+            {
+                sslError = ex;
+            }
+
+            if (rep == null)
+            {
+                if (explicitCred == null)
+                {
+                    // Fallback accettabile: identità del processo, nessuna
+                    // password esposta anche su LDAP non cifrato.
+                    _logger.LogWarning(
+                        "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}): fallback su LDAP (389) con identità di processo (nessuna password in transito).",
+                        domain, sslError?.Message);
+                    try
+                    {
+                        rep = await Task.Run(() => SendLdapQuery(389, useSsl: false)).ConfigureAwait(false);
+                    }
+                    catch (LdapException ex)
+                    {
+                        _logger.LogWarning("Query LDAP verso il dominio '{Domain}' (fallback 389) non riuscita: {Error}", domain, ex.Message);
+                        return (result, false);
+                    }
+                }
+                else
+                {
+                    // CREDENZIALI ESPLICITE: nessun fallback in chiaro (la
+                    // password non deve mai transitare su LDAP non cifrato).
+                    _logger.LogWarning(
+                        "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}) e fallback LDAP non cifrato negato per la presenza di credenziali esplicite: validità template non disponibili.",
+                        domain, sslError?.Message);
+                    return (result, false);
+                }
+            }
 
             var searchResp = rep as SearchResponse;
             if (searchResp == null)
