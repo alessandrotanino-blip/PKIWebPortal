@@ -1,4 +1,4 @@
-[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
+﻿[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
 
 # Enterprise PKI Web Enrollment Portal (AD CS Modern Gateway)
 

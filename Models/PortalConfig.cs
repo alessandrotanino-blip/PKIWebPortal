@@ -46,6 +46,15 @@ public class TemplateConfig
     public bool RequiresApproval { get; set; } = false;
 
     /// <summary>
+    /// Se true (default), consente l'archiviazione cifrata della chiave privata sul server
+    /// durante l'emissione da wizard, permettendo al richiedente o agli amministratori
+    /// di recuperare il pacchetto PFX anche successivamente.
+    /// Se false, la chiave privata non viene trasmessa al server per i template senza approvazione,
+    /// e il recupero successivo offrirà solo il certificato (.crt).
+    /// </summary>
+    public bool StorePrivateKeyForRetrieval { get; set; } = true;
+
+    /// <summary>
     /// Validità (in giorni) del certificato emesso con questo template.
     /// NON è un parametro modificabile manualmente dall'amministratore: viene
     /// letta automaticamente dalla definizione AD CS del template (proprietà

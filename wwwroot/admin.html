@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="it">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PKI Portal - Configurazione Amministratore</title>
-  <script src="/js/theme-init.js?v=2.1.0"></script>
-  <link rel="stylesheet" href="/css/styles.css?v=2.1.0">
+  <script src="/js/theme-init.js?v=2.1.1"></script>
+  <link rel="stylesheet" href="/css/styles.css?v=2.1.1">
   <style>
     .admin-container { max-width: 1440px; margin: 2rem auto; padding: 0 2rem; }
     .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
@@ -76,7 +76,7 @@
     .status-rejected { background: #fee2e2; color: #991b1b; }
     .cert-view-box { margin-top: 1rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 0.75rem; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; display: none; }
   </style>
-  <script src="/js/i18n.js?v=2.1.0"></script>
+  <script src="/js/i18n.js?v=2.1.1"></script>
 </head>
 <body>
   <header class="navbar">
@@ -84,7 +84,7 @@
       <div class="brand-icon">PKI</div>
       <div class="brand-text">
         <h1 data-i18n="admin_panel_title">Configurazione Portale PKI</h1>
-        <p><span data-i18n="admin_panel_sub">Pannello di Amministrazione</span> <span class="brand-version">v2.1.0</span></p>
+        <p><span data-i18n="admin_panel_sub">Pannello di Amministrazione</span> <span class="brand-version">v2.1.1</span></p>
       </div>
     </div>
     <div class="nav-actions">
@@ -624,6 +624,7 @@
           displayName: selectedOpt.dataset.displayName || select.value,
           description: '',
           requiresApproval: false,
+          storePrivateKeyForRetrieval: true,
           validityDays: validityDays,
           allowedKeyTypes: ['RSA-2048', 'RSA-4096'],
           keyUsages: ['DigitalSignature', 'KeyEncipherment'],
@@ -641,7 +642,7 @@
         const templates = cas[caIndex].templates || cas[caIndex].Templates || [];
         templates.push({
           name: '', displayName: 'Nuovo Template', description: '',
-          requiresApproval: false, validityDays: 365,
+          requiresApproval: false, storePrivateKeyForRetrieval: true, validityDays: 365,
           allowedKeyTypes: ['RSA-2048', 'RSA-4096'],
           keyUsages: ['DigitalSignature', 'KeyEncipherment'],
           extendedKeyUsages: ['ServerAuthentication'],
@@ -666,6 +667,7 @@
       const description = tmpl.description || tmpl.Description || '';
       const validityDays = tmpl.validityDays || tmpl.ValidityDays || 365;
       const requiresApproval = tmpl.requiresApproval || tmpl.RequiresApproval || false;
+      const storePrivateKeyForRetrieval = tmpl.storePrivateKeyForRetrieval !== undefined ? tmpl.storePrivateKeyForRetrieval : (tmpl.StorePrivateKeyForRetrieval !== undefined ? tmpl.StorePrivateKeyForRetrieval : true);
       const allowedKeyTypes = (tmpl.allowedKeyTypes || tmpl.AllowedKeyTypes || []).join(', ');
       const keyUsages = (tmpl.keyUsages || tmpl.KeyUsages || []).join(', ');
       const extendedKeyUsages = (tmpl.extendedKeyUsages || tmpl.ExtendedKeyUsages || []).join(', ');
@@ -678,6 +680,8 @@
       const lblValidity = window.I18N ? window.I18N.t('admin_lbl_validity', 'Validità (giorni)') : 'Validità (giorni)';
       const validityNote = window.I18N ? window.I18N.t('admin_validity_note', 'Prelevata dalla definizione del template AD CS (KeyUsagePeriod); non modificabile manualmente. Aggiorna il valore con "Scopri dalla CA".') : 'Prelevata dalla definizione del template AD CS (KeyUsagePeriod); non modificabile manualmente. Aggiorna il valore con "Scopri dalla CA".';
       const lblManualAppr = window.I18N ? window.I18N.t('admin_lbl_manual_approval', 'Approvazione Manuale') : 'Approvazione Manuale';
+      const lblStoreKey = window.I18N ? window.I18N.t('admin_lbl_store_key_pfx', 'Archivia Chiave per Ritiro PFX') : 'Archivia Chiave per Ritiro PFX';
+      const hintStoreKey = window.I18N ? window.I18N.t('admin_hint_store_key_pfx', 'Se attivo (default), la chiave privata viene memorizzata cifrata a riposo (DPAPI/AES-GCM) per consentire il recupero del pacchetto .pfx anche successivamente.') : 'Se attivo (default), la chiave privata viene memorizzata cifrata a riposo (DPAPI/AES-GCM) per consentire il recupero del pacchetto .pfx anche successivamente.';
       const lblKeyTypes = window.I18N ? window.I18N.t('admin_lbl_key_types', 'Tipi Chiave') : 'Tipi Chiave';
       const lblAllowedGroups = window.I18N ? window.I18N.t('admin_lbl_allowed_groups', 'Gruppi AD Autorizzati') : 'Gruppi AD Autorizzati';
       const phAllowedGroups = window.I18N ? window.I18N.t('admin_allowed_groups_placeholder', 'Vuoto = tutti gli utenti (es. VD\\Web-Team, LD\\App-Admin)') : 'Vuoto = tutti gli utenti (es. VD\\Web-Team, LD\\App-Admin)';
@@ -711,6 +715,14 @@
             <input type="checkbox" class="tmpl-toggle" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="requiresApproval" ${requiresApproval ? 'checked' : ''}>
             <span class="toggle-slider"></span>
           </label>
+        </div>
+        <div class="field-row">
+          <label>${escapeHtml(lblStoreKey)}</label>
+          <label class="toggle-switch">
+            <input type="checkbox" class="tmpl-toggle" data-ca="${caIndex}" data-tmpl="${tIdx}" data-field="storePrivateKeyForRetrieval" ${storePrivateKeyForRetrieval ? 'checked' : ''}>
+            <span class="toggle-slider"></span>
+          </label>
+          <small style="display:block; margin-top:0.25rem; opacity:0.7;">${escapeHtml(hintStoreKey)}</small>
         </div>
         <div class="field-row">
           <label>${escapeHtml(lblKeyTypes)}</label>
@@ -874,6 +886,7 @@
             DisplayName: t.displayName || t.DisplayName || '',
             Description: t.description || t.Description || '',
             RequiresApproval: t.requiresApproval || t.RequiresApproval || false,
+            StorePrivateKeyForRetrieval: t.storePrivateKeyForRetrieval !== undefined ? t.storePrivateKeyForRetrieval : (t.StorePrivateKeyForRetrieval !== undefined ? t.StorePrivateKeyForRetrieval : true),
             ValidityDays: t.validityDays || t.ValidityDays || 365,
             AllowedKeyTypes: t.allowedKeyTypes || t.AllowedKeyTypes || [],
             KeyUsages: t.keyUsages || t.KeyUsages || [],

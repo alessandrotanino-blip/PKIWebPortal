@@ -128,6 +128,7 @@ api.MapGet("/config", async (HttpContext ctx, IAdcsService adcsService, IConfigu
                 t.DisplayName,
                 t.Description,
                 t.RequiresApproval,
+                t.StorePrivateKeyForRetrieval,
                 t.ValidityDays,
                 // SECURITY (2.1.0): i nomi dei gruppi AD (AllowedGroups) NON
                 // vengono più esposti a ogni utente autenticato: l'API restituisce

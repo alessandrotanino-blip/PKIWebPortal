@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 [🇮🇹 Italiano](CHANGELOG.md) | [🇬🇧 English](CHANGELOG.en.md)
 
@@ -6,6 +6,19 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.1.1] - 2026-10-22
+
+### Funzionalità & Correzioni
+
+**Recupero PFX differito configurabile per template (StorePrivateKeyForRetrieval)**
+- **Risolto problema recupero PFX per emissione immediata**: nella release 2.1.0 la rimozione dell'invio della chiave privata nei flussi a emissione immediata impediva il successivo recupero del pacchetto .pfx (veniva offerto solo il certificato .crt).
+- **Nuovo parametro StorePrivateKeyForRetrieval nei template**:
+  - **Attivo di default (	rue)**: durante l'emissione da wizard, la chiave privata generata localmente nel browser viene trasmessa via HTTPS al portale e archiviata cifrata a riposo (DPAPI machine-scope / AES-256-GCM in App_Data/held-requests.json). In questo modo il richiedente originale o gli amministratori autorizzati possono riscaricare o ricostruire in qualsiasi momento il pacchetto .pfx completo (con certificato, chiave privata e catena di certificazione CA).
+  - Se configurato su alse, la chiave privata non viene trasmessa al server per i template senza approvazione (modalità zero-knowledge), e il recupero differito consentirà di scaricare unicamente il certificato .crt e la catena .p7b.
+- **Supporto nel pannello amministrativo (/admin.html)**: aggiunto toggle "Archivia Chiave per Ritiro PFX" con note esplicative e supporto multilingua (IT, EN, FR, DE, ES) sia per template aggiunti manualmente sia scoperti dalla CA.
+- **Esposizione API**: il parametro viene restituito dall'endpoint GET /api/config per guidare il comportamento del client durante l'emissione.
+
+---
 ## [2.1.0] - 2026-10-15
 
 ### Sicurezza (hardening su tutte le aree del portale)

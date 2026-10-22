@@ -374,18 +374,24 @@
         );
 
         // Step 2: Sottomissione al backend
-        // SECURITY (2.1.0): la chiave privata viene inviata al portale SOLO quando
-        // il template richiede approvazione (flusso hold: il server la custodisce
-        // cifrata per il ritiro differito del PFX). Nei flussi a emissione
-        // immediata il server non ne ha bisogno: il PFX viene assemblato qui nel
-        // browser e la chiave privata non lascia il dispositivo.
+        // PFX RETRIEVAL & SECURITY: La chiave privata viene inviata al portale se:
+        // 1. Il template richiede approvazione (flusso hold: il server la custodisce cifrata per il ritiro differito)
+        // 2. Oppure se StorePrivateKeyForRetrieval è abilitato per il template (default: true),
+        //    consentendo al richiedente o agli amministratori autorizzati di recuperare il pacchetto PFX
+        //    completo anche successivamente dalla scheda "Ritiro Certificato" o "I Miei Certificati".
+        // Se StorePrivateKeyForRetrieval è esplicitamente disabilitato (false) e il template non richiede approvazione,
+        // la chiave privata non lascia il dispositivo (recupero successivo limitato a .crt).
         const tplRequiresApproval = !!(selectedTemplate.requiresApproval || selectedTemplate.RequiresApproval);
+        const tplStoreKey = (selectedTemplate.storePrivateKeyForRetrieval !== undefined)
+          ? !!selectedTemplate.storePrivateKeyForRetrieval
+          : ((selectedTemplate.StorePrivateKeyForRetrieval !== undefined) ? !!selectedTemplate.StorePrivateKeyForRetrieval : true);
+
         const requestBody = {
           caId: currentCa.id || currentCa.Id || '',
           templateName: selectedTemplate.name || selectedTemplate.Name || '',
           csrPem: csrPem
         };
-        if (tplRequiresApproval) {
+        if (tplRequiresApproval || tplStoreKey) {
           requestBody.privateKeyPem = privateKeyPem;
         }
 

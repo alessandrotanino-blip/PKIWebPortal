@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PKI Portal - Internationalization (i18n) Module
  * Supports 5 languages: Italian (it), English (en), French (fr), German (de), Spanish (es).
  * Features flag icons, dropdown language picker, and reactive UI translation.
@@ -259,6 +259,8 @@ window.I18N = (function () {
       admin_lbl_validity: "Validità (giorni)",
       admin_validity_note: "Prelevata dalla definizione del template AD CS (KeyUsagePeriod); non modificabile manualmente. Aggiorna il valore con \"Scopri dalla CA\".",
       admin_lbl_manual_approval: "Approvazione Manuale",
+      admin_lbl_store_key_pfx: "Archivia Chiave per Ritiro PFX",
+      admin_hint_store_key_pfx: "Se attivo (default), la chiave privata viene memorizzata cifrata a riposo (DPAPI/AES-GCM) per consentire il recupero del pacchetto .pfx anche successivamente.",
       admin_lbl_key_types: "Tipi Chiave",
       admin_lbl_allowed_groups: "Gruppi AD Autorizzati",
       admin_allowed_groups_placeholder: "Vuoto = tutti gli utenti (es. VD\\Web-Team, LD\\App-Admin)",
@@ -525,6 +527,8 @@ window.I18N = (function () {
       admin_lbl_validity: "Validity (days)",
       admin_validity_note: "Retrieved from AD CS template definition (KeyUsagePeriod); not editable manually. Refresh via \"Discover from CA\".",
       admin_lbl_manual_approval: "Manual Approval",
+      admin_lbl_store_key_pfx: "Store Key for PFX Retrieval",
+      admin_hint_store_key_pfx: "When enabled (default), the private key is stored encrypted at rest (DPAPI/AES-GCM) to allow downloading the full .pfx bundle later.",
       admin_lbl_key_types: "Key Types",
       admin_lbl_allowed_groups: "Authorized AD Groups",
       admin_allowed_groups_placeholder: "Empty = all users (e.g. VD\\Web-Team, LD\\App-Admin)",
@@ -791,6 +795,8 @@ window.I18N = (function () {
       admin_lbl_validity: "Validité (jours)",
       admin_validity_note: "Récupéré de la définition du modèle AD CS (KeyUsagePeriod) ; non modifiable manuellement. Actualiser via « Découvrir depuis l'AC ».",
       admin_lbl_manual_approval: "Approbation manuelle",
+      admin_lbl_store_key_pfx: "Stocker la clé pour récupération PFX",
+      admin_hint_store_key_pfx: "Si activé (par défaut), la clé privée est stockée chiffrée au repos (DPAPI/AES-GCM) pour permettre le téléchargement ultérieur du package .pfx.",
       admin_lbl_key_types: "Types de clés",
       admin_lbl_allowed_groups: "Groupes AD autorisés",
       admin_allowed_groups_placeholder: "Vide = tous les utilisateurs (ex. VD\\Web-Team, LD\\App-Admin)",
@@ -1057,6 +1063,8 @@ window.I18N = (function () {
       admin_lbl_validity: "Gültigkeit (Tage)",
       admin_validity_note: "Aus der AD CS-Vorlagendefinition übernommen (KeyUsagePeriod); nicht manuell bearbeitbar. Über „Von CA erkennen“ aktualisieren.",
       admin_lbl_manual_approval: "Manuelle Genehmigung",
+      admin_lbl_store_key_pfx: "Schlüssel für PFX-Abruf speichern",
+      admin_hint_store_key_pfx: "Wenn aktiviert (Standard), wird der private Schlüssel im Ruhezustand verschlüsselt gespeichert (DPAPI/AES-GCM), um das spätere Herunterladen des .pfx-Pakets zu ermöglichen.",
       admin_lbl_key_types: "Schlüsseltypen",
       admin_lbl_allowed_groups: "Autorisierte AD-Gruppen",
       admin_allowed_groups_placeholder: "Leer = alle Benutzer (z.B. VD\\Web-Team, LD\\App-Admin)",
@@ -1323,6 +1331,8 @@ window.I18N = (function () {
       admin_lbl_validity: "Validez (días)",
       admin_validity_note: "Obtenido de la definición de plantilla AD CS (KeyUsagePeriod); no editable manualmente. Actualizar mediante «Descubrir de la CA».",
       admin_lbl_manual_approval: "Aprobación manual",
+      admin_lbl_store_key_pfx: "Almacenar clave para recuperación PFX",
+      admin_hint_store_key_pfx: "Si está activo (predeterminado), la clave privada se almacena cifrada en reposo (DPAPI/AES-GCM) para permitir descargar el paquete .pfx más adelante.",
       admin_lbl_key_types: "Tipos de claves",
       admin_lbl_allowed_groups: "Grupos de AD autorizados",
       admin_allowed_groups_placeholder: "Vacío = todos los usuarios (ej. VD\\Web-Team, LD\\App-Admin)",

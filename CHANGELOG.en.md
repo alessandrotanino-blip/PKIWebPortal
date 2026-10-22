@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 [🇬🇧 English](CHANGELOG.en.md) | [🇮🇹 Italiano](CHANGELOG.md)
 
@@ -6,6 +6,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-10-22
+
+### Features & Fixes
+
+**Configurable deferred PFX retrieval per template (StorePrivateKeyForRetrieval)**
+- **Fixed PFX retrieval for immediate-issuance templates**: in release 2.1.0 omitting the private key transmission for immediate-issuance flows prevented requesters from subsequently retrieving the complete .pfx archive (only .crt and .p7b were made available).
+- **New template parameter StorePrivateKeyForRetrieval**:
+  - **Enabled by default (	rue)**: during wizard enrollment, the browser-generated private key is sent over secure HTTPS and stored encrypted at rest on the server (Windows DPAPI machine-scope / AES-256-GCM in App_Data/held-requests.json). This enables the original requester or authorized administrators to retrieve or regenerate the complete password-protected .pfx archive (with leaf, private key, and issuing chain) at any time later.
+  - When set to alse, the private key does not leave the client for non-approval templates (zero-knowledge mode), restricting subsequent retrievals to the .crt certificate and .p7b chain.
+- **Admin panel integration (/admin.html)**: added "Store Key for PFX Retrieval" toggle switch with descriptions across all 5 supported languages (IT, EN, FR, DE, ES) for both manually added and discovered templates.
+- **API exposure**: the setting is delivered via GET /api/config to guide client-side submission logic.
+
+---
 ## [2.1.0] - 2026-10-15
 
 ### Security (hardening across all portal areas)
