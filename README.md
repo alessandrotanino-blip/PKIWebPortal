@@ -315,9 +315,9 @@ Then open a browser at:
 * **ESC8 Hardening**: This portal does not expose the traditional `certsrv` endpoint.
 * **Separation from certsrv**: The portal uses a completely separate IIS website and Application Pool, ensuring that an issue with the portal does not affect certsrv, and vice versa.
 
-### v2.1.0 Hardening
+### v2.1.0 / v2.1.1 Hardening
 
-Starting with **2.1.0**, the portal enforces the following controls (details in the changelog):
+Starting with **2.1.0** (completed in **2.1.1**), the portal enforces the following controls (details in the changelog):
 
 * **Unencrypted HTTP blocked by default**: `Install-PkiPortal.ps1` without `-UseHttps` now aborts with an error; the `-AllowInsecureHttp` override is reserved for isolated test environments. The site also sets `Strict-Transport-Security` (HSTS).
 * **Extended Protection for Authentication (EPAL)**: the installer configures `windowsAuthentication` with `extendedProtection:outbound` (NTLM relay protection), and anonymous authentication is **disabled** in IIS, so even `/admin.html` and static files require the NTLM/Kerberos challenge.
