@@ -26,6 +26,10 @@ public class HeldRequestStore : IHeldRequestStore
     private const string DpapiPrefix = "PKEY1:";
     private const string AesGcmPrefix = "AESGCM1:";
 
+    private static string SanitizeForLog(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty :
+        new string(value.Take(128).Where(c => !char.IsControl(c)).ToArray());
+
     private readonly byte[]? _dpapiEntropy;
     private readonly bool _dpapiAvailable;
     private readonly byte[]? _aesKey;
@@ -373,7 +377,7 @@ public class HeldRequestStore : IHeldRequestStore
         _store[request.HoldId] = request;
         _logger.LogInformation(
             "Richiesta certificato trattenuta: HoldId={HoldId}, Template={Template}, CA RequestId={CaRequestId}, Richiedente={Requester}",
-            request.HoldId, request.TemplateName, request.CaRequestId, request.RequesterUser);
+            request.HoldId, SanitizeForLog(request.TemplateName), request.CaRequestId, request.RequesterUser);
 
         _ = SaveToDiskAsync(); // Fire-and-forget, errori gestiti internamente
         return Task.FromResult(request);
@@ -410,7 +414,7 @@ public class HeldRequestStore : IHeldRequestStore
         _store[request.HoldId] = request;
         _logger.LogInformation(
             "Richiesta registrata nello store: HoldId={HoldId}, Stato={Status}, Template={Template}, CA RequestId={CaRequestId}, Richiedente={Requester}",
-            request.HoldId, request.Status, request.TemplateName, request.CaRequestId, request.RequesterUser);
+            request.HoldId, request.Status, SanitizeForLog(request.TemplateName), request.CaRequestId, request.RequesterUser);
 
         _ = SaveToDiskAsync();
         return Task.FromResult(request);
@@ -476,7 +480,7 @@ public class HeldRequestStore : IHeldRequestStore
 
             if (request.Status != HoldStatus.PendingApproval)
             {
-                _logger.LogWarning("Tentativo di approvare una richiesta non in stato PendingApproval: HoldId={HoldId}, Stato={Status}", holdId, request.Status);
+                _logger.LogWarning("Tentativo di approvare una richiesta non in stato PendingApproval: HoldId={HoldId}, Stato={Status}", SanitizeForLog(holdId), request.Status);
                 return null;
             }
 
@@ -485,7 +489,7 @@ public class HeldRequestStore : IHeldRequestStore
             request.ReviewedBy = approvedBy;
         }
 
-        _logger.LogInformation("Richiesta certificato APPROVATA: HoldId={HoldId}, Approvata da={ApprovedBy}", holdId, approvedBy);
+        _logger.LogInformation("Richiesta certificato APPROVATA: HoldId={HoldId}, Approvata da={ApprovedBy}", SanitizeForLog(holdId), SanitizeForLog(approvedBy));
         await SaveToDiskAsync(); // persistenza attendibile della transizione di stato
         return request;
     }
@@ -502,7 +506,7 @@ public class HeldRequestStore : IHeldRequestStore
 
             if (request.Status != HoldStatus.PendingApproval)
             {
-                _logger.LogWarning("Tentativo di rifiutare una richiesta non in stato PendingApproval: HoldId={HoldId}, Stato={Status}", holdId, request.Status);
+                _logger.LogWarning("Tentativo di rifiutare una richiesta non in stato PendingApproval: HoldId={HoldId}, Stato={Status}", SanitizeForLog(holdId), request.Status);
                 return null;
             }
 
@@ -512,7 +516,7 @@ public class HeldRequestStore : IHeldRequestStore
             request.RejectionReason = reason;
         }
 
-        _logger.LogInformation("Richiesta certificato RIFIUTATA: HoldId={HoldId}, Rifiutata da={RejectedBy}, Motivo={Reason}", holdId, rejectedBy, reason);
+        _logger.LogInformation("Richiesta certificato RIFIUTATA: HoldId={HoldId}, Rifiutata da={RejectedBy}, Motivo={Reason}", SanitizeForLog(holdId), SanitizeForLog(rejectedBy), SanitizeForLog(reason));
         await SaveToDiskAsync(); // persistenza attendibile della transizione di stato
         return request;
     }

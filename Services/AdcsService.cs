@@ -680,7 +680,7 @@ public class AdcsService : IAdcsService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Errore durante la lettura dal Windows Credential Manager per il target '{Target}'", targetName);
+            _logger.LogError(ex, "Errore durante la lettura dal Windows Credential Manager per il target '{Target}'", SanitizeForLog(targetName));
         }
 
         return null;
@@ -951,12 +951,19 @@ public class AdcsService : IAdcsService
             var startInfo = new ProcessStartInfo
             {
                 FileName = "certreq.exe",
-                Arguments = $"-submit -config \"{caConfigString}\" -attrib \"{attribArg}\" \"{tempReqPath}\" \"{tempCerPath}\" \"{tempChainPath}\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
+            startInfo.ArgumentList.Add("-submit");
+            startInfo.ArgumentList.Add("-config");
+            startInfo.ArgumentList.Add(caConfigString);
+            startInfo.ArgumentList.Add("-attrib");
+            startInfo.ArgumentList.Add(attribArg);
+            startInfo.ArgumentList.Add(tempReqPath);
+            startInfo.ArgumentList.Add(tempCerPath);
+            startInfo.ArgumentList.Add(tempChainPath);
 
             using var process = new Process { StartInfo = startInfo };
             var outputBuilder = new StringBuilder();
@@ -1351,7 +1358,7 @@ public class AdcsService : IAdcsService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Errore durante la scoperta dei template per ConfigString '{ConfigString}'", configString);
+            _logger.LogError(ex, "Errore durante la scoperta dei template per ConfigString '{ConfigString}'", SanitizeForLog(configString));
             return new TemplateDiscoveryResponse
             {
                 Success = false,
@@ -1467,7 +1474,7 @@ public class AdcsService : IAdcsService
         CredentialInfo? cred = ReadCredentialFromManager(target);
         if (cred == null)
         {
-            _logger.LogWarning("Nessuna credenziale trovata per il target '{Target}'. Tentativo con identità locale.", target);
+            _logger.LogWarning("Nessuna credenziale trovata per il target '{Target}'. Tentativo con identità locale.", SanitizeForLog(target));
             return await action(null);
         }
 
@@ -1503,12 +1510,14 @@ public class AdcsService : IAdcsService
         var startInfo = new ProcessStartInfo
         {
             FileName = "certutil.exe",
-            Arguments = $"-config \"{configString}\" -CATemplates",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        startInfo.ArgumentList.Add("-config");
+        startInfo.ArgumentList.Add(configString);
+        startInfo.ArgumentList.Add("-CATemplates");
 
         using var process = new Process { StartInfo = startInfo };
         var stdoutBuilder = new StringBuilder();
@@ -1575,7 +1584,7 @@ public class AdcsService : IAdcsService
             }
         }
 
-        _logger.LogInformation("Trovati {Count} template pubblicati sulla CA '{Config}'", results.Count, configString);
+        _logger.LogInformation("Trovati {Count} template pubblicati sulla CA '{Config}'", results.Count, SanitizeForLog(configString));
         return (results, combinedOutput, process.ExitCode);
     }
 
@@ -1626,7 +1635,7 @@ public class AdcsService : IAdcsService
         }
         else
         {
-            _logger.LogWarning("Impossibile determinare il dominio AD per la CA '{Config}': validità non disponibile.", configString);
+            _logger.LogWarning("Impossibile determinare il dominio AD per la CA '{Config}': validità non disponibile.", SanitizeForLog(configString));
         }
 
         // 2. Fallback: certutil -template SOLO se AD è raggiungibile ma la
@@ -1646,12 +1655,12 @@ public class AdcsService : IAdcsService
                     }
                     else
                     {
-                        _logger.LogWarning("Impossibile leggere la validità del template '{Template}' dalla CA '{Config}' (nessuna fonte disponibile).", t.Name, configString);
+                        _logger.LogWarning("Impossibile leggere la validità del template '{Template}' dalla CA '{Config}' (nessuna fonte disponibile).", SanitizeForLog(t.Name), SanitizeForLog(configString));
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Errore nel fallback certutil per il template '{Template}' (Config '{Config}').", t.Name, configString);
+                    _logger.LogWarning(ex, "Errore nel fallback certutil per il template '{Template}' (Config '{Config}').", SanitizeForLog(t.Name), SanitizeForLog(configString));
                 }
             }
         }
@@ -1756,14 +1765,14 @@ public class AdcsService : IAdcsService
                     // password esposta anche su LDAP non cifrato.
                     _logger.LogWarning(
                         "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}): fallback su LDAP (389) con identità di processo (nessuna password in transito).",
-                        domain, sslError?.Message);
+                        SanitizeForLog(domain), SanitizeForLog(sslError?.Message));
                     try
                     {
                         rep = await Task.Run(() => SendLdapQuery(389, useSsl: false)).ConfigureAwait(false);
                     }
                     catch (LdapException ex)
                     {
-                        _logger.LogWarning("Query LDAP verso il dominio '{Domain}' (fallback 389) non riuscita: {Error}", domain, ex.Message);
+                        _logger.LogWarning("Query LDAP verso il dominio '{Domain}' (fallback 389) non riuscita: {Error}", SanitizeForLog(domain), SanitizeForLog(ex.Message));
                         return (result, false);
                     }
                 }
@@ -1773,7 +1782,7 @@ public class AdcsService : IAdcsService
                     // password non deve mai transitare su LDAP non cifrato).
                     _logger.LogWarning(
                         "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}) e fallback LDAP non cifrato negato per la presenza di credenziali esplicite: validità template non disponibili.",
-                        domain, sslError?.Message);
+                        SanitizeForLog(domain), SanitizeForLog(sslError?.Message));
                     return (result, false);
                 }
             }
@@ -1788,7 +1797,7 @@ public class AdcsService : IAdcsService
             if (searchResp.ResultCode != ResultCode.Success)
             {
                 _logger.LogWarning("Query LDAP non riuscita (ResultCode {ResultCode}: {Error}) durante la lettura delle definizioni dei template dal dominio '{Domain}'.",
-                    searchResp.ResultCode, searchResp.ErrorMessage, domain);
+                    searchResp.ResultCode, SanitizeForLog(searchResp.ErrorMessage), SanitizeForLog(domain));
                 return (result, false);
             }
 
@@ -1833,12 +1842,12 @@ public class AdcsService : IAdcsService
                 }
             }
 
-            _logger.LogInformation("Lette {Count} definizioni template da AD ({Domain}).", result.Count, domain);
+            _logger.LogInformation("Lette {Count} definizioni template da AD ({Domain}).", result.Count, SanitizeForLog(domain));
             return (result, true);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Query LDAP verso il dominio '{Domain}' per le definizioni dei template non riuscita.", domain);
+            _logger.LogWarning(ex, "Query LDAP verso il dominio '{Domain}' per le definizioni dei template non riuscita.", SanitizeForLog(domain));
             return (result, false);
         }
     }
@@ -1852,12 +1861,15 @@ public class AdcsService : IAdcsService
         var startInfo = new ProcessStartInfo
         {
             FileName = "certutil.exe",
-            Arguments = $"-config \"{configString}\" -template {templateName}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        startInfo.ArgumentList.Add("-config");
+        startInfo.ArgumentList.Add(configString);
+        startInfo.ArgumentList.Add("-template");
+        startInfo.ArgumentList.Add(templateName);
 
         using var process = new Process { StartInfo = startInfo };
         var stdoutBuilder = new StringBuilder();
