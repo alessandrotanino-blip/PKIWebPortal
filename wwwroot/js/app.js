@@ -302,7 +302,7 @@
       const chip = document.createElement('div');
       chip.className = 'san-chip';
       chip.innerHTML = `
-        <strong>${san.type}:</strong> ${escapeHtml(san.value)}
+        <strong>${escapeHtml(san.type)}:</strong> ${escapeHtml(san.value)}
         <span class="remove-san" data-index="${index}">&times;</span>
       `;
       chip.querySelector('.remove-san').addEventListener('click', () => {

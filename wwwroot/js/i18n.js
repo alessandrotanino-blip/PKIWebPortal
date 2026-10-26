@@ -2010,7 +2010,12 @@ window.I18N = (function () {
       if (!key) return;
       const val = t(key);
       if (el.getAttribute('data-i18n-html') === 'true') {
-        el.innerHTML = val;
+        const fragment = document.createDocumentFragment();
+        val.split(/<br\s*\/?>/i).forEach((part, index) => {
+          if (index > 0) fragment.appendChild(document.createElement('br'));
+          fragment.appendChild(document.createTextNode(part));
+        });
+        el.replaceChildren(fragment);
       } else {
         el.textContent = val;
       }
