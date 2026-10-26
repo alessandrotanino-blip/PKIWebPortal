@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-10-26
+
+### Features & Internationalization
+
+**New Language Support: Portuguese (pt) and Chinese (zh)**
+- **i18n Module Expansion (wwwroot/js/i18n.js)**:
+  - Added full support for 7 languages (**English, Italian, French, German, Spanish, Portuguese, Chinese**) with instant dynamic switching and persistent user preferences.
+  - Added crisp inline SVG flag icons for Portugal (pt) and China (zh).
+  - Translated all 244 localization keys for both languages, covering Web Crypto enrollment wizard, CSR submission, certificate retrieval/history, multi-CA management, request filters, and notification/error prompts.
+- **User Interface (wwwroot/index.html, wwwroot/admin.html)**:
+  - Added Portuguese (Português) and Chinese (中文) entries to the .lang-dropdown language picker on both user and administration pages.
+  - Updated navigation version badges and asset query string cache-busting to 2.2.0.
+- **Installation Script & Documentation (Install-PkiPortal.ps1, README.md, README.it.md, DOCUMENTATION.dokuwiki)**:
+  - Updated portal version string to 2.2.0 across the PowerShell installer script and project technical documentation.
+
+---
 ## [2.1.1] - 2026-10-22
 
 ### Features & Fixes

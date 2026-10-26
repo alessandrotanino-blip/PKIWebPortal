@@ -1,4 +1,4 @@
-﻿[🇬🇧 English](README.md) |[🇮🇹 Italiano](README.it.md)
+[🇬🇧 English](README.md) |[🇮🇹 Italiano](README.it.md)
 
 # Enterprise PKI Web Enrollment Portal (AD CS Modern Gateway)
 
@@ -41,7 +41,7 @@ Modern web portal built with **HTML5** and **ASP.NET Core 8 (C#)**, designed to 
    * Granular assignment of certificate templates to specific Active Directory groups (`AllowedGroups`). Users outside authorized groups are restricted from issuing certificates with those templates.
 8. **Multi-Language UI & Theme Support**:
 
-   * Full support for 5 languages (**English, Italian, French, German, Spanish**) with real-time dynamic switching.
+   * Full support for 7 languages (**English, Italian, French, German, Spanish, Portuguese, Chinese**) with real-time dynamic switching.
    * Persistent Light and Dark theme selection.
 9. **REST API for Automation (win-acme / PowerShell)**:
 
@@ -97,7 +97,7 @@ Portal/
 │   ├── js/
 │   │   ├── vendor/forge.min.js  # Cryptographic library for PFX/ASN.1
 │   │   ├── crypto-helper.js     # Client-side key and PFX generation
-│   │   ├── i18n.js              # Multi-language module (EN, IT, FR, DE, ES)
+│   │   ├── i18n.js              # Multi-language module (EN, IT, FR, DE, ES, PT, ZH)
 │   │   └── app.js               # Application controller and form handling
 │   ├── index.html               # User portal HTML5/SPA
 │   └── admin.html               # Administration panel (Config & Held Requests)
