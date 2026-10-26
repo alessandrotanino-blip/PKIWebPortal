@@ -6,6 +6,22 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.2.0] - 2026-10-26
+
+### Funzionalità & Internazionalizzazione
+
+**Supporto nuove lingue: Portoghese (pt) e Cinese (zh)**
+- **Estensione i18n (wwwroot/js/i18n.js)**:
+  - Aggiunto supporto completo a 7 lingue (**Italiano, Inglese, Francese, Tedesco, Spagnolo, Portoghese, Cinese**) con commutazione dinamica istantanea e persistenza della preferenza utente.
+  - Integrate nuove icone SVG ad alta risoluzione per le bandiere del Portogallo (pt) e della Cina (zh).
+  - Localizzate tutte le 244 chiavi e stringhe per ciascuna lingua, coprendo wizard crittografico, upload CSR, storico e download certificati/chiavi, amministrazione multi-CA, filtri richieste e messaggi di notifica/errore.
+- **Interfaccia Utente (wwwroot/index.html, wwwroot/admin.html)**:
+  - Inserite le opzioni Portoghese (Português) e Cinese (中文) nel selettore a discesa .lang-dropdown.
+  - Cache-busting e badge versione aggiornati a 2.2.0.
+- **Script di installazione e documentazione (Install-PkiPortal.ps1, README.md, README.it.md, DOCUMENTATION.dokuwiki)**:
+  - Allineata la versione del portale a 2.2.0 nello script di installazione PowerShell e nella documentazione di progetto.
+
+---
 ## [2.1.1] - 2026-10-22
 
 ### Funzionalità & Correzioni
