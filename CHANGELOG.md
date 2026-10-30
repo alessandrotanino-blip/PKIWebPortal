@@ -7,13 +7,16 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
 ## [2.2.1] - 2026-10-26
-### Security
-- Remediated CodeQL alerts for XSS, log forging, and command injection
-- Hardened DOM handling, log output, and AD CS command arguments
 
-### Included
-- All changes from v2.2.0, including Chinese and Portuguese localization
+### Sicurezza & Hardening
+- **Risoluzione avvisi CodeQL**:
+  - Mitigazione delle segnalazioni relative a Cross-Site Scripting (XSS), log forging e command injection.
+  - Hardening della manipolazione del DOM client-side, sanitizzazione sicura dei messaggi di log e validazione rigorosa dei parametri dei comandi AD CS.
 
+### Incluso
+- Tutte le modifiche e funzionalità della v2.2.0, incluso il supporto completo alle lingue Cinese e Portoghese.
+
+---
 ## [2.2.0] - 2026-10-26
 
 ### Funzionalità & Internazionalizzazione

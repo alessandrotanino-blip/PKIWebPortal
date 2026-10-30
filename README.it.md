@@ -1,4 +1,4 @@
-[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
+﻿[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
 
 # Enterprise PKI Web Enrollment Portal (AD CS Modern Gateway)
 
@@ -309,9 +309,11 @@ Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 * **Service Account**: L'Application Pool di IIS deve eseguire con un account che abbia i permessi *Request Certificates* (Enroll) sui template ADCS desiderati. Per la modalità Standalone all'interno della foresta, `NetworkService` o un Managed Service Account è sufficiente.
 * **Separazione da certsrv**: Il portale utilizza un sito IIS e un Application Pool completamente separati, garantendo che un problema sul portale non impatti certsrv e viceversa.
 
-### Hardening v2.1.0 / v2.1.1
+### Hardening (v2.1.0 - v2.2.1)
 
-A partire dalla **2.1.0** (e completato nella **2.1.1**) il portale applica le seguenti contromisure (dettagli nel changelog):
+A partire dalla **2.1.0** (esteso fino alla **2.2.1**) il portale applica le seguenti contromisure (dettagli nel changelog):
+
+* **Remediazione CodeQL & Hardening Rigoroso (v2.2.1)**: Risolti gli alert relativi a Cross-Site Scripting (XSS), log forging e command injection; rafforzamento della manipolazione del DOM client-side, sanitizzazione dell'output dei log e validazione rigorosa dei parametri verso i comandi di sistema AD CS.
 
 * **HTTP in chiaro bloccato by default**: `Install-PkiPortal.ps1` senza `-UseHttps` si arresta con errore; l'override `-AllowInsecureHttp` è riservato ad ambienti di test isolati. Il portale imposta inoltre `Strict-Transport-Security` (HSTS).
 * **Extended Protection for Authentication (EPAL)**: lo script di installazione configura `windowsAuthentication` con `extendedProtection:outbound` (protezione da NTLM relay); l'autenticazione anonima su IIS è **disabilitata**, quindi anche `/admin.html` e i file statici richiedono il challenge NTLM/Kerberos.

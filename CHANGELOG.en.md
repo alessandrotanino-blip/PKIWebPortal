@@ -8,12 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 
 ## [2.2.1] - 2026-10-26
-### Security
-- Remediated CodeQL alerts for XSS, log forging, and command injection
-- Hardened DOM handling, log output, and AD CS command arguments
+
+### Security & Hardening
+- **CodeQL Alert Remediation**:
+  - Remediated CodeQL alerts for Cross-Site Scripting (XSS), log forging, and command injection.
+  - Hardened client-side DOM handling, log output sanitization, and strict validation of AD CS command arguments.
 
 ### Included
-- All changes from v2.2.0, including Chinese and Portuguese localization
+- All changes from v2.2.0, including Chinese and Portuguese localization.
+
+---
 ## [2.2.0] - 2026-10-26
 
 ### Features & Internationalization
