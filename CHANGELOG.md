@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 [🇮🇹 Italiano](CHANGELOG.md) | [🇬🇧 English](CHANGELOG.en.md)
 
@@ -6,6 +6,30 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.3.0] - 2026-11-03
+
+### Funzionalità & Architettura
+- **Server ACME RFC 8555 Nativo Integrato**:
+  - Implementazione completa del protocollo ACME (RFC 8555) direttamente dentro il runtime ASP.NET Core del portale, eliminando la necessità di proxy o bridge esterni (es. ACME-Server-ADCS, Smallstep, Keyfactor o EJBCA).
+  - Piena compatibilità con client ACME standard: **win-acme** (Windows/IIS), **Certbot** (Linux), **Traefik**, **Caddy**, **acme.sh**.
+  - Endpoint ACME implementati: `/acme/directory`, `/acme/new-nonce`, `/acme/new-account`, `/acme/account/{id}`, `/acme/account/{id}/orders`, `/acme/new-order`, `/acme/order/{id}`, `/acme/authz/{id}`, `/acme/chall/{authId}/{type}`, `/acme/order/{id}/finalize`, `/acme/cert/{id}`, `/acme/revoke-cert`, `/acme/key-change`, `/acme/terms`.
+- **Motore Crittografico ACME (RFC 7515 & RFC 7638)**:
+  - Validazione e parsing JWS per firme asimmetriche sia RSA (RS256, RS384, RS512, PS256, PS384, PS512) che ECDSA (ES256, ES384, ES512).
+  - Calcolo JWK Thumbprint secondo RFC 7638 per identificazione account e verifica challenge.
+- **Validazione Challenge di Dominio (RFC 8555 Sez. 8)**:
+  - Supporto challenge `http-01` con verifica automatica porta 80 via `HttpClientFactory`.
+  - Modalità `AutoApprove` configurabile per ambienti isolati, air-gapped o lab di collaudo interni.
+  - Modalità `Http01WithAutoFallback` per reti aziendali con segmentazione firewall interna.
+- **Emissione Diretta su AD CS**:
+  - Integrazione nativa del workflow di finalizzazione ACME con `IAdcsService`, mapping con i template AD CS configurati e restituzione della catena X.509 completa (`application/pem-certificate-chain`).
+- **Store ACME Thread-Safe con Persistenza Atomica**:
+  - Gestione account, ordini, autorizzazioni, challenge e nonce anti-replay con persistenza atomica su `App_Data/acme-store.json`.
+- **Script di Collaudo Automatizzato**:
+  - Aggiunto `Test-AcmeProtocol.ps1` per test end-to-end completo (generazione chiavi, registrazione, ordine, challenge, CSR, emissione AD CS e verifica certificato X.509).
+- **Hardening IIS e Dual-Auth**:
+  - Aggiornato `Install-PkiPortal.ps1` per abilitare l'accesso anonimo esclusivamente su `/acme` e `/.well-known`, preservando Windows Authentication (Negotiate) su `/` e `/api/*`.
+
+---
 ## [2.2.1] - 2026-10-26
 
 ### Sicurezza & Hardening

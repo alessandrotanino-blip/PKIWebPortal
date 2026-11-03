@@ -10,9 +10,15 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Configurazione servizi
 builder.Services.Configure<PortalConfig>(builder.Configuration.GetSection("PortalConfig"));
+builder.Services.Configure<AcmeConfig>(builder.Configuration.GetSection("AcmeConfig"));
+builder.Services.AddHttpClient();
 builder.Services.AddSingleton<ICsrParserService, CsrParserService>();
 builder.Services.AddSingleton<IAdcsService, AdcsService>();
 builder.Services.AddSingleton<IHeldRequestStore, HeldRequestStore>();
+builder.Services.AddSingleton<IAcmeCryptoService, AcmeCryptoService>();
+builder.Services.AddSingleton<IAcmeStore, AcmeStore>();
+builder.Services.AddSingleton<IAcmeValidationService, AcmeValidationService>();
+builder.Services.AddSingleton<IAcmeService, AcmeService>();
 builder.Services.AddSingleton<CsrfTokenService>();
 
 // Supporto file statici e routing
@@ -62,6 +68,15 @@ builder.Services.AddRateLimiter(options =>
         }));
 
     // Default portale (tutti gli altri endpoint API).
+    // Default portale (tutti gli altri endpoint API).
+    options.AddPolicy("acme-policy", ctx =>
+        System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(GetUserKey(ctx), _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 300,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
     options.AddPolicy("portal-default", ctx =>
         System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(GetUserKey(ctx), _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions
         {
@@ -81,6 +96,7 @@ var app = builder.Build();
 
 // Inizializzazione immediata dello store richieste trattenute e verifica crittografica all'avvio
 _ = app.Services.GetRequiredService<IHeldRequestStore>();
+_ = app.Services.GetRequiredService<IAcmeStore>();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -775,6 +791,249 @@ api.MapGet("/certificates/held/{holdId}", async (string holdId, IHeldRequestStor
         _ => Results.Problem("Stato richiesta non riconosciuto.")
     };
 });
+
+// ===== ACME Server (RFC 8555) Integrato =====
+// Consente il rinnovo automatico tramite client ACME (win-acme, certbot, acme.sh, ecc.).
+// Gli endpoint ACME sono esposti in modalità anonima poiché autenticati crittograficamente con JWS (RFC 7515).
+
+string GetAcmeBaseUrl(HttpContext ctx, AcmeConfig config)
+{
+    if (!string.IsNullOrWhiteSpace(config.BaseUrl))
+        return config.BaseUrl.TrimEnd('/');
+    return $"{ctx.Request.Scheme}://{ctx.Request.Host}".TrimEnd('/');
+}
+
+async Task<AcmeJwsRequest?> ReadAcmeJwsAsync(HttpContext ctx)
+{
+    try
+    {
+        return await ctx.Request.ReadFromJsonAsync<AcmeJwsRequest>();
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+void ApplyAcmeResponseHeaders(HttpContext ctx, string? newNonce, string baseUrl)
+{
+    if (!string.IsNullOrEmpty(newNonce))
+    {
+        ctx.Response.Headers["Replay-Nonce"] = newNonce;
+    }
+    ctx.Response.Headers["Cache-Control"] = "no-store";
+    ctx.Response.Headers.Append("Link", $"<{baseUrl}/acme/directory>;rel=\"index\"");
+}
+
+var acme = app.MapGroup("/acme")
+    .AllowAnonymous()
+    .RequireRateLimiting("acme-policy");
+
+// 1. Directory RFC 8555 Sez. 7.1.1
+acme.MapGet("/directory", (HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    var dir = acmeSvc.GetDirectory(baseUrl);
+    return Results.Ok(dir);
+});
+
+// 2. New-Nonce RFC 8555 Sez. 7.2
+acme.MapMethods("/new-nonce", new[] { "GET", "HEAD" }, (HttpContext ctx, IAcmeService acmeSvc) =>
+{
+    string nonce = acmeSvc.CreateNonce();
+    ctx.Response.Headers["Replay-Nonce"] = nonce;
+    ctx.Response.Headers["Cache-Control"] = "no-store";
+    return Results.NoContent();
+});
+
+// 3. New-Account RFC 8555 Sez. 7.3
+acme.MapPost("/new-account", async (HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    var jws = await ReadAcmeJwsAsync(ctx);
+    if (jws == null)
+    {
+        string nonce = acmeSvc.CreateNonce();
+        ApplyAcmeResponseHeaders(ctx, nonce, baseUrl);
+        return Results.Json(new AcmeProblem { Type = AcmeErrorTypes.Malformed, Detail = "Richiesta JWS non valida.", Status = 400 },
+            contentType: "application/problem+json", statusCode: 400);
+    }
+
+    var (result, newNonce) = await acmeSvc.HandleNewAccountAsync(jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 4. Account Management & POST-as-GET RFC 8555 Sez. 7.3.1
+acme.MapMethods("/account/{id}", new[] { "GET", "POST" }, async (string id, HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    AcmeJwsRequest? jws = ctx.Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase)
+        ? await ReadAcmeJwsAsync(ctx)
+        : null;
+
+    var (result, newNonce) = await acmeSvc.HandleGetAccountAsync(id, jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 5. Account Orders List RFC 8555 Sez. 7.1.2.1
+acme.MapMethods("/account/{id}/orders", new[] { "GET", "POST" }, async (string id, HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    AcmeJwsRequest? jws = ctx.Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase)
+        ? await ReadAcmeJwsAsync(ctx)
+        : null;
+
+    var (result, newNonce) = await acmeSvc.HandleGetOrdersAsync(id, jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 6. New-Order RFC 8555 Sez. 7.4
+acme.MapPost("/new-order", async (HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    var jws = await ReadAcmeJwsAsync(ctx);
+    if (jws == null)
+    {
+        string nonce = acmeSvc.CreateNonce();
+        ApplyAcmeResponseHeaders(ctx, nonce, baseUrl);
+        return Results.Json(new AcmeProblem { Type = AcmeErrorTypes.Malformed, Detail = "Richiesta JWS non valida.", Status = 400 },
+            contentType: "application/problem+json", statusCode: 400);
+    }
+
+    var (result, newNonce) = await acmeSvc.HandleNewOrderAsync(jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 7. Order Status RFC 8555 Sez. 7.4
+acme.MapMethods("/order/{id}", new[] { "GET", "POST" }, async (string id, HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    AcmeJwsRequest? jws = ctx.Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase)
+        ? await ReadAcmeJwsAsync(ctx)
+        : null;
+
+    var (result, newNonce) = await acmeSvc.HandleGetOrderAsync(id, jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 8. Order Finalize RFC 8555 Sez. 7.4
+acme.MapPost("/order/{id}/finalize", async (string id, HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    var jws = await ReadAcmeJwsAsync(ctx);
+    if (jws == null)
+    {
+        string nonce = acmeSvc.CreateNonce();
+        ApplyAcmeResponseHeaders(ctx, nonce, baseUrl);
+        return Results.Json(new AcmeProblem { Type = AcmeErrorTypes.Malformed, Detail = "Richiesta JWS non valida.", Status = 400 },
+            contentType: "application/problem+json", statusCode: 400);
+    }
+
+    var (result, newNonce) = await acmeSvc.HandleFinalizeOrderAsync(id, jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 9. Authorization RFC 8555 Sez. 7.5
+acme.MapMethods("/authz/{id}", new[] { "GET", "POST" }, async (string id, HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    AcmeJwsRequest? jws = ctx.Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase)
+        ? await ReadAcmeJwsAsync(ctx)
+        : null;
+
+    var (result, newNonce) = await acmeSvc.HandleGetAuthorizationAsync(id, jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 10. Challenge RFC 8555 Sez. 7.5.1
+acme.MapMethods("/chall/{authId}/{type}", new[] { "GET", "POST" }, async (string authId, string type, HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    var jws = await ReadAcmeJwsAsync(ctx);
+    if (jws == null && ctx.Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+    {
+        string nonce = acmeSvc.CreateNonce();
+        ApplyAcmeResponseHeaders(ctx, nonce, baseUrl);
+        return Results.Json(new AcmeProblem { Type = AcmeErrorTypes.Malformed, Detail = "Richiesta JWS non valida.", Status = 400 },
+            contentType: "application/problem+json", statusCode: 400);
+    }
+
+    if (jws == null)
+    {
+        var authResult = await acmeSvc.HandleGetAuthorizationAsync(authId, null, baseUrl);
+        ApplyAcmeResponseHeaders(ctx, authResult.NewNonce, baseUrl);
+        return authResult.Result;
+    }
+
+    var (result, newNonce) = await acmeSvc.HandleChallengeAsync(authId, type, jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 11. Certificate Download RFC 8555 Sez. 7.4.2
+acme.MapMethods("/cert/{id}", new[] { "GET", "POST" }, async (string id, HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    AcmeJwsRequest? jws = ctx.Request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase)
+        ? await ReadAcmeJwsAsync(ctx)
+        : null;
+
+    var (result, newNonce) = await acmeSvc.HandleGetCertificateAsync(id, jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 12. Revoke Cert RFC 8555 Sez. 7.6
+acme.MapPost("/revoke-cert", async (HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    var jws = await ReadAcmeJwsAsync(ctx);
+    if (jws == null)
+    {
+        string nonce = acmeSvc.CreateNonce();
+        ApplyAcmeResponseHeaders(ctx, nonce, baseUrl);
+        return Results.Json(new AcmeProblem { Type = AcmeErrorTypes.Malformed, Detail = "Richiesta JWS non valida.", Status = 400 },
+            contentType: "application/problem+json", statusCode: 400);
+    }
+
+    var (result, newNonce) = await acmeSvc.HandleRevokeCertAsync(jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 13. Key Change RFC 8555 Sez. 7.5
+acme.MapPost("/key-change", async (HttpContext ctx, IAcmeService acmeSvc, Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig> cfgMonitor) =>
+{
+    string baseUrl = GetAcmeBaseUrl(ctx, cfgMonitor.CurrentValue);
+    var jws = await ReadAcmeJwsAsync(ctx);
+    if (jws == null)
+    {
+        string nonce = acmeSvc.CreateNonce();
+        ApplyAcmeResponseHeaders(ctx, nonce, baseUrl);
+        return Results.Json(new AcmeProblem { Type = AcmeErrorTypes.Malformed, Detail = "Richiesta JWS non valida.", Status = 400 },
+            contentType: "application/problem+json", statusCode: 400);
+    }
+
+    var (result, newNonce) = await acmeSvc.HandleKeyChangeAsync(jws, baseUrl);
+    ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
+    return result;
+});
+
+// 14. Termini di servizio
+acme.MapGet("/terms", () => Results.Text("Enterprise PKI Portal - ACME Automated Certificate Enrollment Terms of Service.\nAutomated issuance governed by Enterprise Active Directory Certificate Services policies.", "text/plain"));
+
+// Supporto locale /.well-known/acme-challenge/{token} per test
+app.MapGet("/.well-known/acme-challenge/{token}", (string token) =>
+{
+    return Results.NotFound();
+}).AllowAnonymous();
 
 app.Run();
 

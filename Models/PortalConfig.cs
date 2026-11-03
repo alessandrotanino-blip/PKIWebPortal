@@ -9,6 +9,7 @@ public class PortalConfig
     public string DefaultCaId { get; set; } = "default-ca";
     [JsonPropertyName("cas")]
     public List<CaConfig> CAs { get; set; } = new();
+    public AcmeConfig Acme { get; set; } = new();
 }
 
 public class CaConfig

@@ -1,4 +1,4 @@
-﻿[🇬🇧 English](README.md) |[🇮🇹 Italiano](README.it.md)
+[🇬🇧 English](README.md) |[🇮🇹 Italiano](README.it.md)
 
 # Enterprise PKI Web Enrollment Portal (AD CS Modern Gateway)
 
@@ -43,7 +43,10 @@ Modern web portal built with **HTML5** and **ASP.NET Core 8 (C#)**, designed to 
 
    * Full support for 7 languages (**English, Italian, French, German, Spanish, Portuguese, Chinese**) with real-time dynamic switching.
    * Persistent Light and Dark theme selection.
-9. **REST API for Automation (win-acme / PowerShell)**:
+9. **Integrated ACME Server (RFC 8555) & REST API (win-acme / Certbot / PowerShell)**:
+
+   * **Native ACME (RFC 8555) Server**: Allows standard clients like **win-acme** (Windows/IIS), **Certbot** (Linux), **Traefik**, **Caddy**, or **acme.sh** to automatically enroll and renew SSL/TLS certificates directly from Microsoft AD CS.
+   * Full support for **`http-01`** domain validation challenges, **`AutoApprove`** mode (ideal for isolated air-gapped labs and internal networks), and asymmetric JWS signatures (RSA and ECDSA).
 
    * Exposes RESTful endpoints for integrating automatic renewal scripts and automation clients such as `win-acme`.
 

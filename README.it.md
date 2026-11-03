@@ -1,4 +1,4 @@
-﻿[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
+[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
 
 # Enterprise PKI Web Enrollment Portal (AD CS Modern Gateway)
 
@@ -43,7 +43,10 @@ Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostit
 
    * Supporto completo per 7 lingue (**Italiano, Inglese, Francese, Tedesco, Spagnolo, Portoghese, Cinese**) con cambio dinamico istantaneo.
    * Selezione tema Chiaro/Scuro persistente in memoria locale.
-9. **REST API per Automazione (win-acme / PowerShell)**:
+9. **Server ACME RFC 8555 Integrato & REST API (win-acme / Certbot / PowerShell)**:
+
+   * **Server ACME (RFC 8555) Nativo**: Consente a client standard come **win-acme** (Windows/IIS), **Certbot** (Linux), **Traefik**, **Caddy** o **acme.sh** di rinnovare automaticamente certificati SSL/TLS direttamente verso Microsoft AD CS.
+   * Supporto per challenge **`http-01`** (verifica automatica su porta 80), modalità **`AutoApprove`** (ideale per lab e reti interne) e firme JWS asimmetriche (RSA ed ECDSA).
 
    * Espone endpoint RESTful per integrare script di rinnovo automatico e client di automazione come `win-acme`.
 
@@ -309,7 +312,10 @@ Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 * **Service Account**: L'Application Pool di IIS deve eseguire con un account che abbia i permessi *Request Certificates* (Enroll) sui template ADCS desiderati. Per la modalità Standalone all'interno della foresta, `NetworkService` o un Managed Service Account è sufficiente.
 * **Separazione da certsrv**: Il portale utilizza un sito IIS e un Application Pool completamente separati, garantendo che un problema sul portale non impatti certsrv e viceversa.
 
-### Hardening (v2.1.0 - v2.2.1)
+### Hardening e Novità (v2.1.0 - v2.3.0)
+
+* **Server ACME RFC 8555 Integrato (v2.3.0)**: Server ACME nativo completo integrato in ASP.NET Core per rinnovo automatico certificati con `win-acme`, `certbot`, `acme.sh` o Traefik direttamente verso Microsoft AD CS. Include supporto per challenge `http-01`, modalità `AutoApprove` per ambienti isolati, verifica firme JWS asimmetriche (RSA/ECDSA), store persistente atomico e script di collaudo `Test-AcmeProtocol.ps1`.
+* **Configurazione IIS Dual-Auth per ACME (v2.3.0)**: Accesso anonimo autorizzato esclusivamente per `/acme/*` e `/.well-known/*`, mantenendo Windows Authentication obbligatoria sul resto del portale.
 
 A partire dalla **2.1.0** (esteso fino alla **2.2.1**) il portale applica le seguenti contromisure (dettagli nel changelog):
 

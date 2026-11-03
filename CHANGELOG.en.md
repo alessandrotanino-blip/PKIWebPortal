@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 [🇬🇧 English](CHANGELOG.en.md) | [🇮🇹 Italiano](CHANGELOG.md)
 
@@ -7,6 +7,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.3.0] - 2026-11-03
+
+### Features & Architecture
+- **Built-in Native ACME Server (RFC 8555)**:
+  - Complete implementation of the ACME protocol (RFC 8555) hosted directly inside the portal's ASP.NET Core runtime, eliminating external ACME bridges or third-party products (e.g., ACME-Server-ADCS, Smallstep, Keyfactor, or EJBCA).
+  - Full compatibility with standard ACME clients: **win-acme** (Windows/IIS), **Certbot** (Linux), **Traefik**, **Caddy**, **acme.sh**.
+  - Implemented ACME endpoints: `/acme/directory`, `/acme/new-nonce`, `/acme/new-account`, `/acme/account/{id}`, `/acme/account/{id}/orders`, `/acme/new-order`, `/acme/order/{id}`, `/acme/authz/{id}`, `/acme/chall/{authId}/{type}`, `/acme/order/{id}/finalize`, `/acme/cert/{id}`, `/acme/revoke-cert`, `/acme/key-change`, `/acme/terms`.
+- **ACME Cryptographic Engine (RFC 7515 & RFC 7638)**:
+  - Full JWS parsing and signature verification for both RSA (RS256, RS384, RS512, PS256, PS384, PS512) and ECDSA (ES256, ES384, ES512).
+  - Strict RFC 7638 JWK Thumbprint calculation for account key identification and challenge key authorizations.
+- **Domain Challenge Validation (RFC 8555 Section 8)**:
+  - Automated `http-01` challenge validation over port 80 via `HttpClientFactory`.
+  - Configurable `AutoApprove` mode for air-gapped networks, offline testing, and dev labs.
+  - `Http01WithAutoFallback` mode for segmented corporate networks with internal firewall boundaries.
+- **Direct AD CS Issuance**:
+  - Native integration with `IAdcsService` on order finalization, mapping requested SANs with configured AD CS certificate templates and serving the complete X.509 chain (`application/pem-certificate-chain`).
+- **Thread-Safe ACME Store with Atomic Persistence**:
+  - Concurrent dictionary management for accounts, orders, authorizations, challenges, and anti-replay nonces, persisted atomically to `App_Data/acme-store.json`.
+- **End-to-End Test Suite**:
+  - Added `Test-AcmeProtocol.ps1` for complete end-to-end testing (in-memory key generation, registration, order creation, challenge validation, CSR generation, AD CS issuance, and X.509 certificate inspection).
+- **IIS Hardening & Dual-Auth**:
+  - Updated `Install-PkiPortal.ps1` to configure anonymous authentication specifically on `/acme` and `/.well-known`, preserving Windows Authentication (Negotiate) across `/` and `/api/*`.
+
+---
 ## [2.2.1] - 2026-10-26
 
 ### Security & Hardening

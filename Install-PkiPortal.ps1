@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Installation script for the PKI Web Enrollment Portal on IIS Windows Server.
     Installs the site alongside Microsoft Web Enrollment (certsrv) without modifying it.
@@ -96,7 +96,7 @@
 
 .NOTES
     Author:  Enterprise PKI Team
-    Version: 2.2.1
+    Version: 2.3.0
     Requires: Windows Server 2016+ with the IIS role, local administrator privileges.
     IMPORTANT: This script does NOT modify the "Default Web Site" site or certsrv in any way.
 #>
@@ -336,6 +336,7 @@ $requiredFeatures = @(
     @{ Name = "Web-Http-Logging";       Desc = "Logging HTTP";                 DescEn = "HTTP Logging" },
     @{ Name = "Web-Request-Monitor";    Desc = "Monitor richieste";            DescEn = "Request Monitor" },
     @{ Name = "Web-Filtering";          Desc = "Filtro richieste";             DescEn = "Request Filtering" },
+    @{ Name = "Web-Anonymous-Auth";     Desc = "Autenticazione Anonima";       DescEn = "Anonymous Authentication" },
     @{ Name = "Web-Windows-Auth";       Desc = "Autenticazione Windows";       DescEn = "Windows Authentication" },
     @{ Name = "Web-Stat-Compression";   Desc = "Compressione statica";         DescEn = "Static Content Compression" },
     @{ Name = "Web-Dyn-Compression";    Desc = "Compressione dinamica";        DescEn = "Dynamic Content Compression" },
@@ -1005,6 +1006,26 @@ try {
     if ($UseHttps) {
         Write-OK "Extended Protection (tokenChecking=Allow) abilitata." "Extended Protection (tokenChecking=Allow) enabled."
     }
+
+    # Configurazione accesso Anonimo per endpoint ACME (RFC 8555) e challenge
+    # L'autenticazione ACME avviene tramite firma crittografica JWS (RFC 7515).
+    try {
+        Set-WebConfigurationProperty -PSPath $apphostPath -Location "$SiteName/acme" `
+            -Filter "$authBase/anonymousAuthentication" -Name "enabled" -Value $true -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -PSPath $apphostPath -Location "$SiteName/acme" `
+            -Filter "$authBase/windowsAuthentication" -Name "enabled" -Value $false -ErrorAction SilentlyContinue
+
+        Set-WebConfigurationProperty -PSPath $apphostPath -Location "$SiteName/.well-known" `
+            -Filter "$authBase/anonymousAuthentication" -Name "enabled" -Value $true -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -PSPath $apphostPath -Location "$SiteName/.well-known" `
+            -Filter "$authBase/windowsAuthentication" -Name "enabled" -Value $false -ErrorAction SilentlyContinue
+
+        Write-OK "Endpoint ACME e challenge ('/acme', '/.well-known') configurati con accesso Anonymous." `
+                 "ACME and challenge endpoints ('/acme', '/.well-known') configured with Anonymous access."
+    } catch {
+        Write-Warn "Configurazione location ACME su IIS non riuscita: $($_.Exception.Message)" `
+                   "ACME location configuration on IIS failed: $($_.Exception.Message)"
+    }
 }
 catch {
     # Fail-closed: a PKI portal must not keep running without authentication.
@@ -1187,13 +1208,14 @@ if ($defaultWs -and $defaultWs.State -eq "Started") {
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Green
 if ($script:IsItalian) {
-    Write-Host "  INSTALLAZIONE COMPLETATA (v2.2.1)                              " -ForegroundColor White
+    Write-Host "  INSTALLAZIONE COMPLETATA (v2.3.0)                              " -ForegroundColor White
 } else {
-    Write-Host "  INSTALLATION COMPLETED (v2.2.1)                                " -ForegroundColor White
+    Write-Host "  INSTALLATION COMPLETED (v2.3.0)                                " -ForegroundColor White
 }
 Write-Host "==================================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  $(Msg 'Portale PKI:' 'PKI Portal:')     ${protocol}://localhost:${SitePort}" -ForegroundColor Cyan
+Write-Host "  $(Msg 'ACME Directory:' 'ACME Directory:')  ${protocol}://localhost:${SitePort}/acme/directory" -ForegroundColor Cyan
 if ($SiteHostHeader) {
     Write-Host "  $(Msg 'URL Hostname:' 'Hostname URL:')    ${protocol}://${SiteHostHeader}:${SitePort}" -ForegroundColor Cyan
 }

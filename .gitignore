@@ -18,6 +18,7 @@ DOCUMENTATION.dokuwiki
 *.temp
 *.bak
 held-requests.json
+acme-store.json
 store-entropy.bin
 store-key.bin
 App_Data/
