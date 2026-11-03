@@ -463,6 +463,210 @@ The simulator:
 
 ---
 
+## 🤖 Native ACME Server (RFC 8555) & Automated Renewals
+
+Starting with version **2.3.0**, the PKI Portal includes a **full native RFC 8555 ACME Server** hosted directly inside the ASP.NET Core application process. This allows automated issuance and renewal of TLS/SSL certificates directly against **Microsoft Active Directory Certificate Services (AD CS)**, eliminating external third-party bridge software (such as *ACME-Server-ADCS*, *Smallstep*, *Keyfactor*, or *EJBCA*).
+
+```
+[ Clients: win-acme / Certbot / Traefik / acme.sh ]
+                         │
+                         ▼ (RFC 8555 over HTTPS - JWS / RFC 7515)
+┌────────────────────────────────────────────────────────────────────────┐
+│                   PKI Portal (ASP.NET Core 8)                          │
+│                                                                        │
+│  ├── /                  -> Web Enrollment SPA (Windows Auth)           │
+│  ├── /api/*             -> Portal REST API (Windows Auth)              │
+│  └── /acme/*            -> Native ACME Server RFC 8555 (Anonymous+JWS) │
+│       ├── /directory                                                   │
+│       ├── /new-nonce    (Anti-replay Replay-Nonce header)              │
+│       ├── /new-account  (RSA and ECDSA account key registration)       │
+│       ├── /new-order    (Certificate orders with SANs / DNS names)     │
+│       ├── /authz & /chall (HTTP-01 validation & AutoApprove mode)      │
+│       ├── /order/{id}/finalize (PKCS#10 CSR submission)                │
+│       └── /cert/{id}    (X.509 PEM certificate chain download)         │
+│                                │                                       │
+│                                ▼                                       │
+│                       [ IAdcsService ] (Native)                        │
+└────────────────────────────────┬───────────────────────────────────────┘
+                                 │ DCOM CCertRequest / certreq.exe
+                                 ▼
+              [ Microsoft AD CS Subordinate CA ]
+```
+
+### ACME Endpoints (RFC 8555)
+
+The ACME endpoints operate with **anonymous HTTP transport access** (configured automatically by `Install-PkiPortal.ps1` for `/acme/*` and `/.well-known/*`), while authentication is strictly verified at the application layer via **JWS cryptographic signatures (RFC 7515)**:
+
+|Method|ACME Endpoint|RFC 8555 Description|Authentication|
+|-|-|-|-|
+|`GET`|`/acme/directory`|Directory listing of all ACME resources and endpoints|Anonymous|
+|`GET` / `HEAD`|`/acme/new-nonce`|Provides anti-replay nonces (`Replay-Nonce` header)|Anonymous|
+|`POST`|`/acme/new-account`|Registers client account with public JWK (RSA or ECDSA)|Anonymous + JWS|
+|`GET` / `POST`|`/acme/account/{id}`|Account details query (POST-as-GET)|JWS (`kid`)|
+|`GET` / `POST`|`/acme/account/{id}/orders`|Lists all orders belonging to the account|JWS (`kid`)|
+|`POST`|`/acme/new-order`|Creates a new certificate order for requested DNS SANs|JWS (`kid`)|
+|`GET` / `POST`|`/acme/order/{id}`|Queries order status (`pending`, `ready`, `processing`, `valid`)|JWS (`kid`)|
+|`GET` / `POST`|`/acme/authz/{id}`|Queries authorization and domain challenge status|JWS (`kid`)|
+|`POST`|`/acme/chall/{authId}/{type}`|Triggers challenge verification (`http-01` / `dns-01`)|JWS (`kid`)|
+|`POST`|`/acme/order/{id}/finalize`|Submits Base64Url DER CSR and issues certificate on AD CS|JWS (`kid`)|
+|`GET` / `POST`|`/acme/cert/{id}`|Downloads signed certificate chain (`application/pem-certificate-chain`)|Anonymous / JWS|
+|`POST`|`/acme/revoke-cert`|Certificate revocation|JWS (`kid`)|
+|`POST`|`/acme/key-change`|Account key roll-over|JWS (`kid`)|
+|`GET`|`/acme/terms`|Terms of Service for enterprise automated issuance|Anonymous|
+
+---
+
+### Configuration (`appsettings.json`)
+
+```json
+"AcmeConfig": {
+  "Enabled": true,
+  "BaseUrl": "https://pki.corp.contoso.com",
+  "DefaultCaId": "Contoso Sub CA",
+  "DefaultTemplateName": "WebServer5y",
+  "AllowedTemplates": [
+    "WebServer5y"
+  ],
+  "ValidationMode": "Http01",
+  "HttpPort": 80,
+  "ChallengeTimeoutSeconds": 15,
+  "RequireTermsOfServiceAgreed": true,
+  "TermsOfServiceUrl": "/acme/terms"
+}
+```
+
+* **`BaseUrl`**: Public or corporate URL of the portal (e.g., `https://pki.corp.contoso.com`). Inferred automatically from HTTP requests if left blank.
+* **`DefaultCaId`**: Target AD CS Certification Authority ID (defined in `PortalConfig.cas`) used for ACME requests.
+* **`DefaultTemplateName`**: Default AD CS certificate template name (e.g., `WebServer5y` or `WebServer`).
+* **`ValidationMode`**:
+  * `"Http01"` (default): Standard RFC 8555 Section 8.3 validation. The portal queries port 80 of the target host at `http://<domain>/.well-known/acme-challenge/<token>`.
+  * `"AutoApprove"`: Immediate approval without outbound HTTP requests. **Recommended for isolated air-gapped networks, micro-segmented VLANs, or testing labs.**
+  * `"Http01WithAutoFallback"`: Attempts real HTTP-01 verification and falls back to approval if the target host is unreachable.
+* **`HttpPort`**: Target port for `http-01` challenge validation (default: `80`).
+
+---
+
+### 1. End-to-End Verification with `Test-AcmeProtocol.ps1`
+
+The repository includes a complete automated test script that verifies the full ACME protocol without external dependencies:
+
+```powershell
+# Run end-to-end ACME test against local or remote portal
+.\Test-AcmeProtocol.ps1 -PortalUrl "https://pki.corp.contoso.com" -DomainName "server01.corp.contoso.com"
+```
+
+The script automatically executes:
+1. Directory discovery and initial nonce retrieval.
+2. In-memory generation of an RSA-2048 account key and computation of the RFC 7638 JWK Thumbprint.
+3. JWS-signed account registration (`RS256`).
+4. New order creation for the requested domain.
+5. Authorization retrieval and HTTP-01 challenge submission.
+6. In-memory generation of a server key pair, PKCS#10 CSR, and SAN extensions.
+7. Order finalization and AD CS certificate issuance.
+8. Download of the signed X.509 certificate chain and cryptographic property inspection (Subject, Issuer, Validity, Thumbprint).
+
+---
+
+### 2. Windows Client: `win-acme` (`wacs.exe`)
+
+`win-acme` is the reference ACME client for Windows Server and IIS.
+
+#### A. Automated IIS Site Binding
+```powershell
+# Run wacs.exe from an Administrator prompt:
+.\wacs.exe --baseurl "https://pki.corp.contoso.com/acme/directory" `
+           --target iis `
+           --siteid 1 `
+           --validation selfhosting `
+           --accepttos `
+           --emailaddress "admin@corp.contoso.com"
+```
+* `win-acme` creates a scheduled task in **Windows Task Scheduler** to check and automatically renew certificates before expiration.
+
+#### B. Manual Target / PFX Generation for Non-IIS Services
+```powershell
+.\wacs.exe --baseurl "https://pki.corp.contoso.com/acme/directory" `
+           --target manual `
+           --host "service.corp.contoso.com" `
+           --validation filesystem `
+           --webroot "C:\inetpub\wwwroot" `
+           --store certman
+```
+
+---
+
+### 3. Linux Client: `Certbot`
+
+For Linux servers (Nginx, Apache, appliances, or Docker containers):
+
+#### A. Standalone Mode (Port 80)
+```bash
+certbot certonly --standalone \
+  --server "https://pki.corp.contoso.com/acme/directory" \
+  --email "admin@corp.contoso.com" \
+  --agree-tos \
+  -d "app01.corp.contoso.com"
+```
+
+#### B. Webroot Mode (With Nginx / Apache running)
+```bash
+certbot certonly --webroot -w /var/www/html \
+  --server "https://pki.corp.contoso.com/acme/directory" \
+  --email "admin@corp.contoso.com" \
+  --agree-tos \
+  -d "web01.corp.contoso.com"
+```
+
+#### C. Automatic Renewal Dry-Run Test
+```bash
+certbot renew --dry-run
+```
+
+---
+
+### 4. Custom Automation via REST API (PowerShell & Bash)
+
+For CI/CD pipelines (Ansible, GitLab CI, GitHub Actions) or custom scripts:
+
+#### PowerShell Example
+```powershell
+# Read locally generated CSR
+$csr = Get-Content -Path "C:\certs\server01.csr" -Raw
+
+$body = @{
+    CaId = "Contoso Sub CA"
+    TemplateName = "WebServer5y"
+    CsrPem = $csr
+} | ConvertTo-Json
+
+# Submit request using current domain credentials (Negotiate/NTLM)
+$response = Invoke-RestMethod -Uri "https://pki.corp.contoso.com/api/certificates/request" `
+    -Method Post `
+    -Body $body `
+    -ContentType "application/json" `
+    -UseDefaultCredentials
+
+if ($response.success -and $response.disposition -eq "Issued") {
+    $response.certificatePem | Out-File "C:\certs\server01.cer" -Encoding ascii
+    Write-Host "Certificate issued successfully!" -ForegroundColor Green
+}
+```
+
+#### Linux cURL Example (Kerberos SPNEGO)
+```bash
+curl --negotiate -u : -X POST "https://pki.corp.contoso.com/api/certificates/request" \
+  -H "Content-Type: application/json" \
+  -d @- <<EOF
+{
+  "caId": "Contoso Sub CA",
+  "templateName": "WebServer5y",
+  "csrPem": "$(cat /etc/ssl/server.csr | sed ':a;N;$!ba;s/\n/\\n/g')"
+}
+EOF
+```
+
+---
+
 ## 📡 User REST Endpoints
 
 |Method|Endpoint|Description|Permission|
