@@ -1,4 +1,4 @@
-# Segreti e configurazioni locali
+﻿# Segreti e configurazioni locali
 .env
 .env.*
 *.key
@@ -41,3 +41,5 @@ AppData/
 # File del sistema operativo
 .DS_Store
 Thumbs.db
+
+publish/
