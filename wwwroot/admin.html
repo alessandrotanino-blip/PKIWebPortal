@@ -1339,6 +1339,26 @@
       return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    function setAcmeDirectoryLink(baseUrl) {
+      const trimmedBaseUrl = (baseUrl || '').trim().replace(/\/$/, '');
+      let directoryUrl = '/acme/directory';
+      if (trimmedBaseUrl) {
+        try {
+          const parsedBaseUrl = new URL(trimmedBaseUrl);
+          if (parsedBaseUrl.protocol === 'http:' || parsedBaseUrl.protocol === 'https:') {
+            parsedBaseUrl.pathname = parsedBaseUrl.pathname.replace(/\/$/, '') + '/acme/directory';
+            parsedBaseUrl.search = '';
+            parsedBaseUrl.hash = '';
+            directoryUrl = parsedBaseUrl.href;
+          }
+        } catch { }
+      }
+
+      const dirLink = document.getElementById('acme-directory-link');
+      dirLink.href = directoryUrl;
+      dirLink.textContent = trimmedBaseUrl ? trimmedBaseUrl + '/acme/directory' : directoryUrl;
+    }
+
     // ===== ACME Configuration Tab =====
 
     let acmeConfig = null;
@@ -1372,13 +1392,7 @@
       document.getElementById('acme-require-tos').checked    = c.requireTermsOfServiceAgreed ?? c.RequireTermsOfServiceAgreed ?? true;
       document.getElementById('acme-tos-url').value          = c.termsOfServiceUrl ?? c.TermsOfServiceUrl ?? '/acme/terms';
 
-      // Update directory link with BaseUrl if available
-      const baseUrl = document.getElementById('acme-baseurl').value.replace(/\/$/, '');
-      const dirLink = document.getElementById('acme-directory-link');
-      if (baseUrl) {
-        dirLink.href = baseUrl + '/acme/directory';
-        dirLink.textContent = baseUrl + '/acme/directory';
-      }
+      setAcmeDirectoryLink(document.getElementById('acme-baseurl').value);
     }
 
     async function saveAcmeConfig() {
@@ -1447,15 +1461,7 @@
 
       // Update directory link when BaseUrl changes
       document.getElementById('acme-baseurl').addEventListener('input', (e) => {
-        const baseUrl = e.target.value.trim().replace(/\/$/, '');
-        const dirLink = document.getElementById('acme-directory-link');
-        if (baseUrl) {
-          dirLink.href = baseUrl + '/acme/directory';
-          dirLink.textContent = baseUrl + '/acme/directory';
-        } else {
-          dirLink.href = '/acme/directory';
-          dirLink.textContent = '/acme/directory';
-        }
+        setAcmeDirectoryLink(e.target.value);
       });
     }
   })();
