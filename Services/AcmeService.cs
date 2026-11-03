@@ -209,7 +209,7 @@ public class AcmeService : IAcmeService
 
         if (!string.Equals(account!.Id, target.Id, StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogWarning("Tentativo di lettura account altrui ({Requested}) dall'account {Actual}.", accountId, account.Id);
+            _logger.LogWarning("Tentativo di lettura non autorizzato di un account ACME.");
             return (Problem(AcmeErrorTypes.Unauthorized, "L'account autenticato non corrisponde a quello richiesto.", 403), newNonce);
         }
 
