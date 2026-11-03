@@ -10,6 +10,7 @@ public interface IAcmeCryptoService
     string Base64UrlDecodeToString(string input);
 
     string ComputeJwkThumbprint(AcmeJwk jwk);
+    bool ValidateJwkStrength(AcmeJwk jwk, out string? errorMessage);
     AcmeJwsHeader? ParseProtectedHeader(string protectedHeaderB64);
     bool VerifyJwsSignature(string protectedHeaderB64, string payloadB64, string signatureB64, AcmeJwk jwk, out string? errorMessage);
     string ConvertDerCsrToPem(byte[] derCsr);

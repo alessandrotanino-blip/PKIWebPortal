@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -13,6 +13,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- SECURITY (2.3.1 - TODO): aggiornare a 8.0.32 appena possibile: 8.0.31 è
+         vulnerabile a CVE-2026-70179 (GHSA-vrrp-6v32-2p8g, elevation of privilege
+         in Negotiate/LDAP claim resolution). Bloccato in questo ambiente da
+         TLS MITM su nuget.org. -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" Version="8.0.31" />
   </ItemGroup>
 

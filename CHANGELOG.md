@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 [🇮🇹 Italiano](CHANGELOG.md) | [🇬🇧 English](CHANGELOG.en.md)
 
@@ -7,6 +7,23 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
 ## [2.3.1] - 2026-11-03
+
+### Sicurezza & Hardening (Security Review Server ACME)
+
+- **Binding CSR↔Ordine (critica)**: `finalize` verifica ora che CN e tutte le SAN DNS del CSR siano contenuto degli identifier dell'ordine ACME; SAN IP, email e URI sono rifiutate. Non è più possibile ottenere un certificato per domini diversi da quelli ordinati/validati (il CSR viene analizzato a livello DER, compatibile con .NET 8).
+- **Mitigazione SSRF via http-01 (critica)**: l'identifier della challenge deve essere un hostname DNS pubblico (rifiutati IP letterali, hostname >253, caratteri speciali). Se anche solo uno degli indirizzi risolti è privato/riservato (10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, 100.64/10, fc00::/7, ecc.) la validazione viene rifiutata. La risposta HTTP del host non viene più ritrasmessa al client: i dettagli restano solo nei log server.
+- **Allowlist domini (critica)**: nuovo `AcmeConfig.AllowedDomains` (match esatto o sottodominio). Se non vuota, `new-order` per domini fuori lista → 400 `rejectedIdentifier`. Nelle modalità `AutoApprove`/`Http01WithAutoFallback` la lista è obbligatoria: senza, nessun ordine è accettato. I domini wildcard (`*.`) sono sempre rifiutati.
+- **Ownership degli account (alta)**: letture `/acme/account/{id}`, `/acme/order/{id}`, `/acme/authz/{id}` ora richiedono JWS valido: senza firma → 401; con JWS di account diverso → 403 (fix IDOR). JWS con chiave non registrata → 404 `accountDoesNotExist` (autenticazione con chiavi effimere più possibile).
+- **Revoca certificati effettiva (alta)**: `revoke-cert` esegue la revoca reale su AD CS (`certutil -revoke` sotto impersonazione dell'account CA); se la revoca fallisce viene restituito 500 (nessun falso successo). I certificati revocati non sono più scaricabili (404).
+- **Key change reale (alta)**: `key-change` valida il JWS esterno (chiave vecchia) e quello interno (chiave nuova), verifica la forza della nuova chiave e aggiorna JWK/thumbprint dell'account.
+- **Persistenza completa dello stato ACME (alta)**: lo store persiste JWK, thumbprint, associazione ordine↔account, CA, template, request ID, catena certificati e timestamp di revoca: dopo un recycle di IIS gli account mantengono le chiavi e i certificati restano scaricabili.
+- **Hardening JWS**: allow-list di algoritmi (niente `none`/sconosciuti), RSA ≥ 2048 bit con esponente valido, curve EC solo P-256/P-384/P-521 (con verifica che alg e curva coincidano), body JWS ≤ 32 KiB, nonce a uso singolo (replay → `badNonce`) con hard cap ed eviction (anti crescita di memoria).
+- **Espiry e limiti**: ordini/autorizzazioni scadono (`pending` → `expired`), max 10 identifier per ordine, body challenge ≤ 4 KiB, timeout http-01 gestito per singola richiesta (niente più mutazione del timeout del client condiviso).
+- **Enable flag e TLS**: con `AcmeConfig.Enabled = false` gli endpoint `/acme/*` rispondono 503; le richieste HTTP non-localhost vengono redirette a HTTPS (301).
+- **Admin API e GUI**: `PUT /api/admin/acme-config` valida Base URL (http/https assoluto), `AllowedTemplates`/`DefaultTemplateName` (regex), `AllowedDomains` (hostname per voce), `TermsOfServiceUrl` e impone `AllowedDomains` non vuota in `AutoApprove`. Scrittura di `appsettings.json` resa atomica (file temporaneo + move). Nuovo campo CSV `AllowedDomains` nel pannello admin.
+- **Robustness del logging**: pipeline di logging resa esplicita (solo console) — il provider Windows EventLog di default, in assenza di permesso di scrittura, non fa più crollare le richieste in corso (inclusi i codici di rifiuto di sicurezza).
+- **Test di sicurezza automatizzati**: aggiunto `Test-AcmeSecurity.ps1` con 9 scenari di regression (401 anonimi, 404 chiave non registrata, wildcard, allowlist, binding CSR, SAN IP, replay nonce, JWS oversize, IDOR 403).
+- **TODO (esterno)**: aggiornare `Microsoft.AspNetCore.Authentication.Negotiate` 8.0.31 → **8.0.32** per CVE-2026-70179 (GHSA-vrrp-6v32-2p8g, elevation of privilege in Negotiate/LDAP). Bloccato in questo ambiente da TLS MITM su nuget.org; è un cambio di una riga in `PkiPortal.csproj` (segnalato con commento TODO).
 
 ### Miglioramenti UX
 

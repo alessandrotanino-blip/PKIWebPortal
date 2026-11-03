@@ -20,4 +20,10 @@ public interface IAcmeStore
 
     Task<AcmeChallenge?> GetChallengeAsync(string authId, string type);
     Task<AcmeChallenge> SaveChallengeAsync(AcmeChallenge challenge);
+
+    /// <summary>
+    /// SECURITY (2.3.1): restituisce l'ordine il cui certificato emesso ha il
+    /// thumbprint specificato (per la revoca ACME, RFC 8555 Sez. 7.6).
+    /// </summary>
+    Task<AcmeOrder?> FindOrderByCertificateThumbprintAsync(string thumbprint);
 }

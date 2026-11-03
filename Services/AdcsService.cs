@@ -556,6 +556,127 @@ public class AdcsService : IAdcsService
         return caResult;
     }
 
+    /// <summary>
+    /// SECURITY (2.3.1): revoca di un certificato emesso via certutil
+    /// (-revoke &lt;serial&gt; &lt;motivo&gt;), eseguito nel contesto di sicurezza
+    /// della CA (Credential Manager o identità locale).
+    /// </summary>
+    public async Task<CertificateRevocationResponse> RevokeCertificateAsync(string? caId, string serialNumber, string reason)
+    {
+        // SECURITY: anti-iniezione — il serial è un token esadecimale stretto.
+        if (string.IsNullOrWhiteSpace(serialNumber) ||
+            !Regex.IsMatch(serialNumber, @"^[0-9A-Fa-f]{1,32}$"))
+        {
+            return new CertificateRevocationResponse
+            {
+                Success = false,
+                StatusMessage = "Numero seriale certificato non valido."
+            };
+        }
+
+        var ca = await GetCaConfigAsync(caId);
+        if (ca == null)
+        {
+            return new CertificateRevocationResponse
+            {
+                Success = false,
+                StatusMessage = "Configurazione CA non trovata."
+            };
+        }
+
+        if (ca.UseSimulator || !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return new CertificateRevocationResponse
+            {
+                Success = false,
+                StatusMessage = "Revoca non supportata in modalità simulatore o al di fuori di Windows."
+            };
+        }
+
+        // Motivo: solo caratteri stampabili, troncati (va passato come singolo
+        // argomento a certutil, senza shell).
+        string safeReason = new string((reason ?? "Revoca ACME").Take(120)
+            .Where(c => !char.IsControl(c)).ToArray());
+
+        _logger.LogInformation("Revoca certificato AD CS {Serial} presso CA '{CaId}' (motivo: {Reason}).", serialNumber, ca.Id, SanitizeForLog(safeReason));
+
+        var result = await ExecuteInSecurityContextAsync(ca, async () =>
+            await RevokeViaCertutilAsync(ca.ConfigString, serialNumber, safeReason));
+
+        return result;
+    }
+
+    private async Task<CertificateRevocationResponse> RevokeViaCertutilAsync(string configString, string serialNumber, string reason)
+    {
+        if (!CaConfigStringRegex.IsMatch(configString))
+        {
+            return new CertificateRevocationResponse
+            {
+                Success = false,
+                StatusMessage = "ConfigString CA non valida."
+            };
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "certutil.exe",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-config");
+        startInfo.ArgumentList.Add(configString);
+        startInfo.ArgumentList.Add("-revoke");
+        startInfo.ArgumentList.Add(serialNumber);
+        startInfo.ArgumentList.Add(reason);
+
+        using var process = new Process { StartInfo = startInfo };
+        var stdoutBuilder = new StringBuilder();
+        var stderrBuilder = new StringBuilder();
+        process.OutputDataReceived += (s, e) => { if (e.Data != null) stdoutBuilder.AppendLine(e.Data); };
+        process.ErrorDataReceived += (s, e) => { if (e.Data != null) stderrBuilder.AppendLine(e.Data); };
+
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        int exitCode;
+        try
+        {
+            await process.WaitForExitAsync(cts.Token);
+            exitCode = process.ExitCode;
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            return new CertificateRevocationResponse
+            {
+                Success = false,
+                StatusMessage = "Timeout: certutil -revoke non ha risposto entro 30 secondi."
+            };
+        }
+
+        string stdout = stdoutBuilder.ToString();
+        string stderr = stderrBuilder.ToString();
+        _logger.LogInformation("Output certutil -revoke {Serial} (exit {ExitCode}):\nSTDOUT: {Stdout}\nSTDERR: {Stderr}",
+            serialNumber, exitCode, SanitizeForLog(stdout), SanitizeForLog(stderr));
+
+        bool success = exitCode == 0 &&
+            !stdout.Contains("0x8009", StringComparison.OrdinalIgnoreCase) &&
+            !stderr.Contains("0x8009", StringComparison.OrdinalIgnoreCase);
+
+        return new CertificateRevocationResponse
+        {
+            Success = success,
+            StatusMessage = success
+                ? "Certificato revocato con successo."
+                : $"certutil -revoke ha restituito codice di uscita {exitCode}.",
+            RawOutput = stdout + (string.IsNullOrWhiteSpace(stderr) ? "" : "\n[STDERR]\n" + stderr)
+        };
+    }
+
     #region Gestione Contesto di Sicurezza & Windows Credential Manager
 
     /// <summary>
@@ -564,6 +685,48 @@ public class AdcsService : IAdcsService
     ///   effettua un LogonUser (NewCredentials) ed impersona il contesto di rete verso la foresta remota.
     /// - Se AuthMode == "LocalIdentity" (default): esegue direttamente con l'identità dell'App Pool locale.
     /// </summary>
+    /// <summary>
+    /// SECURITY (2.3.1): overload generico del contesto di sicurezza
+    /// (usato dalla revoca certificati, che restituisce un tipo di risposta
+    /// diverso dalla sottomissione).
+    /// </summary>
+    private async Task<T> ExecuteInSecurityContextAsync<T>(CaConfig ca, Func<Task<T>> action)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ||
+            !string.Equals(ca.AuthMode, "CredentialManager", StringComparison.OrdinalIgnoreCase))
+        {
+            // Modalità Locale / Integrated Identity
+            return await action();
+        }
+
+        CredentialInfo? credGen = ReadCredentialFromManager(ca.CredentialTarget ?? ExtractHostFromConfigString(ca.ConfigString));
+        if (credGen == null)
+        {
+            _logger.LogWarning("Nessuna credenziale trovata in Windows Credential Manager per il target '{Target}'. Tentativo di esecuzione con identità locale.", ca.CredentialTarget ?? ExtractHostFromConfigString(ca.ConfigString));
+            return await action();
+        }
+
+        SafeAccessTokenHandle? tokenHandleGen = null;
+        try
+        {
+            bool logonOkGen = LogonUser(credGen.Username, credGen.Domain, credGen.Password,
+                9 /*LOGON32_LOGON_NEW_CREDENTIALS*/, 3 /*LOGON32_PROVIDER_WINNT50*/, out tokenHandleGen);
+
+            if (!logonOkGen || tokenHandleGen.IsInvalid)
+            {
+                int errorGen = Marshal.GetLastWin32Error();
+                _logger.LogError("LogonUser fallito per {Domain}\\{User} (Win32 Error: {Error})", credGen.Domain, credGen.Username, errorGen);
+                throw new Win32Exception(errorGen, "Impossibile autenticarsi con le credenziali del Credential Manager.");
+            }
+
+            return await WindowsIdentity.RunImpersonated(tokenHandleGen, async () => await action());
+        }
+        finally
+        {
+            tokenHandleGen?.Dispose();
+        }
+    }
+
     private async Task<CertificateSubmissionResponse> ExecuteInSecurityContextAsync(CaConfig ca, Func<Task<CertificateSubmissionResponse>> action)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ||

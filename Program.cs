@@ -8,6 +8,18 @@ using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ROBUSTNESS (2.3.1): la pipeline di logging di default su Windows include il
+// provider EventLog (source ".NET Runtime"). Se l'account che esegue l'app
+// (app pool limitato, sandbox, container) non ha accesso in scrittura alla
+// source, OGNI log Warning/Error lancia AggregateException e fa crollare la
+// richiesta in corso — incluse le risposte di rifiuto di sicurezza
+// (400/401/403). Provider reso deterministico: solo console, sempre
+// disponibile (catturabile via stdoutout.log in IIS out-of-process).
+// Se si desidera il logging nell'Event Log, aggiungere esplicitamente
+// builder.Logging.AddEventLog(source, logName) con un account abilitato.
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+
 // Configurazione servizi
 builder.Services.Configure<PortalConfig>(builder.Configuration.GetSection("PortalConfig"));
 builder.Services.Configure<AcmeConfig>(builder.Configuration.GetSection("AcmeConfig"));
@@ -103,6 +115,39 @@ app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// SECURITY (2.3.1): guardia ACME — applica la flag "Enabled" (ignorata
+// finora: disattivare ACME dal GUI non aveva effetto) e impone TLS sul
+// percorso /acme (RFC 8555 Sez. 15.1.1: l'ACME MUST transitare su HTTPS;
+// i JWS contengono nonces e le chiavi pubbliche degli account).
+// L'HTTP in chiaro resta consentito solo verso localhost (sviluppo/test).
+app.Use(async (ctx, next) =>
+{
+    if (ctx.Request.Path.StartsWithSegments("/acme"))
+    {
+        var acmeCfg = ctx.RequestServices.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<AcmeConfig>>().CurrentValue;
+        if (acmeCfg is { Enabled: false })
+        {
+            ctx.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            ctx.Response.ContentType = "application/problem+json";
+            await ctx.Response.WriteAsync(
+                "{\"type\":\"urn:ietf:params:acme:error:serverInternal\",\"detail\":\"Il server ACME è disabilitato.\",\"status\":503}");
+            return;
+        }
+
+        if (ctx.Request.Scheme == "http")
+        {
+            bool isLocalhost = ctx.Request.Host.Host is "localhost" or "127.0.0.1" or "[::1]";
+            if (!isLocalhost)
+            {
+                ctx.Response.StatusCode = StatusCodes.Status301MovedPermanently;
+                ctx.Response.Headers.Location = $"https://{ctx.Request.Host}{ctx.Request.Path}{ctx.Request.QueryString}";
+                return;
+            }
+        }
+    }
+    await next();
+});
 
 // SECURITY (2.1.0): rate limiter DOPO l'autenticazione, così la partizione
 // può usare l'identità dell'utente.
@@ -622,19 +667,70 @@ admin.MapPut("/acme-config", async (HttpContext ctx, AcmeConfig newAcmeCfg) =>
         return CsrfDenied();
 
     // Validazione input
-    if (!string.IsNullOrEmpty(newAcmeCfg.BaseUrl) &&
-        !Uri.TryCreate(newAcmeCfg.BaseUrl, UriKind.Absolute, out _))
-        return Results.BadRequest(new { message = "BaseUrl non è un URL assoluto valido." });
+    // SECURITY (2.3.1): BaseUrl deve essere un URL http/https (esclude
+    // javascript:, file:, ftp:, …).
+    if (!string.IsNullOrEmpty(newAcmeCfg.BaseUrl))
+    {
+        if (!Uri.TryCreate(newAcmeCfg.BaseUrl, UriKind.Absolute, out var baseUrlUri) ||
+            (!baseUrlUri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+             !baseUrlUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Results.BadRequest(new { message = "BaseUrl deve essere un URL assoluto con schema http o https." });
+        }
+    }
 
     var validModes = new[] { "Http01", "AutoApprove", "Http01WithAutoFallback" };
     if (!validModes.Contains(newAcmeCfg.ValidationMode, StringComparer.OrdinalIgnoreCase))
         return Results.BadRequest(new { message = $"ValidationMode non valido. Valori accettati: {string.Join(", ", validModes)}." });
+
+    // SECURITY (2.3.1, C3): in modalità AutoApprove la validazione del dominio
+    // è assente per definizione: l'allowlist AllowedDomains diventa
+    // obbligatoria, altrimenti il server diventerebbe un "oracle" di
+    // certificati per qualsiasi nome (anche interno).
+    if (string.Equals(newAcmeCfg.ValidationMode, "AutoApprove", StringComparison.OrdinalIgnoreCase) &&
+        (newAcmeCfg.AllowedDomains == null || !newAcmeCfg.AllowedDomains.Any(d => !string.IsNullOrWhiteSpace(d))))
+    {
+        return Results.BadRequest(new { message = "Con ValidationMode 'AutoApprove' è obbligatorio impostare almeno un dominio in AllowedDomains." });
+    }
 
     if (newAcmeCfg.HttpPort is < 1 or > 65535)
         return Results.BadRequest(new { message = "HttpPort deve essere compreso tra 1 e 65535." });
 
     if (newAcmeCfg.ChallengeTimeoutSeconds is < 5 or > 120)
         return Results.BadRequest(new { message = "ChallengeTimeoutSeconds deve essere compreso tra 5 e 120." });
+
+    // SECURITY (2.3.1): template e domini — forme strette anti-iniezione
+    // (i template finiscono in parametri di certreq/certutil).
+    var templateShape = new System.Text.RegularExpressions.Regex(@"^[A-Za-z0-9_-]{1,64}$");
+    foreach (var t in (newAcmeCfg.AllowedTemplates ?? new List<string>()))
+    {
+        if (!templateShape.IsMatch(t ?? string.Empty))
+            return Results.BadRequest(new { message = $"Nome template non valido: '{t}'." });
+    }
+    if (!string.IsNullOrWhiteSpace(newAcmeCfg.DefaultTemplateName) &&
+        !templateShape.IsMatch(newAcmeCfg.DefaultTemplateName))
+        return Results.BadRequest(new { message = $"DefaultTemplateName non valido: '{newAcmeCfg.DefaultTemplateName}'." });
+
+    var domainShape = new System.Text.RegularExpressions.Regex(@"^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$");
+    foreach (var d in (newAcmeCfg.AllowedDomains ?? new List<string>()))
+    {
+        if (!domainShape.IsMatch((d ?? string.Empty).Trim()))
+            return Results.BadRequest(new { message = $"Dominio non valido in AllowedDomains: '{d}'." });
+    }
+
+    // SECURITY (2.3.1): ToS URL — relativo (deve iniziare con '/') o
+    // assoluto http/https: viene concatenato/inserito nella directory ACME.
+    if (!string.IsNullOrWhiteSpace(newAcmeCfg.TermsOfServiceUrl))
+    {
+        var tos = newAcmeCfg.TermsOfServiceUrl.Trim();
+        bool tosOk = tos.StartsWith('/') ||
+            (tos.StartsWith("http", StringComparison.OrdinalIgnoreCase) &&
+             Uri.TryCreate(tos, UriKind.Absolute, out var tosUri) &&
+             (tosUri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+              tosUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)));
+        if (!tosOk)
+            return Results.BadRequest(new { message = "TermsOfServiceUrl deve essere un percorso relativo (inizia con '/') o un URL http/https." });
+    }
 
     await configSaveLock.WaitAsync();
     try
@@ -663,8 +759,12 @@ admin.MapPut("/acme-config", async (HttpContext ctx, AcmeConfig newAcmeCfg) =>
             }
             root["AcmeConfig"] = newAcmeCfg;
 
+            // SECURITY (2.3.1): scrittura atomica (tmp + move) — un crash a
+            // metà scrittura non deve corrompere appsettings.json.
             string updatedJson = JsonSerializer.Serialize(root, options);
-            await File.WriteAllTextAsync(filePath, updatedJson);
+            string tmpPath = filePath + ".acmetmp";
+            await File.WriteAllTextAsync(tmpPath, updatedJson);
+            File.Move(tmpPath, filePath, overwrite: true);
         }
 
         (app.Configuration as IConfigurationRoot)?.Reload();
@@ -895,6 +995,13 @@ async Task<AcmeJwsRequest?> ReadAcmeJwsAsync(HttpContext ctx)
 {
     try
     {
+        // SECURITY (2.3.1): limite di dimensione del body JWS (RFC 8555
+        // Sez. 6.2: 32 KiB) — impedisce a payload maliziosi di grande
+        // dimensione di consumare memoria/CPU nel parsing.
+        if (ctx.Request.ContentLength is long cl and > (32 * 1024))
+        {
+            return null;
+        }
         return await ctx.Request.ReadFromJsonAsync<AcmeJwsRequest>();
     }
     catch

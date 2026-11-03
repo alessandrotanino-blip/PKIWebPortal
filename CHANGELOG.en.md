@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 [🇬🇧 English](CHANGELOG.en.md) | [🇮🇹 Italiano](CHANGELOG.md)
 
@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 
 ## [2.3.1] - 2026-11-03
+
+### Security & Hardening (ACME Server Security Review)
+
+- **CSR↔Order binding (critical)**: `finalize` now verifies that the CSR CN and all DNS SANs are a subset of the ACME order identifiers; IP, email and URI SANs are rejected. It is no longer possible to obtain a certificate for names different from the ordered/validated ones (the CSR is parsed at the DER level, .NET 8 compatible).
+- **SSRF mitigation via http-01 (critical)**: the challenge identifier must be a public DNS hostname (IP literals, hostnames >253 chars and special characters are rejected). If any resolved address is private/reserved (10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, 100.64/10, fc00::/7, etc.) the validation is rejected. The HTTP response from the target host is no longer echoed to the client: details stay in server logs only.
+- **Domain allowlist (critical)**: new `AcmeConfig.AllowedDomains` (exact or subdomain match). When non-empty, `new-order` for out-of-list domains → 400 `rejectedIdentifier`. In `AutoApprove`/`Http01WithAutoFallback` modes the list is mandatory: without it, no order is accepted. Wildcard domains (`*.`) are always rejected.
+- **Account ownership (high)**: reads of `/acme/account/{id}`, `/acme/order/{id}`, `/acme/authz/{id}` now require a valid JWS: unsigned → 401; JWS from a different account → 403 (IDOR fix). JWS with an unregistered key → 404 `accountDoesNotExist` (ephemeral-key authentication no longer possible).
+- **Effective certificate revocation (high)**: `revoke-cert` now performs a real revocation on AD CS (`certutil -revoke` under CA account impersonation); if the CA cannot revoke, 500 is returned (no fake success). Revoked certificates can no longer be downloaded (404).
+- **Real key change (high)**: `key-change` validates the outer JWS (old key) and the inner JWS (new key), checks the new key strength and updates the account JWK/thumbprint.
+- **Full ACME state persistence (high)**: the store now persists JWK, thumbprint, order↔account association, CA, template, request ID, certificate chain and revocation timestamp: after an IIS recycle accounts keep their keys and certificates remain downloadable.
+- **JWS hardening**: algorithm allowlist (no `none`/unknown), RSA ≥ 2048-bit with valid exponent, EC curves limited to P-256/P-384/P-521 (alg/curve consistency checked), JWS body ≤ 32 KiB, single-use nonces (replay → `badNonce`) with hard cap and eviction (anti memory growth).
+- **Expiry and limits**: orders/authorizations expire (`pending` → `expired`), max 10 identifiers per order, challenge body ≤ 4 KiB, http-01 timeout managed per request (no more mutation of the shared client timeout).
+- **Enable flag and TLS**: with `AcmeConfig.Enabled = false`, `/acme/*` endpoints answer 503; non-localhost HTTP requests are redirected to HTTPS (301).
+- **Admin API and GUI**: `PUT /api/admin/acme-config` validates Base URL (absolute http/https), `AllowedTemplates`/`DefaultTemplateName` (regex), `AllowedDomains` (hostname per entry), `TermsOfServiceUrl`, and requires a non-empty `AllowedDomains` in `AutoApprove`. `appsettings.json` write is now atomic (temp file + move). New CSV `AllowedDomains` field in the admin panel.
+- **Logging robustness**: the logging pipeline is now explicit (console only) — the default Windows EventLog provider, when it lacks write permission, no longer crashes in-flight requests (including security rejection responses).
+- **Automated security tests**: added `Test-AcmeSecurity.ps1` with 9 regression scenarios (anonymous 401, unregistered key 404, wildcard, allowlist, CSR binding, IP SAN, nonce replay, oversized JWS, IDOR 403).
+- **TODO (external)**: bump `Microsoft.AspNetCore.Authentication.Negotiate` 8.0.31 → **8.0.32** for CVE-2026-70179 (GHSA-vrrp-6v32-2p8g, elevation of privilege in Negotiate/LDAP). Blocked in this environment by TLS MITM on nuget.org; it is a one-line change in `PkiPortal.csproj` (marked with a TODO comment).
 
 ### UX Improvements
 

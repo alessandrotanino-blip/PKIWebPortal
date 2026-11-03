@@ -35,6 +35,16 @@ public class CertificateStatusQueryRequest
     public int RequestId { get; set; }
 }
 
+/// <summary>
+/// SECURITY (2.3.1): risposta di revoca certificato AD CS (revoca ACME RFC 8555 Sez. 7.6).
+/// </summary>
+public class CertificateRevocationResponse
+{
+    public bool Success { get; set; }
+    public string StatusMessage { get; set; } = string.Empty;
+    public string? RawOutput { get; set; }
+}
+
 public class CsrParseRequest
 {
     public string CsrPem { get; set; } = string.Empty;

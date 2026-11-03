@@ -112,6 +112,97 @@ public class AcmeCryptoService : IAcmeCryptoService
         }
     }
 
+    /// <summary>
+    /// SECURITY (2.3.1): valida la forza minima della chiave pubblica di un
+    /// account ACME prima della registrazione (RFC 8555 Sez. 6.2):
+    /// RSA &lt; 2048 bit e chiavi degenerate rifiutate; per EC solo curve
+    /// NIST P-256/384/521 con coordinate coerenti.
+    /// </summary>
+    public bool ValidateJwkStrength(AcmeJwk jwk, out string? errorMessage)
+    {
+        errorMessage = null;
+        try
+        {
+            if (string.Equals(jwk.Kty, "RSA", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(jwk.N) || string.IsNullOrEmpty(jwk.E))
+                {
+                    errorMessage = "Parametri RSA mancanti (n o e).";
+                    return false;
+                }
+
+                byte[] modulus = Base64UrlDecode(jwk.N);
+                byte[] exponent = Base64UrlDecode(jwk.E);
+
+                // Dimensione minima del modulo: 2048 bit (256 byte).
+                if (modulus.Length < 256)
+                {
+                    errorMessage = $"Chiave RSA troppo debole: il modulo deve avere almeno 2048 bit (ricevuti {modulus.Length * 8}).";
+                    return false;
+                }
+
+                // Esponente: piccolo intero dispari >= 3 (standard: 65537).
+                if (exponent.Length == 0 || exponent.Length > 8)
+                {
+                    errorMessage = "Esponente RSA non valido.";
+                    return false;
+                }
+                ulong e = 0;
+                for (int i = exponent.Length - 1; i >= 0; i--) e = (e << 8) | exponent[i];
+                if (e < 3 || e % 2 == 0)
+                {
+                    errorMessage = "Esponente RSA non valido (deve essere dispari e >= 3).";
+                    return false;
+                }
+
+                return true;
+            }
+            else if (string.Equals(jwk.Kty, "EC", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(jwk.X) || string.IsNullOrEmpty(jwk.Y) || string.IsNullOrEmpty(jwk.Crv))
+                {
+                    errorMessage = "Parametri EC mancanti (x, y o crv).";
+                    return false;
+                }
+
+                string crv = (jwk.Crv ?? string.Empty).ToUpperInvariant();
+                int expected = crv switch
+                {
+                    "P-256" => 32,
+                    "P-384" => 48,
+                    "P-521" => 66,
+                    _ => -1
+                };
+                if (expected < 0)
+                {
+                    errorMessage = $"Curva EC '{jwk.Crv}' non supportata (consentite: P-256, P-384, P-521).";
+                    return false;
+                }
+
+                byte[] x = Base64UrlDecode(jwk.X);
+                byte[] y = Base64UrlDecode(jwk.Y);
+                if (x.Length != expected || y.Length != expected)
+                {
+                    errorMessage = "Coordinate EC non coerenti con la curva dichiarata.";
+                    return false;
+                }
+
+                return true;
+            }
+            else
+            {
+                errorMessage = $"Tipo di chiave JWK '{jwk.Kty}' non supportato (consentite: RSA, EC).";
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "JWK non interpretabile durante la validazione della forza chiave.");
+            errorMessage = "JWK non interpretabile.";
+            return false;
+        }
+    }
+
     public bool VerifyJwsSignature(string protectedHeaderB64, string payloadB64, string signatureB64, AcmeJwk jwk, out string? errorMessage)
     {
         errorMessage = null;
@@ -127,7 +218,10 @@ public class AcmeCryptoService : IAcmeCryptoService
             byte[] dataToVerify = Encoding.ASCII.GetBytes($"{protectedHeaderB64}.{payloadB64}");
             byte[] signature = Base64UrlDecode(signatureB64);
 
-            string alg = header.Alg?.ToUpperInvariant() ?? string.Empty;
+            // SECURITY (2.3.1): allowlist esplicita degli algoritmi (RFC 8555
+            // Sez. 6.2). Alg sconosciuti o "none" vengono rifiutati
+            // esplicitamente invece di cadere in un fallback.
+            string alg = (header.Alg ?? string.Empty).ToUpperInvariant();
 
             if (string.Equals(jwk.Kty, "RSA", StringComparison.OrdinalIgnoreCase))
             {
@@ -144,17 +238,20 @@ public class AcmeCryptoService : IAcmeCryptoService
                     Exponent = Base64UrlDecode(jwk.E)
                 });
 
-                HashAlgorithmName hashAlg = alg switch
+                HashAlgorithmName hashAlg;
+                RSASignaturePadding padding;
+                switch (alg)
                 {
-                    "RS256" or "PS256" => HashAlgorithmName.SHA256,
-                    "RS384" or "PS384" => HashAlgorithmName.SHA384,
-                    "RS512" or "PS512" => HashAlgorithmName.SHA512,
-                    _ => HashAlgorithmName.SHA256
-                };
-
-                RSASignaturePadding padding = alg.StartsWith("PS", StringComparison.OrdinalIgnoreCase)
-                    ? RSASignaturePadding.Pss
-                    : RSASignaturePadding.Pkcs1;
+                    case "RS256": hashAlg = HashAlgorithmName.SHA256; padding = RSASignaturePadding.Pkcs1; break;
+                    case "RS384": hashAlg = HashAlgorithmName.SHA384; padding = RSASignaturePadding.Pkcs1; break;
+                    case "RS512": hashAlg = HashAlgorithmName.SHA512; padding = RSASignaturePadding.Pkcs1; break;
+                    case "PS256": hashAlg = HashAlgorithmName.SHA256; padding = RSASignaturePadding.Pss; break;
+                    case "PS384": hashAlg = HashAlgorithmName.SHA384; padding = RSASignaturePadding.Pss; break;
+                    case "PS512": hashAlg = HashAlgorithmName.SHA512; padding = RSASignaturePadding.Pss; break;
+                    default:
+                        errorMessage = $"Algoritmo JWS '{header.Alg}' non supportato (consentiti: RS256, RS384, RS512, PS256, PS384, PS512).";
+                        return false;
+                }
 
                 bool isValid = rsa.VerifyData(dataToVerify, signature, hashAlg, padding);
                 if (!isValid)
@@ -172,13 +269,23 @@ public class AcmeCryptoService : IAcmeCryptoService
                     return false;
                 }
 
-                ECCurve curve = jwk.Crv.ToUpperInvariant() switch
+                // SECURITY (2.3.1): l'alg deve corrispondere alla curva (RFC 7518);
+                // combinazioni non previste vengono rifiutate esplicitamente.
+                string crv = (jwk.Crv ?? string.Empty).ToUpperInvariant();
+                ECCurve curve;
+                HashAlgorithmName hashAlg;
+                switch (alg)
                 {
-                    "P-256" => ECCurve.NamedCurves.nistP256,
-                    "P-384" => ECCurve.NamedCurves.nistP384,
-                    "P-521" => ECCurve.NamedCurves.nistP521,
-                    _ => throw new NotSupportedException($"Curva EC '{jwk.Crv}' non supportata.")
-                };
+                    case "ES256" when string.Equals(crv, "P-256", StringComparison.OrdinalIgnoreCase):
+                        curve = ECCurve.NamedCurves.nistP256; hashAlg = HashAlgorithmName.SHA256; break;
+                    case "ES384" when string.Equals(crv, "P-384", StringComparison.OrdinalIgnoreCase):
+                        curve = ECCurve.NamedCurves.nistP384; hashAlg = HashAlgorithmName.SHA384; break;
+                    case "ES512" when string.Equals(crv, "P-521", StringComparison.OrdinalIgnoreCase):
+                        curve = ECCurve.NamedCurves.nistP521; hashAlg = HashAlgorithmName.SHA512; break;
+                    default:
+                        errorMessage = $"Combinazione alg/curva non supportata: alg '{header.Alg}' con curva '{jwk.Crv}' (consentite: ES256/P-256, ES384/P-384, ES512/P-521).";
+                        return false;
+                }
 
                 using var ecdsa = ECDsa.Create();
                 ecdsa.ImportParameters(new ECParameters
@@ -190,14 +297,6 @@ public class AcmeCryptoService : IAcmeCryptoService
                         Y = Base64UrlDecode(jwk.Y)
                     }
                 });
-
-                HashAlgorithmName hashAlg = jwk.Crv.ToUpperInvariant() switch
-                {
-                    "P-256" => HashAlgorithmName.SHA256,
-                    "P-384" => HashAlgorithmName.SHA384,
-                    "P-521" => HashAlgorithmName.SHA512,
-                    _ => HashAlgorithmName.SHA256
-                };
 
                 // Verifica IEEE P1363 (standard JWS RFC 7515) o fallback DER
                 bool isValid = ecdsa.VerifyData(dataToVerify, signature, hashAlg, DSASignatureFormat.IeeeP1363FixedFieldConcatenation)
@@ -219,7 +318,8 @@ public class AcmeCryptoService : IAcmeCryptoService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Eccezione durante la verifica della firma JWS.");
-            errorMessage = $"Errore di verifica firma: {ex.Message}";
+            // SECURITY: non esporre ex.Message al client (dettagli interni).
+            errorMessage = "Errore di verifica firma.";
             return false;
         }
     }

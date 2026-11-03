@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="it">
 <head>
   <meta charset="UTF-8">
@@ -304,6 +304,15 @@
           <label for="acme-timeout" data-i18n="acme_field_timeout">Timeout Challenge (sec)</label>
           <input type="number" id="acme-timeout" class="form-control" min="5" max="120" placeholder="15">
         </div>
+
+        <div class="field-row">
+          <label for="acme-allowed-domains" data-i18n="acme_field_allowed_domains">Domini Emittibili (Allowlist)</label>
+          <input type="text" id="acme-allowed-domains" class="form-control" placeholder="vd.ld, app.corp.it, …">
+        </div>
+        <small style="padding: 0 0 0.75rem 188px; display:block; opacity:0.7;" data-i18n="acme_hint_allowed_domains">
+          Elenco separato da virgole dei domini (o zone DNS) emittibili via ACME; un nome è ammesso se coincide con una voce o è suo subdominio.
+          <strong>Obbligatorio con AutoApprove</strong>: senza allowlist, la modalità AutoApprove verrebbe rifiutata per evitare l'emissione di certificati per nomi arbitrari. Lasciare vuoto per non imporre restrizioni (modalità Http01).
+        </small>
       </div>
 
       <!-- Termini di Servizio -->
@@ -1389,6 +1398,8 @@
       document.getElementById('acme-validation-mode').value  = c.validationMode ?? c.ValidationMode ?? 'Http01';
       document.getElementById('acme-http-port').value        = c.httpPort ?? c.HttpPort ?? 80;
       document.getElementById('acme-timeout').value          = c.challengeTimeoutSeconds ?? c.ChallengeTimeoutSeconds ?? 15;
+      var allowedDomains = c.allowedDomains ?? c.AllowedDomains;
+      document.getElementById('acme-allowed-domains').value  = Array.isArray(allowedDomains) ? allowedDomains.join(', ') : (allowedDomains || '');
       document.getElementById('acme-require-tos').checked    = c.requireTermsOfServiceAgreed ?? c.RequireTermsOfServiceAgreed ?? true;
       document.getElementById('acme-tos-url').value          = c.termsOfServiceUrl ?? c.TermsOfServiceUrl ?? '/acme/terms';
 
@@ -1399,12 +1410,16 @@
       const allowedRaw = document.getElementById('acme-allowed-templates').value;
       const allowedArr = allowedRaw.split(',').map(s => s.trim()).filter(s => s);
 
+      const allowedDomainsRaw = document.getElementById('acme-allowed-domains').value;
+      const allowedDomainsArr = allowedDomainsRaw.split(',').map(s => s.trim()).filter(s => s);
+
       const payload = {
         Enabled:                      document.getElementById('acme-enabled').checked,
         BaseUrl:                      document.getElementById('acme-baseurl').value.trim() || null,
         DefaultCaId:                  document.getElementById('acme-ca-id').value.trim() || null,
         DefaultTemplateName:          document.getElementById('acme-template').value.trim(),
         AllowedTemplates:             allowedArr,
+        AllowedDomains:               allowedDomainsArr,
         ValidationMode:               document.getElementById('acme-validation-mode').value,
         HttpPort:                     parseInt(document.getElementById('acme-http-port').value, 10) || 80,
         ChallengeTimeoutSeconds:      parseInt(document.getElementById('acme-timeout').value, 10) || 15,

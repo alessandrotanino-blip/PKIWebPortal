@@ -36,6 +36,17 @@ public class AcmeConfig
     public List<string> AllowedTemplates { get; set; } = new();
 
     /// <summary>
+    /// SECURITY (2.3.1): allowlist dei domini emittibili via ACME. Ogni identifier
+    /// deve coincidere esattamente con una voce o essere un suo subdominio
+    /// (es. voce "vd.ld" ammette "app01.vd.ld"). Se vuoto (e ValidationMode
+    /// diversa da AutoApprove/None) non ci sono restrizioni.
+    /// In modalità AutoApprove/None l'allowlist è OBBLIGATORIA: senza di essa
+    /// il server rifiuta ogni ordine (previene l'emissione di certificati per
+    /// nomi arbitrari senza proof di ownership).
+    /// </summary>
+    public List<string> AllowedDomains { get; set; } = new();
+
+    /// <summary>
     /// Modalità di validazione delle challenge di dominio:
     /// - "Http01" (default): verifica reale via HTTP GET su port 80 (RFC 8555 Sez. 8.3).
     /// - "AutoApprove": approvazione immediata senza richiesta HTTP (ideale per lab, reti chiuse o test).
@@ -322,6 +333,20 @@ public class AcmeOrder
 
     [JsonIgnore]
     public string? CaCertificatePem { get; set; }
+
+    /// <summary>
+    /// SECURITY (2.3.1): thumbprint SHA-256 (base64url) della foglia emessa,
+    /// usato per rintracciare il certificato nelle richieste di revoca ACME
+    /// (RFC 8555 Sez. 7.6). Non esposto nelle risposte API.
+    /// </summary>
+    [JsonIgnore]
+    public string? CertificateThumbprint { get; set; }
+
+    /// <summary>
+    /// SECURITY (2.3.1): istante UTC in cui il certificato è stato revocato.
+    /// </summary>
+    [JsonIgnore]
+    public DateTime? RevokedAt { get; set; }
 }
 
 /// <summary>
@@ -396,4 +421,30 @@ public class AcmeFinalizeRequest
 {
     [JsonPropertyName("csr")]
     public string Csr { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Payload di revoca certificato (RFC 8555 Sez. 7.6).
+/// </summary>
+public class AcmeRevokeRequest
+{
+    /// <summary>Certificato in formato DER, codificato Base64Url.</summary>
+    [JsonPropertyName("certificate")]
+    public string Certificate { get; set; } = string.Empty;
+
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("statusDetail")]
+    public string? StatusDetail { get; set; }
+}
+
+/// <summary>
+/// Payload di key-change account (RFC 8555 Sez. 7.5): contiene un JWS interno
+/// firmato con la nuova chiave.
+/// </summary>
+public class AcmeKeyChangeRequest
+{
+    [JsonPropertyName("outer")]
+    public string Outer { get; set; } = string.Empty;
 }
