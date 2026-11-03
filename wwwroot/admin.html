@@ -86,7 +86,7 @@
       <div class="brand-icon">PKI</div>
       <div class="brand-text">
         <h1 data-i18n="admin_panel_title">Configurazione Portale PKI</h1>
-        <p><span data-i18n="admin_panel_sub">Pannello di Amministrazione</span> <span class="brand-version">v2.3.0</span></p>
+        <p><span data-i18n="admin_panel_sub">Pannello di Amministrazione</span> <span class="brand-version">v2.3.1</span></p>
       </div>
     </div>
     <div class="nav-actions">
@@ -285,12 +285,12 @@
       <div class="card" style="margin-top:1rem;">
         <div class="card-title"><span data-i18n="acme_validation_title">🔍 Validazione Challenge HTTP-01</span></div>
 
-        <div class="field-row">
-          <label for="acme-validation-mode" data-i18n="acme_field_validation_mode">Modalità Validazione</label>
-          <select id="acme-validation-mode" class="form-control">
-            <option value="Http01">Http01 — Verifica reale HTTP (RFC 8555)</option>
-            <option value="AutoApprove">AutoApprove — Approvazione automatica (lab/reti chiuse)</option>
-            <option value="Http01WithAutoFallback">Http01WithAutoFallback — HTTP con fallback automatico</option>
+        <div style="margin-bottom: 0.75rem;">
+          <label for="acme-validation-mode" style="font-size:0.85rem; font-weight:600; color:var(--gray-700); display:block; margin-bottom:0.4rem;" data-i18n="acme_field_validation_mode">Modalità Validazione</label>
+          <select id="acme-validation-mode" class="form-control" style="width:100%;">
+            <option value="Http01">Http01 — Verifica HTTP reale (RFC 8555, porta 80)</option>
+            <option value="AutoApprove">AutoApprove — Auto-approvazione (lab / reti isolate)</option>
+            <option value="Http01WithAutoFallback">Http01WithAutoFallback — HTTP con fallback auto</option>
           </select>
         </div>
         <small style="padding: 0 0 0.75rem 188px; display:block; opacity:0.7;" data-i18n="acme_hint_validation_mode">In reti micro-segmentate o DMZ strette, usare <strong>AutoApprove</strong> se il server non può contattare i client sulla porta HTTP.</small>

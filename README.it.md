@@ -1,4 +1,4 @@
-[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
+﻿[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
 
 # Enterprise PKI Web Enrollment Portal (AD CS Modern Gateway)
 
@@ -533,6 +533,29 @@ Gli endpoint ACME operano con **accesso anonimo a livello di trasporto HTTP** (c
   * `"Http01WithAutoFallback"`: tenta la verifica HTTP-01 e, se il server target non risponde (firewall interno), approva con fallback automatico.
 * **`HttpPort`**: porta su cui contattare il client per la challenge `http-01` (default: `80`).
 
+
+### Configurazione dal Pannello Admin (v2.3.1)
+
+> **Novità v2.3.1** — L'intera sezione AcmeConfig può essere gestita direttamente dal**Pannello di Amministrazione** (/admin), senza editare manualmente ppsettings.json.
+
+Accedi a /admin con un account membro di **Domain Admins** o **PKI Admins** e clicca il tab **🤖 Server ACME**:
+
+| Campo | Descrizione |
+|---|---|
+| **Abilitato** | Toggle on/off del server ACME |
+| **Base URL** | URL pubblico del portale (es. https://pki.azienda.lan) |
+| **CA Predefinita (ID)** | ID della CA AD CS da usare per l'emissione |
+| **Template AD CS** | Template predefinito per le richieste ACME |
+| **Template Consentiti** | Lista (separata da virgola) dei template ACME autorizzati |
+| **Modalità Validazione** | Http01 / AutoApprove / Http01WithAutoFallback |
+| **Porta HTTP Challenge** | Porta su cui contattare il client per la challenge (default: 80) |
+| **Timeout Challenge (sec)** | Tempo massimo per la verifica HTTP-01 (5–120 sec) |
+| **Richiedi Accettazione ToS** | Toggle obbligatorietà dei termini di servizio |
+| **URL Termini di Servizio** | Percorso o URL dei ToS |
+
+Il pannello include anche il pulsante **🧪 Testa Directory** per verificare in tempo reale che l'endpoint /acme/directory risponda correttamente.
+
+> **Sicurezza**: gli endpoint GET /api/admin/acme-config e PUT /api/admin/acme-config richiedono Windows Authentication e token CSRF — identico al pannello di configurazione CA già presente.
 ---
 
 ### 1. Collaudo Completo con `Test-AcmeProtocol.ps1`

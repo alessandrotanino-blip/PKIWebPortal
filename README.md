@@ -1,4 +1,4 @@
-[🇬🇧 English](README.md) |[🇮🇹 Italiano](README.it.md)
+﻿[🇬🇧 English](README.md) |[🇮🇹 Italiano](README.it.md)
 
 # Enterprise PKI Web Enrollment Portal (AD CS Modern Gateway)
 
@@ -546,6 +546,29 @@ The ACME endpoints operate with **anonymous HTTP transport access** (configured 
 
 ---
 
+
+### Configuration from the Admin Panel (v2.3.1)
+
+> **New in v2.3.1** — The entire AcmeConfig block can now be managed directly from the **Administration Panel** (/admin), without manually editing ppsettings.json.
+
+Log in to /admin as a member of **Domain Admins** or **PKI Admins** and click the **🤖 Server ACME** tab:
+
+| Field | Description |
+|---|---|
+| **Enabled** | Toggle the ACME server on/off |
+| **Base URL** | Public portal URL (e.g. https://pki.corp.contoso.com) |
+| **Default CA (ID)** | AD CS CA ID to use for certificate issuance |
+| **AD CS Template** | Default template for ACME certificate requests |
+| **Allowed Templates** | Comma-separated list of ACME-authorised templates |
+| **Validation Mode** | Http01 / AutoApprove / Http01WithAutoFallback |
+| **HTTP Challenge Port** | Port to reach the ACME client for http-01 (default: 80) |
+| **Challenge Timeout (sec)** | Max time for HTTP-01 verification (5–120 s) |
+| **Require ToS Acceptance** | Toggle mandatory Terms of Service acceptance |
+| **Terms of Service URL** | Path or URL to the ToS document |
+
+The panel also includes a **🧪 Test Directory** button for real-time verification that /acme/directory responds correctly.
+
+> **Security**: GET /api/admin/acme-config and PUT /api/admin/acme-config require Windows Authentication and a CSRF token — same pattern as the existing CA configuration panel.
 ### 1. End-to-End Verification with `Test-AcmeProtocol.ps1`
 
 The repository includes a complete automated test script that verifies the full ACME protocol without external dependencies:

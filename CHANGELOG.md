@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 [🇮🇹 Italiano](CHANGELOG.md) | [🇬🇧 English](CHANGELOG.en.md)
 
@@ -6,7 +6,20 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
-## [2.3.0] - 2026-11-03
+## [2.3.1] - 2026-11-03
+
+### Miglioramenti UX
+
+- **Configurazione ACME dal Pannello Admin**:
+  - Aggiunto tab **🤖 Server ACME** nel pannello di amministrazione (`/admin`), che permette di leggere e modificare l'intera sezione `AcmeConfig` direttamente dall'interfaccia web, eliminando la necessità di editare manualmente `appsettings.json`.
+  - Nuovi campi configurabili via GUI: Abilitato, Base URL, CA Predefinita, Template AD CS, Template Consentiti, Modalità Validazione, Porta HTTP Challenge, Timeout Challenge, Accettazione ToS, URL ToS.
+  - Pulsante **🧪 Testa Directory** per verifica live della raggiungibilità dell'endpoint `GET /acme/directory` direttamente dal pannello.
+  - Aggiornamento dinamico del link alla directory ACME al cambio del campo Base URL.
+  - Lazy load: la configurazione ACME viene caricata solo al primo accesso al tab.
+  - Nuovi endpoint API admin protetti (Windows Auth + CSRF): `GET /api/admin/acme-config` e `PUT /api/admin/acme-config`.
+  - Fix layout: il campo **Modalità Validazione** ora usa layout verticale con `select` a larghezza piena per evitare il troncamento del testo delle opzioni.
+
+---## [2.3.0] - 2026-11-03
 
 ### Funzionalità & Architettura
 - **Server ACME RFC 8555 Nativo Integrato**:
