@@ -1343,6 +1343,30 @@
 
     let acmeConfig = null;
 
+    function updateAcmeDirectoryLink(baseUrl) {
+      const directoryPath = '/acme/directory';
+      const dirLink = document.getElementById('acme-directory-link');
+      const trimmedBaseUrl = baseUrl.trim().replace(/\/$/, '');
+      if (!trimmedBaseUrl) {
+        dirLink.href = directoryPath;
+        dirLink.textContent = directoryPath;
+        return;
+      }
+
+      const directoryUrl = trimmedBaseUrl + directoryPath;
+      dirLink.textContent = directoryUrl;
+      try {
+        const parsedUrl = new URL(directoryUrl);
+        if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') {
+          dirLink.href = parsedUrl.href;
+        } else {
+          dirLink.removeAttribute('href');
+        }
+      } catch {
+        dirLink.removeAttribute('href');
+      }
+    }
+
     async function loadAcmeConfig() {
       try {
         const resp = await fetch('/api/admin/acme-config');
@@ -1374,11 +1398,7 @@
 
       // Update directory link with BaseUrl if available
       const baseUrl = document.getElementById('acme-baseurl').value.replace(/\/$/, '');
-      const dirLink = document.getElementById('acme-directory-link');
-      if (baseUrl) {
-        dirLink.href = baseUrl + '/acme/directory';
-        dirLink.textContent = baseUrl + '/acme/directory';
-      }
+      updateAcmeDirectoryLink(baseUrl);
     }
 
     async function saveAcmeConfig() {
@@ -1447,15 +1467,7 @@
 
       // Update directory link when BaseUrl changes
       document.getElementById('acme-baseurl').addEventListener('input', (e) => {
-        const baseUrl = e.target.value.trim().replace(/\/$/, '');
-        const dirLink = document.getElementById('acme-directory-link');
-        if (baseUrl) {
-          dirLink.href = baseUrl + '/acme/directory';
-          dirLink.textContent = baseUrl + '/acme/directory';
-        } else {
-          dirLink.href = '/acme/directory';
-          dirLink.textContent = '/acme/directory';
-        }
+        updateAcmeDirectoryLink(e.target.value);
       });
     }
   })();
