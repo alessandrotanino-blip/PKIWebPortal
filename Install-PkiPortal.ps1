@@ -751,8 +751,8 @@ else {
     # forwarding them to the ASP.NET Core application process.
     if (Test-Path $destWebConfig) {
         $wcContent = Get-Content $destWebConfig -Raw -ErrorAction SilentlyContinue
-        if ($wcContent -and $wcContent -notmatch 'AspNetCoreModuleV2') {
-            Write-Warn "web.config non contiene il modulo AspNetCoreModuleV2. Sovrascrittura con versione corretta..." `
+        if ($wcContent -and ($wcContent -notmatch 'AspNetCoreModuleV2' -or $wcContent -match 'inheritInChildApplications="false"')) {
+            Write-Warn "web.config non valido o contiene inheritInChildApplications=false (blocca route ACME). Sovrascrittura con versione corretta..." `
                        "web.config is missing AspNetCoreModuleV2 module. Overwriting with correct version..."
             $customWebConfig = Join-Path $SourcePath "web.config"
             if (Test-Path $customWebConfig) {
