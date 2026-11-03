@@ -746,7 +746,29 @@ else {
         Copy-Item -Path $customWebConfig -Destination $destWebConfig -Force
         Write-OK "File web.config copiato (prima installazione)." "File web.config copied (initial installation)."
     }
-    # Remove app_offline.htm to allow the new version to start
+    # Validation: ensure web.config has AspNetCoreModuleV2 handler
+    # Without this handler, IIS serves requests as static files (404) instead of
+    # forwarding them to the ASP.NET Core application process.
+    if (Test-Path $destWebConfig) {
+        $wcContent = Get-Content $destWebConfig -Raw -ErrorAction SilentlyContinue
+        if ($wcContent -and $wcContent -notmatch 'AspNetCoreModuleV2') {
+            Write-Warn "web.config non contiene il modulo AspNetCoreModuleV2. Sovrascrittura con versione corretta..." `
+                       "web.config is missing AspNetCoreModuleV2 module. Overwriting with correct version..."
+            $customWebConfig = Join-Path $SourcePath "web.config"
+            if (Test-Path $customWebConfig) {
+                Copy-Item -Path $customWebConfig -Destination $destWebConfig -Force
+                Write-OK "web.config sovrascritto con la versione corretta contenente AspNetCoreModuleV2." `
+                         "web.config overwritten with the correct version containing AspNetCoreModuleV2."
+            } else {
+                Write-Fail "Impossibile trovare web.config sorgente in: $customWebConfig" `
+                           "Cannot find source web.config at: $customWebConfig"
+            }
+        } else {
+            Write-OK "web.config contiene AspNetCoreModuleV2 (handler routing OK)." `
+                     "web.config contains AspNetCoreModuleV2 (handler routing OK)."
+        }
+    }
+        # Remove app_offline.htm to allow the new version to start
     $appOfflineFile = Join-Path $InstallPath "app_offline.htm"
     if (Test-Path $appOfflineFile) {
         Remove-Item -Path $appOfflineFile -Force -ErrorAction SilentlyContinue
@@ -1226,7 +1248,23 @@ Write-Host "  $(Msg 'Log:' 'Logs:')             $logPath" -ForegroundColor White
 Write-Host "  certsrv:         $(Msg 'Non modificato [OK]' 'Unmodified [OK]')" -ForegroundColor Green
 Write-Host ""
 if ($script:IsItalian) {
+    # ACME health check
+    try {
+        $acmeUrl = "${protocol}://localhost:${SitePort}/acme/directory"
+        $acmeResp = Invoke-WebRequest -Uri $acmeUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+        if ($acmeResp.StatusCode -eq 200) {
+            Write-Host "  ACME Health:     " -NoNewline -ForegroundColor White
+            Write-Host "OK (HTTP 200)" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  ACME Health:     " -NoNewline -ForegroundColor White
+        Write-Host "ERRORE - $($_.Exception.Message)" -ForegroundColor Red
+        Write-Warn "L'endpoint ACME /acme/directory non risponde. Verificare che il modulo AspNetCoreModuleV2 sia installato (Hosting Bundle .NET 8) e che web.config contenga l'handler corretto." `
+                   "ACME endpoint /acme/directory is not responding. Verify AspNetCoreModuleV2 is installed (.NET 8 Hosting Bundle) and web.config contains the correct handler."
+    }
+    Write-Host ""
     Write-Host "  PROSSIMI PASSI:" -ForegroundColor Yellow
+    Write-Host "    0. Configurare ACME dal pannello Admin: ${protocol}://localhost:${SitePort}/admin -> tab Server ACME" -ForegroundColor White
     Write-Host "    1. Modificare $InstallPath\appsettings.json con le vere Sub-CA e i template" -ForegroundColor White
     Write-Host "    2. Impostare UseSimulator = false per le CA reali" -ForegroundColor White
     Write-Host "    3. Verificare che l'identità del pool ($identityAccount) abbia" -ForegroundColor White
@@ -1237,6 +1275,7 @@ if ($script:IsItalian) {
     }
 } else {
     Write-Host "  NEXT STEPS:" -ForegroundColor Yellow
+    Write-Host "    0. Configure ACME from the Admin panel: ${protocol}://localhost:${SitePort}/admin -> Server ACME tab" -ForegroundColor White
     Write-Host "    1. Configure $InstallPath\appsettings.json with real Sub-CAs and templates" -ForegroundColor White
     Write-Host "    2. Set UseSimulator = false for real CAs" -ForegroundColor White
     Write-Host "    3. Verify pool identity ($identityAccount) has" -ForegroundColor White
