@@ -594,6 +594,94 @@ admin.MapPut("/config", async (HttpContext ctx, PortalConfig newConfig) =>
     }
 });
 
+// ===== Configurazione ACME =====
+
+// GET /api/admin/acme-config - Legge la configurazione ACME corrente
+admin.MapGet("/acme-config", (HttpContext ctx, IConfiguration config) =>
+{
+    if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
+        return Results.Challenge();
+
+    if (!IsServerAdmin(ctx))
+        return Results.Forbid();
+
+    var acmeCfg = config.GetSection("AcmeConfig").Get<AcmeConfig>() ?? new AcmeConfig();
+    return Results.Ok(acmeCfg);
+});
+
+// PUT /api/admin/acme-config - Salva la configurazione ACME in appsettings.json
+admin.MapPut("/acme-config", async (HttpContext ctx, AcmeConfig newAcmeCfg) =>
+{
+    if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
+        return Results.Challenge();
+
+    if (!IsServerAdmin(ctx))
+        return Results.Forbid();
+
+    if (!HasValidCsrf(ctx))
+        return CsrfDenied();
+
+    // Validazione input
+    if (!string.IsNullOrEmpty(newAcmeCfg.BaseUrl) &&
+        !Uri.TryCreate(newAcmeCfg.BaseUrl, UriKind.Absolute, out _))
+        return Results.BadRequest(new { message = "BaseUrl non è un URL assoluto valido." });
+
+    var validModes = new[] { "Http01", "AutoApprove", "Http01WithAutoFallback" };
+    if (!validModes.Contains(newAcmeCfg.ValidationMode, StringComparer.OrdinalIgnoreCase))
+        return Results.BadRequest(new { message = $"ValidationMode non valido. Valori accettati: {string.Join(", ", validModes)}." });
+
+    if (newAcmeCfg.HttpPort is < 1 or > 65535)
+        return Results.BadRequest(new { message = "HttpPort deve essere compreso tra 1 e 65535." });
+
+    if (newAcmeCfg.ChallengeTimeoutSeconds is < 5 or > 120)
+        return Results.BadRequest(new { message = "ChallengeTimeoutSeconds deve essere compreso tra 5 e 120." });
+
+    await configSaveLock.WaitAsync();
+    try
+    {
+        var targetPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            Path.Combine(app.Environment.ContentRootPath, "appsettings.json"),
+            Path.Combine(AppContext.BaseDirectory, "appsettings.json")
+        };
+
+        var options = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = null };
+
+        foreach (var filePath in targetPaths)
+        {
+            if (!File.Exists(filePath)) continue;
+
+            string json = await File.ReadAllTextAsync(filePath);
+            using var doc = JsonDocument.Parse(json);
+
+            var root = new Dictionary<string, object>();
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Name == "AcmeConfig")
+                    continue;
+                root[prop.Name] = JsonSerializer.Deserialize<object>(prop.Value.GetRawText())!;
+            }
+            root["AcmeConfig"] = newAcmeCfg;
+
+            string updatedJson = JsonSerializer.Serialize(root, options);
+            await File.WriteAllTextAsync(filePath, updatedJson);
+        }
+
+        (app.Configuration as IConfigurationRoot)?.Reload();
+
+        return Results.Ok(new { success = true, message = "Configurazione ACME salvata con successo. Le modifiche sono attive immediatamente." });
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Errore durante il salvataggio della configurazione ACME.");
+        return Results.Problem("Errore durante il salvataggio della configurazione ACME. I dettagli sono nel log del server.");
+    }
+    finally
+    {
+        configSaveLock.Release();
+    }
+});
+
 // ===== Gestione Richieste Trattenute (Hold) =====
 
 // GET /api/admin/held-requests - Lista richieste trattenute (default: solo PendingApproval)

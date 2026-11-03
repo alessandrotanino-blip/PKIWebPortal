@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="it">
 <head>
   <meta charset="UTF-8">
@@ -165,6 +165,9 @@
       <button type="button" class="tab-btn" id="tab-btn-config" data-tab="pane-config">
         <span data-i18n="tab_config">⚙️ Configurazione Portale &amp; CA</span>
       </button>
+      <button type="button" class="tab-btn" id="tab-btn-acme" data-tab="pane-acme">
+        <span data-i18n="tab_acme">🤖 Server ACME</span>
+      </button>
     </nav>
 
     <!-- PANE 1: Richieste Certificato in Attesa / Storico -->
@@ -234,6 +237,115 @@
     </div>
   </div>
 
+    <!-- PANE 3: Configurazione ACME -->
+    <div class="tab-pane" id="pane-acme">
+
+      <!-- Stato ACME -->
+      <div class="card">
+        <div class="card-title"><span data-i18n="acme_general_title">🤖 Server ACME (RFC 8555)</span></div>
+
+        <div class="field-row">
+          <label for="acme-enabled" data-i18n="acme_field_enabled">Abilitato</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="acme-enabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="field-row">
+          <label for="acme-baseurl" data-i18n="acme_field_baseurl">Base URL</label>
+          <input type="url" id="acme-baseurl" class="form-control" placeholder="https://pki.azienda.lan">
+        </div>
+        <small style="padding: 0 0 0.75rem 188px; display:block; opacity:0.7;" data-i18n="acme_hint_baseurl">URL assoluto del portale. Se vuoto, viene dedotto automaticamente dalla richiesta HTTP.</small>
+      </div>
+
+      <!-- Emissione Certificati -->
+      <div class="card" style="margin-top:1rem;">
+        <div class="card-title"><span data-i18n="acme_cert_title">📜 Emissione Certificati AD CS</span></div>
+
+        <div class="field-row">
+          <label for="acme-ca-id" data-i18n="acme_field_ca_id">CA Predefinita (ID)</label>
+          <input type="text" id="acme-ca-id" class="form-control" placeholder="es. CloudLD Sub CA">
+        </div>
+        <small style="padding: 0 0 0.75rem 188px; display:block; opacity:0.7;" data-i18n="acme_hint_ca_id">ID della CA configurata in PortalConfig. Lasciare vuoto per usare la CA predefinita del portale.</small>
+
+        <div class="field-row">
+          <label for="acme-template" data-i18n="acme_field_template">Template AD CS</label>
+          <input type="text" id="acme-template" class="form-control" placeholder="es. WebServer5y">
+        </div>
+
+        <div class="field-row">
+          <label for="acme-allowed-templates" data-i18n="acme_field_allowed_templates">Template Consentiti</label>
+          <input type="text" id="acme-allowed-templates" class="form-control" placeholder="WebServer5y, WebServer, ...">
+        </div>
+        <small style="padding: 0 0 0.75rem 188px; display:block; opacity:0.7;" data-i18n="acme_hint_allowed_templates">Elenco separato da virgole. Se vuoto, viene consentito solo il template predefinito.</small>
+      </div>
+
+      <!-- Validazione Challenge -->
+      <div class="card" style="margin-top:1rem;">
+        <div class="card-title"><span data-i18n="acme_validation_title">🔍 Validazione Challenge HTTP-01</span></div>
+
+        <div class="field-row">
+          <label for="acme-validation-mode" data-i18n="acme_field_validation_mode">Modalità Validazione</label>
+          <select id="acme-validation-mode" class="form-control">
+            <option value="Http01">Http01 — Verifica reale HTTP (RFC 8555)</option>
+            <option value="AutoApprove">AutoApprove — Approvazione automatica (lab/reti chiuse)</option>
+            <option value="Http01WithAutoFallback">Http01WithAutoFallback — HTTP con fallback automatico</option>
+          </select>
+        </div>
+        <small style="padding: 0 0 0.75rem 188px; display:block; opacity:0.7;" data-i18n="acme_hint_validation_mode">In reti micro-segmentate o DMZ strette, usare <strong>AutoApprove</strong> se il server non può contattare i client sulla porta HTTP.</small>
+
+        <div class="field-row">
+          <label for="acme-http-port" data-i18n="acme_field_http_port">Porta HTTP Challenge</label>
+          <input type="number" id="acme-http-port" class="form-control" min="1" max="65535" placeholder="80">
+        </div>
+
+        <div class="field-row">
+          <label for="acme-timeout" data-i18n="acme_field_timeout">Timeout Challenge (sec)</label>
+          <input type="number" id="acme-timeout" class="form-control" min="5" max="120" placeholder="15">
+        </div>
+      </div>
+
+      <!-- Termini di Servizio -->
+      <div class="card" style="margin-top:1rem;">
+        <div class="card-title"><span data-i18n="acme_tos_title">📋 Termini di Servizio</span></div>
+
+        <div class="field-row">
+          <label for="acme-require-tos" data-i18n="acme_field_require_tos">Richiedi Accettazione ToS</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="acme-require-tos">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="field-row">
+          <label for="acme-tos-url" data-i18n="acme_field_tos_url">URL Termini di Servizio</label>
+          <input type="text" id="acme-tos-url" class="form-control" placeholder="/acme/terms">
+        </div>
+      </div>
+
+      <!-- Link alla directory ACME -->
+      <div class="card" style="margin-top:1rem; background: var(--primary-light, #eff6ff); border-color: var(--primary);">
+        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+          <span style="font-size:1.5rem;">🔗</span>
+          <div>
+            <div style="font-weight:700; color:var(--primary);" data-i18n="acme_directory_label">Directory ACME</div>
+            <a id="acme-directory-link" href="/acme/directory" target="_blank" style="font-size:0.85rem; color:var(--primary); word-break:break-all;">/acme/directory</a>
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-test-acme-dir" style="margin-left:auto;" data-i18n="acme_btn_test">🧪 Testa Directory</button>
+        </div>
+        <div id="acme-dir-result" style="margin-top:0.75rem; display:none;"></div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex; justify-content:flex-end; gap:1rem; margin-top:1rem; margin-bottom:2rem;">
+        <button type="button" class="btn btn-secondary" id="btn-cancel-acme" data-i18n="btn_cancel_changes">Annulla Modifiche</button>
+        <button type="button" class="btn btn-primary" id="btn-save-acme" style="padding: 0.85rem 2rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          <span data-i18n="btn_save_acme">Salva Configurazione ACME</span>
+        </button>
+      </div>
+    </div>
   <!-- Toast Notification -->
   <div id="toast" class="toast"></div>
 
@@ -361,6 +473,7 @@
       setupTabs();
       setupHeldRequestsHandlers();
       loadHeldRequests();
+      setupAcmeTab();
 
       // Setup language changed listener
       window.addEventListener('languageChanged', () => {
@@ -935,6 +1048,9 @@
           if (btn.getAttribute('data-tab') === 'pane-requests') {
             loadHeldRequests();
           }
+          if (btn.getAttribute('data-tab') === 'pane-acme' && !acmeConfig) {
+            loadAcmeConfig();
+          }
         });
       });
     }
@@ -1221,6 +1337,126 @@
     function esc(text) {
       if (!text) return '';
       return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // ===== ACME Configuration Tab =====
+
+    let acmeConfig = null;
+
+    async function loadAcmeConfig() {
+      try {
+        const resp = await fetch('/api/admin/acme-config');
+        if (!resp.ok) {
+          showToast('Errore caricamento configurazione ACME: HTTP ' + resp.status, 'error');
+          return;
+        }
+        acmeConfig = await resp.json();
+        renderAcmeConfig();
+      } catch (err) {
+        showToast('Errore di rete ACME: ' + err.message, 'error');
+      }
+    }
+
+    function renderAcmeConfig() {
+      if (!acmeConfig) return;
+      const c = acmeConfig;
+      document.getElementById('acme-enabled').checked      = c.enabled ?? c.Enabled ?? true;
+      document.getElementById('acme-baseurl').value         = c.baseUrl  ?? c.BaseUrl  ?? '';
+      document.getElementById('acme-ca-id').value           = c.defaultCaId ?? c.DefaultCaId ?? '';
+      document.getElementById('acme-template').value        = c.defaultTemplateName ?? c.DefaultTemplateName ?? 'WebServer';
+      const allowedTmpls = c.allowedTemplates ?? c.AllowedTemplates ?? [];
+      document.getElementById('acme-allowed-templates').value = Array.isArray(allowedTmpls) ? allowedTmpls.join(', ') : allowedTmpls;
+      document.getElementById('acme-validation-mode').value  = c.validationMode ?? c.ValidationMode ?? 'Http01';
+      document.getElementById('acme-http-port').value        = c.httpPort ?? c.HttpPort ?? 80;
+      document.getElementById('acme-timeout').value          = c.challengeTimeoutSeconds ?? c.ChallengeTimeoutSeconds ?? 15;
+      document.getElementById('acme-require-tos').checked    = c.requireTermsOfServiceAgreed ?? c.RequireTermsOfServiceAgreed ?? true;
+      document.getElementById('acme-tos-url').value          = c.termsOfServiceUrl ?? c.TermsOfServiceUrl ?? '/acme/terms';
+
+      // Update directory link with BaseUrl if available
+      const baseUrl = document.getElementById('acme-baseurl').value.replace(/\/$/, '');
+      const dirLink = document.getElementById('acme-directory-link');
+      if (baseUrl) {
+        dirLink.href = baseUrl + '/acme/directory';
+        dirLink.textContent = baseUrl + '/acme/directory';
+      }
+    }
+
+    async function saveAcmeConfig() {
+      const allowedRaw = document.getElementById('acme-allowed-templates').value;
+      const allowedArr = allowedRaw.split(',').map(s => s.trim()).filter(s => s);
+
+      const payload = {
+        Enabled:                      document.getElementById('acme-enabled').checked,
+        BaseUrl:                      document.getElementById('acme-baseurl').value.trim() || null,
+        DefaultCaId:                  document.getElementById('acme-ca-id').value.trim() || null,
+        DefaultTemplateName:          document.getElementById('acme-template').value.trim(),
+        AllowedTemplates:             allowedArr,
+        ValidationMode:               document.getElementById('acme-validation-mode').value,
+        HttpPort:                     parseInt(document.getElementById('acme-http-port').value, 10) || 80,
+        ChallengeTimeoutSeconds:      parseInt(document.getElementById('acme-timeout').value, 10) || 15,
+        RequireTermsOfServiceAgreed:  document.getElementById('acme-require-tos').checked,
+        TermsOfServiceUrl:            document.getElementById('acme-tos-url').value.trim() || '/acme/terms'
+      };
+
+      try {
+        const resp = await fetch('/api/admin/acme-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': await ensureCsrfToken() },
+          body: JSON.stringify(payload)
+        });
+        const result = await resp.json();
+        if (resp.ok && result.success) {
+          acmeConfig = payload;
+          showToast(result.message || 'Configurazione ACME salvata!', 'success');
+        } else {
+          showToast('Errore: ' + (result.message || result.detail || 'Salvataggio fallito'), 'error');
+        }
+      } catch (err) {
+        showToast('Errore di rete: ' + err.message, 'error');
+      }
+    }
+
+    async function testAcmeDirectory() {
+      const resultDiv = document.getElementById('acme-dir-result');
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = '<span class="spinner-sm"></span> Contatto la directory ACME...';
+
+      try {
+        const resp = await fetch('/acme/directory');
+        if (resp.ok) {
+          const data = await resp.json();
+          const hasRequired = data.newNonce && data.newAccount && data.newOrder;
+          resultDiv.innerHTML = hasRequired
+            ? `<span style="color:var(--success);">✅ Directory ACME operativa — endpoint trovati: newNonce, newAccount, newOrder, finalize</span>`
+            : `<span style="color:var(--warning);">⚠️ Directory raggiunta ma risposta inattesa: <code>${JSON.stringify(data).substring(0, 200)}</code></span>`;
+        } else {
+          resultDiv.innerHTML = `<span style="color:var(--danger);">❌ Errore HTTP ${resp.status}: il server ACME potrebbe essere disabilitato o non raggiungibile.</span>`;
+        }
+      } catch (err) {
+        resultDiv.innerHTML = `<span style="color:var(--danger);">❌ Errore di rete: ${err.message}</span>`;
+      }
+    }
+
+    function setupAcmeTab() {
+      document.getElementById('btn-save-acme').addEventListener('click', saveAcmeConfig);
+      document.getElementById('btn-cancel-acme').addEventListener('click', () => {
+        if (acmeConfig) renderAcmeConfig();
+        else loadAcmeConfig();
+      });
+      document.getElementById('btn-test-acme-dir').addEventListener('click', testAcmeDirectory);
+
+      // Update directory link when BaseUrl changes
+      document.getElementById('acme-baseurl').addEventListener('input', (e) => {
+        const baseUrl = e.target.value.trim().replace(/\/$/, '');
+        const dirLink = document.getElementById('acme-directory-link');
+        if (baseUrl) {
+          dirLink.href = baseUrl + '/acme/directory';
+          dirLink.textContent = baseUrl + '/acme/directory';
+        } else {
+          dirLink.href = '/acme/directory';
+          dirLink.textContent = '/acme/directory';
+        }
+      });
     }
   })();
   </script>
