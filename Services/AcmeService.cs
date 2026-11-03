@@ -174,7 +174,7 @@ public class AcmeService : IAcmeService
             };
 
             await _store.SaveAccountAsync(newAccount);
-            _logger.LogInformation("Nuovo account ACME creato con successo: ID {AccountId}, Thumbprint {Thumbprint}", accountId, thumbprint);
+            _logger.LogInformation("Nuovo account ACME creato con successo.");
 
             string locationUrl = $"{baseUrl}/acme/account/{accountId}";
             var createdResult = Results.Created(locationUrl, newAccount);
