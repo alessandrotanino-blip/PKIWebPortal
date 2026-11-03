@@ -63,6 +63,11 @@
   color: var(--gray-800);
 }
 
+[data-theme="dark"] select.form-control option {
+  background-color: #1e293b;
+  color: #e2e8f0;
+}
+
 [data-theme="dark"] .ca-select-group select {
   color: var(--gray-800);
 }

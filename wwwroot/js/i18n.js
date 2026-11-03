@@ -294,7 +294,31 @@ window.I18N = (function () {
       admin_auth_required: "Autenticazione richiesta.",
       admin_conn_error: "Errore di connessione",
       admin_config_load_error: "Impossibile caricare la configurazione",
-      admin_unknown_user: "Sconosciuto"
+      admin_unknown_user: "Sconosciuto",
+
+      // ACME Tab (v2.3.1)
+      tab_acme: "🤖 Server ACME",
+      acme_general_title: "🤖 Server ACME (RFC 8555)",
+      acme_field_enabled: "Abilitato",
+      acme_field_baseurl: "Base URL",
+      acme_hint_baseurl: "URL assoluto del portale. Se vuoto, viene dedotto automaticamente dalla richiesta HTTP.",
+      acme_cert_title: "📜 Emissione Certificati AD CS",
+      acme_field_ca_id: "CA Predefinita (ID)",
+      acme_hint_ca_id: "ID della CA configurata in PortalConfig. Lasciare vuoto per usare la CA predefinita del portale.",
+      acme_field_template: "Template AD CS",
+      acme_field_allowed_templates: "Template Consentiti",
+      acme_hint_allowed_templates: "Elenco separato da virgole. Se vuoto, viene consentito solo il template predefinito.",
+      acme_validation_title: "🔍 Validazione Challenge HTTP-01",
+      acme_field_validation_mode: "Modalità Validazione",
+      acme_hint_validation_mode: "In reti micro-segmentate o DMZ strette, usare AutoApprove se il server non può contattare i client sulla porta HTTP.",
+      acme_field_http_port: "Porta HTTP Challenge",
+      acme_field_timeout: "Timeout Challenge (sec)",
+      acme_tos_title: "📋 Termini di Servizio",
+      acme_field_require_tos: "Richiedi Accettazione ToS",
+      acme_field_tos_url: "URL Termini di Servizio",
+      acme_directory_label: "Directory ACME",
+      acme_btn_test: "🧪 Testa Directory",
+      btn_save_acme: "Salva Configurazione ACME"
     },
 
     en: {
@@ -562,7 +586,31 @@ window.I18N = (function () {
       admin_auth_required: "Authentication required.",
       admin_conn_error: "Connection error",
       admin_config_load_error: "Unable to load configuration",
-      admin_unknown_user: "Unknown"
+      admin_unknown_user: "Unknown",
+
+      // ACME Tab (v2.3.1)
+      tab_acme: "🤖 ACME Server",
+      acme_general_title: "🤖 ACME Server (RFC 8555)",
+      acme_field_enabled: "Enabled",
+      acme_field_baseurl: "Base URL",
+      acme_hint_baseurl: "Absolute portal URL. If empty, it is automatically inferred from the HTTP request.",
+      acme_cert_title: "📜 AD CS Certificate Issuance",
+      acme_field_ca_id: "Default CA (ID)",
+      acme_hint_ca_id: "CA ID configured in PortalConfig. Leave empty to use the portal default CA.",
+      acme_field_template: "AD CS Template",
+      acme_field_allowed_templates: "Allowed Templates",
+      acme_hint_allowed_templates: "Comma-separated list. If empty, only the default template is allowed.",
+      acme_validation_title: "🔍 HTTP-01 Challenge Validation",
+      acme_field_validation_mode: "Validation Mode",
+      acme_hint_validation_mode: "In micro-segmented networks or strict DMZs, use AutoApprove if the server cannot reach clients on the HTTP port.",
+      acme_field_http_port: "HTTP Challenge Port",
+      acme_field_timeout: "Challenge Timeout (sec)",
+      acme_tos_title: "📋 Terms of Service",
+      acme_field_require_tos: "Require ToS Acceptance",
+      acme_field_tos_url: "Terms of Service URL",
+      acme_directory_label: "ACME Directory",
+      acme_btn_test: "🧪 Test Directory",
+      btn_save_acme: "Save ACME Configuration"
     },
 
     fr: {
@@ -830,7 +878,31 @@ window.I18N = (function () {
       admin_auth_required: "Authentification requise.",
       admin_conn_error: "Erreur de connexion",
       admin_config_load_error: "Impossible de charger la configuration",
-      admin_unknown_user: "Inconnu"
+      admin_unknown_user: "Inconnu",
+
+      // ACME Tab (v2.3.1)
+      tab_acme: "🤖 Serveur ACME",
+      acme_general_title: "🤖 Serveur ACME (RFC 8555)",
+      acme_field_enabled: "Activé",
+      acme_field_baseurl: "URL de base",
+      acme_hint_baseurl: "URL absolue du portail. Si vide, déduite automatiquement de la requête HTTP.",
+      acme_cert_title: "📜 Émission Certificats AD CS",
+      acme_field_ca_id: "AC par défaut (ID)",
+      acme_hint_ca_id: "ID de l'AC configurée dans PortalConfig. Laisser vide pour utiliser l'AC par défaut.",
+      acme_field_template: "Modèle AD CS",
+      acme_field_allowed_templates: "Modèles autorisés",
+      acme_hint_allowed_templates: "Liste séparée par des virgules. Si vide, seul le modèle par défaut est autorisé.",
+      acme_validation_title: "🔍 Validation Challenge HTTP-01",
+      acme_field_validation_mode: "Mode de validation",
+      acme_hint_validation_mode: "Dans les réseaux micro-segmentés ou DMZ strictes, utilisez AutoApprove si le serveur ne peut pas contacter les clients sur le port HTTP.",
+      acme_field_http_port: "Port HTTP Challenge",
+      acme_field_timeout: "Délai Challenge (sec)",
+      acme_tos_title: "📋 Conditions d'utilisation",
+      acme_field_require_tos: "Exiger l'acceptation des CGU",
+      acme_field_tos_url: "URL des CGU",
+      acme_directory_label: "Répertoire ACME",
+      acme_btn_test: "🧪 Tester le répertoire",
+      btn_save_acme: "Enregistrer la configuration ACME"
     },
 
     de: {
@@ -1098,7 +1170,31 @@ window.I18N = (function () {
       admin_auth_required: "Authentifizierung erforderlich.",
       admin_conn_error: "Verbindungsfehler",
       admin_config_load_error: "Konfiguration konnte nicht geladen werden",
-      admin_unknown_user: "Unbekannt"
+      admin_unknown_user: "Unbekannt",
+
+      // ACME Tab (v2.3.1)
+      tab_acme: "🤖 ACME-Server",
+      acme_general_title: "🤖 ACME-Server (RFC 8555)",
+      acme_field_enabled: "Aktiviert",
+      acme_field_baseurl: "Basis-URL",
+      acme_hint_baseurl: "Absolute Portal-URL. Wenn leer, wird sie automatisch aus der HTTP-Anfrage abgeleitet.",
+      acme_cert_title: "📜 AD CS Zertifikatsausstellung",
+      acme_field_ca_id: "Standard-CA (ID)",
+      acme_hint_ca_id: "In PortalConfig konfigurierte CA-ID. Leer lassen für die Portal-Standard-CA.",
+      acme_field_template: "AD CS-Vorlage",
+      acme_field_allowed_templates: "Erlaubte Vorlagen",
+      acme_hint_allowed_templates: "Kommagetrennte Liste. Wenn leer, ist nur die Standardvorlage erlaubt.",
+      acme_validation_title: "🔍 HTTP-01 Challenge-Validierung",
+      acme_field_validation_mode: "Validierungsmodus",
+      acme_hint_validation_mode: "In mikro-segmentierten Netzwerken oder strengen DMZs verwenden Sie AutoApprove, wenn der Server die Clients über den HTTP-Port nicht erreichen kann.",
+      acme_field_http_port: "HTTP Challenge-Port",
+      acme_field_timeout: "Challenge-Timeout (Sek.)",
+      acme_tos_title: "📋 Nutzungsbedingungen",
+      acme_field_require_tos: "ToS-Akzeptanz erforderlich",
+      acme_field_tos_url: "URL der Nutzungsbedingungen",
+      acme_directory_label: "ACME-Verzeichnis",
+      acme_btn_test: "🧪 Verzeichnis testen",
+      btn_save_acme: "ACME-Konfiguration speichern"
     },
 
     es: {
@@ -1366,7 +1462,31 @@ window.I18N = (function () {
       admin_auth_required: "Autenticación requerida.",
       admin_conn_error: "Error de conexión",
       admin_config_load_error: "No se pudo cargar la configuración",
-      admin_unknown_user: "Desconocido"
+      admin_unknown_user: "Desconocido",
+
+      // ACME Tab (v2.3.1)
+      tab_acme: "🤖 Servidor ACME",
+      acme_general_title: "🤖 Servidor ACME (RFC 8555)",
+      acme_field_enabled: "Habilitado",
+      acme_field_baseurl: "URL base",
+      acme_hint_baseurl: "URL absoluta del portal. Si está vacía, se deduce automáticamente de la petición HTTP.",
+      acme_cert_title: "📜 Emisión de Certificados AD CS",
+      acme_field_ca_id: "CA predeterminada (ID)",
+      acme_hint_ca_id: "ID de la CA configurada en PortalConfig. Dejar vacío para usar la CA predeterminada del portal.",
+      acme_field_template: "Plantilla AD CS",
+      acme_field_allowed_templates: "Plantillas permitidas",
+      acme_hint_allowed_templates: "Lista separada por comas. Si está vacía, solo se permite la plantilla predeterminada.",
+      acme_validation_title: "🔍 Validación Challenge HTTP-01",
+      acme_field_validation_mode: "Modo de validación",
+      acme_hint_validation_mode: "En redes micro-segmentadas o DMZ estrictas, usar AutoApprove si el servidor no puede contactar a los clientes por el puerto HTTP.",
+      acme_field_http_port: "Puerto HTTP Challenge",
+      acme_field_timeout: "Tiempo límite Challenge (seg)",
+      acme_tos_title: "📋 Términos de Servicio",
+      acme_field_require_tos: "Requerir aceptación de ToS",
+      acme_field_tos_url: "URL de Términos de Servicio",
+      acme_directory_label: "Directorio ACME",
+      acme_btn_test: "🧪 Probar Directorio",
+      btn_save_acme: "Guardar Configuración ACME"
     },
 
     pt: {
@@ -1634,7 +1754,31 @@ window.I18N = (function () {
       admin_auth_required: "Autenticação obrigatória.",
       admin_conn_error: "Erro de conexão",
       admin_config_load_error: "Não foi possível carregar a configuração",
-      admin_unknown_user: "Desconhecido"
+      admin_unknown_user: "Desconhecido",
+
+      // ACME Tab (v2.3.1)
+      tab_acme: "🤖 Servidor ACME",
+      acme_general_title: "🤖 Servidor ACME (RFC 8555)",
+      acme_field_enabled: "Ativado",
+      acme_field_baseurl: "URL base",
+      acme_hint_baseurl: "URL absoluto do portal. Se vazio, é deduzido automaticamente da solicitação HTTP.",
+      acme_cert_title: "📜 Emissão de Certificados AD CS",
+      acme_field_ca_id: "CA padrão (ID)",
+      acme_hint_ca_id: "ID da CA configurada em PortalConfig. Deixar vazio para usar a CA padrão do portal.",
+      acme_field_template: "Modelo AD CS",
+      acme_field_allowed_templates: "Modelos permitidos",
+      acme_hint_allowed_templates: "Lista separada por vírgulas. Se vazio, apenas o modelo padrão é permitido.",
+      acme_validation_title: "🔍 Validação Challenge HTTP-01",
+      acme_field_validation_mode: "Modo de validação",
+      acme_hint_validation_mode: "Em redes micro-segmentadas ou DMZs restritas, usar AutoApprove se o servidor não conseguir contactar os clientes pela porta HTTP.",
+      acme_field_http_port: "Porta HTTP Challenge",
+      acme_field_timeout: "Tempo limite Challenge (seg)",
+      acme_tos_title: "📋 Termos de Serviço",
+      acme_field_require_tos: "Exigir aceitação dos ToS",
+      acme_field_tos_url: "URL dos Termos de Serviço",
+      acme_directory_label: "Diretório ACME",
+      acme_btn_test: "🧪 Testar Diretório",
+      btn_save_acme: "Salvar Configuração ACME"
     },
 
     zh: {
@@ -1902,7 +2046,31 @@ window.I18N = (function () {
       admin_auth_required: "需要身份验证。",
       admin_conn_error: "连接错误",
       admin_config_load_error: "无法加载配置",
-      admin_unknown_user: "未知"
+      admin_unknown_user: "未知",
+
+      // ACME Tab (v2.3.1)
+      tab_acme: "🤖 ACME 服务器",
+      acme_general_title: "🤖 ACME 服务器 (RFC 8555)",
+      acme_field_enabled: "启用",
+      acme_field_baseurl: "基础 URL",
+      acme_hint_baseurl: "门户的绝对 URL。如果为空，将从 HTTP 请求中自动推断。",
+      acme_cert_title: "📜 AD CS 证书颁发",
+      acme_field_ca_id: "默认 CA (ID)",
+      acme_hint_ca_id: "在 PortalConfig 中配置的 CA ID。留空则使用门户默认 CA。",
+      acme_field_template: "AD CS 模板",
+      acme_field_allowed_templates: "允许的模板",
+      acme_hint_allowed_templates: "以逗号分隔的列表。如果为空，仅允许默认模板。",
+      acme_validation_title: "🔍 HTTP-01 挑战验证",
+      acme_field_validation_mode: "验证模式",
+      acme_hint_validation_mode: "在微分段网络或严格 DMZ 中，如果服务器无法通过 HTTP 端口联系客户端，请使用 AutoApprove。",
+      acme_field_http_port: "HTTP 挑战端口",
+      acme_field_timeout: "挑战超时（秒）",
+      acme_tos_title: "📋 服务条款",
+      acme_field_require_tos: "要求接受服务条款",
+      acme_field_tos_url: "服务条款 URL",
+      acme_directory_label: "ACME 目录",
+      acme_btn_test: "🧪 测试目录",
+      btn_save_acme: "保存 ACME 配置"
     }
   };
 
