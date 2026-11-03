@@ -318,7 +318,10 @@ Then open a browser at:
 * **ESC8 Hardening**: This portal does not expose the traditional `certsrv` endpoint.
 * **Separation from certsrv**: The portal uses a completely separate IIS website and Application Pool, ensuring that an issue with the portal does not affect certsrv, and vice versa.
 
-### Hardening (v2.1.0 - v2.2.1)
+### Hardening & Features (v2.1.0 - v2.3.0)
+
+* **Native ACME RFC 8555 Server (v2.3.0)**: Built-in native ACME server in ASP.NET Core for automated certificate enrollment with `win-acme`, `certbot`, `acme.sh`, or Traefik directly against Microsoft AD CS. Includes `http-01` challenge validation, `AutoApprove` mode for internal air-gapped environments, asymmetric JWS verification (RSA/ECDSA), atomic persistence, and `Test-AcmeProtocol.ps1` test suite.
+* **IIS Dual-Auth Configuration for ACME (v2.3.0)**: Anonymous authentication enabled specifically on `/acme/*` and `/.well-known/*`, preserving mandatory Windows Authentication across the rest of the portal.
 
 Starting with **2.1.0** through **2.2.1**, the portal enforces the following controls (details in the changelog):
 

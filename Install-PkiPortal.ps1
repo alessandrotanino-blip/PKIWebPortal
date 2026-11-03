@@ -299,10 +299,10 @@ try {
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Cyan
 if ($script:IsItalian) {
-    Write-Host "  INSTALLAZIONE PORTALE PKI WEB ENROLLMENT (AD CS Modern) v2.2.1 " -ForegroundColor White
+    Write-Host "  INSTALLAZIONE PORTALE PKI WEB ENROLLMENT (AD CS Modern) v2.3.0 " -ForegroundColor White
     Write-Host "  Installazione a fianco di Microsoft certsrv (non intrusiva)     " -ForegroundColor Gray
 } else {
-    Write-Host "  PKI WEB ENROLLMENT PORTAL INSTALLATION (AD CS Modern) v2.2.1   " -ForegroundColor White
+    Write-Host "  PKI WEB ENROLLMENT PORTAL INSTALLATION (AD CS Modern) v2.3.0   " -ForegroundColor White
     Write-Host "  Side-by-side with Microsoft certsrv (non-intrusive)             " -ForegroundColor Gray
 }
 Write-Host "==================================================================" -ForegroundColor Cyan
