@@ -519,8 +519,12 @@ Gli endpoint ACME operano con **accesso anonimo a livello di trasporto HTTP** (c
   "AllowedTemplates": [
     "WebServer5y"
   ],
+  "AllowedDomains": [
+    "azienda.lan"
+  ],
   "ValidationMode": "Http01",
   "HttpPort": 80,
+  "AllowPrivateIpValidation": true,
   "ChallengeTimeoutSeconds": 15,
   "RequireTermsOfServiceAgreed": true,
   "TermsOfServiceUrl": "/acme/terms"
@@ -553,6 +557,8 @@ Accedi a /admin con un account membro di **Domain Admins** o **PKI Admins** e cl
 | **Modalità Validazione** | Http01 / AutoApprove / Http01WithAutoFallback |
 | **Porta HTTP Challenge** | Porta su cui contattare il client per la challenge (default: 80) |
 | **Timeout Challenge (sec)** | Tempo massimo per la verifica HTTP-01 (5–120 sec) |
+| **Consenti IP Privati (RFC 1918)** | Abilita la validazione HTTP-01 anche verso indirizzi IP privati intranet aziendali (anti-SSRF attivo) |
+| **Domini Emittibili (Allowlist)** | Lista separata da virgole dei domini consentiti (es. zienda.lan) |
 | **Richiedi Accettazione ToS** | Toggle obbligatorietà dei termini di servizio |
 | **URL Termini di Servizio** | Percorso o URL dei ToS |
 

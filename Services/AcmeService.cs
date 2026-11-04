@@ -318,7 +318,8 @@ public class AcmeService : IAcmeService
         // l'allowlist è obbligatoria — senza di essa qualsiasi nome (anche
         // interno) diventerebbe emittibile senza proof di ownership.
         if ((string.Equals(Config.ValidationMode, "AutoApprove", StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(Config.ValidationMode, "None", StringComparison.OrdinalIgnoreCase)) &&
+             string.Equals(Config.ValidationMode, "None", StringComparison.OrdinalIgnoreCase) ||
+             Config.AllowPrivateIpValidation) &&
             (Config.AllowedDomains == null || Config.AllowedDomains.Count == 0))
         {
             _logger.LogError("Ordine ACME rifiutato: ValidationMode '{Mode}' senza AllowedDomains configurata (configurazione pericolosa).", Config.ValidationMode);

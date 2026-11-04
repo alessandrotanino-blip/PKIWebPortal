@@ -693,6 +693,14 @@ admin.MapPut("/acme-config", async (HttpContext ctx, AcmeConfig newAcmeCfg) =>
         return Results.BadRequest(new { message = "Con ValidationMode 'AutoApprove' è obbligatorio impostare almeno un dominio in AllowedDomains." });
     }
 
+    // SECURITY (2.3.2): con AllowPrivateIpValidation abilitato l'allowlist è
+    // obbligatoria per impedire che client ACME usino la validazione su IP privati per SSRF.
+    if (newAcmeCfg.AllowPrivateIpValidation &&
+        (newAcmeCfg.AllowedDomains == null || !newAcmeCfg.AllowedDomains.Any(d => !string.IsNullOrWhiteSpace(d))))
+    {
+        return Results.BadRequest(new { message = "Con 'AllowPrivateIpValidation' abilitato è obbligatorio impostare almeno un dominio in AllowedDomains." });
+    }
+
     if (newAcmeCfg.HttpPort is < 1 or > 65535)
         return Results.BadRequest(new { message = "HttpPort deve essere compreso tra 1 e 65535." });
 

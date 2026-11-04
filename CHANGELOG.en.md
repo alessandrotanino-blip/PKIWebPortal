@@ -7,6 +7,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.3.2] - 2026-11-04
+
+### New Features & Intranet ACME Support
+
+- **RFC 1918 Private IP Support for HTTP-01 Validation (`AllowPrivateIpValidation`)**:
+  - Added configuration option `AcmeConfig.AllowPrivateIpValidation` (default: `false`).
+  - When enabled, allows the ACME server to perform real HTTP-01 challenge validations against corporate intranet servers on private IP ranges (RFC 1918: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`; CGNAT `100.64.0.0/10`; IPv6 ULA `fc00::/7`).
+  - Provides significantly stronger security than pure `AutoApprove`, enforcing genuine *Proof of Possession* and web server ownership validation within corporate Active Directory networks.
+  - **Strict and permanent anti-SSRF defenses**: loopback (`127.0.0.0/8`, `::1`), link-local and cloud metadata endpoints (`169.254.0.0/16`, `169.254.169.254`, `fe80::/10`), multicast (`224.0.0.0/4`, `ff00::/8`), and non-routable addresses (`0.0.0.0/8`) remain **strictly blocked at all times**.
+  - **Mandatory security constraint**: when `AllowPrivateIpValidation` is enabled, specifying `AllowedDomains` is **mandatory** (enforced on ACME order creation and in the administration PUT API), preventing ACME clients from probing unauthorized internal endpoints.
+
+### Admin GUI & i18n Improvements
+
+- **Administration Panel (`/admin`)**:
+  - Added interactive toggle **Allow Private IPs (Intranet RFC 1918)** with descriptive guidance under the **🤖 Server ACME** tab.
+  - Full multilingual localization (EN, IT, FR, DE, ES, PT, ZH) in `i18n.js`.
+
 ## [2.3.1] - 2026-11-03
 
 ### Security & Hardening (ACME Server Security Review)

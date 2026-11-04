@@ -306,6 +306,17 @@
         </div>
 
         <div class="field-row">
+          <label for="acme-allow-private-ips" data-i18n="acme_field_allow_private_ips">Consenti IP Privati (Intranet RFC 1918)</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="acme-allow-private-ips">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <small style="padding: 0 0 0.75rem 188px; display:block; opacity:0.7;" data-i18n="acme_hint_allow_private_ips">
+          Consente la verifica reale HTTP-01 anche verso server con indirizzi IP privati (10.x, 172.16-31.x, 192.168.x). I controlli anti-SSRF mantengono sempre bloccati loopback (127.0.0.1) e metadata cloud (169.254.169.254). Richiede la compilazione di Domini Emittibili (Allowlist).
+        </small>
+
+        <div class="field-row">
           <label for="acme-allowed-domains" data-i18n="acme_field_allowed_domains">Domini Emittibili (Allowlist)</label>
           <input type="text" id="acme-allowed-domains" class="form-control" placeholder="vd.ld, app.corp.it, …">
         </div>
@@ -1398,6 +1409,7 @@
       document.getElementById('acme-validation-mode').value  = c.validationMode ?? c.ValidationMode ?? 'Http01';
       document.getElementById('acme-http-port').value        = c.httpPort ?? c.HttpPort ?? 80;
       document.getElementById('acme-timeout').value          = c.challengeTimeoutSeconds ?? c.ChallengeTimeoutSeconds ?? 15;
+      document.getElementById('acme-allow-private-ips').checked = c.allowPrivateIpValidation ?? c.AllowPrivateIpValidation ?? false;
       var allowedDomains = c.allowedDomains ?? c.AllowedDomains;
       document.getElementById('acme-allowed-domains').value  = Array.isArray(allowedDomains) ? allowedDomains.join(', ') : (allowedDomains || '');
       document.getElementById('acme-require-tos').checked    = c.requireTermsOfServiceAgreed ?? c.RequireTermsOfServiceAgreed ?? true;
@@ -1423,6 +1435,7 @@
         ValidationMode:               document.getElementById('acme-validation-mode').value,
         HttpPort:                     parseInt(document.getElementById('acme-http-port').value, 10) || 80,
         ChallengeTimeoutSeconds:      parseInt(document.getElementById('acme-timeout').value, 10) || 15,
+        AllowPrivateIpValidation:     document.getElementById('acme-allow-private-ips').checked,
         RequireTermsOfServiceAgreed:  document.getElementById('acme-require-tos').checked,
         TermsOfServiceUrl:            document.getElementById('acme-tos-url').value.trim() || '/acme/terms'
       };

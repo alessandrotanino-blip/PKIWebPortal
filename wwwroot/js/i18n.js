@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PKI Portal - Internationalization (i18n) Module
  * Supports 7 languages: Italian (it), English (en), French (fr), German (de), Spanish (es), Portuguese (pt), Chinese (zh).
  * Features flag icons, dropdown language picker, and reactive UI translation.
@@ -313,6 +313,7 @@ window.I18N = (function () {
       acme_hint_validation_mode: "In reti micro-segmentate o DMZ strette, usare AutoApprove se il server non può contattare i client sulla porta HTTP.",
       acme_field_http_port: "Porta HTTP Challenge",
       acme_field_timeout: "Timeout Challenge (sec)",
+      acme_field_allow_private_ips: "Consenti IP Privati (Intranet RFC 1918)",
       acme_tos_title: "📋 Termini di Servizio",
       acme_field_require_tos: "Richiedi Accettazione ToS",
       acme_field_tos_url: "URL Termini di Servizio",
@@ -605,6 +606,7 @@ window.I18N = (function () {
       acme_hint_validation_mode: "In micro-segmented networks or strict DMZs, use AutoApprove if the server cannot reach clients on the HTTP port.",
       acme_field_http_port: "HTTP Challenge Port",
       acme_field_timeout: "Challenge Timeout (sec)",
+      acme_field_allow_private_ips: "Allow Private IPs (Intranet RFC 1918)",
       acme_tos_title: "📋 Terms of Service",
       acme_field_require_tos: "Require ToS Acceptance",
       acme_field_tos_url: "Terms of Service URL",
@@ -897,6 +899,7 @@ window.I18N = (function () {
       acme_hint_validation_mode: "Dans les réseaux micro-segmentés ou DMZ strictes, utilisez AutoApprove si le serveur ne peut pas contacter les clients sur le port HTTP.",
       acme_field_http_port: "Port HTTP Challenge",
       acme_field_timeout: "Délai Challenge (sec)",
+      acme_field_allow_private_ips: "Autoriser les IP privées (Intranet RFC 1918)",
       acme_tos_title: "📋 Conditions d'utilisation",
       acme_field_require_tos: "Exiger l'acceptation des CGU",
       acme_field_tos_url: "URL des CGU",
@@ -1189,6 +1192,7 @@ window.I18N = (function () {
       acme_hint_validation_mode: "In mikro-segmentierten Netzwerken oder strengen DMZs verwenden Sie AutoApprove, wenn der Server die Clients über den HTTP-Port nicht erreichen kann.",
       acme_field_http_port: "HTTP Challenge-Port",
       acme_field_timeout: "Challenge-Timeout (Sek.)",
+      acme_field_allow_private_ips: "Private IPs erlauben (Intranet RFC 1918)",
       acme_tos_title: "📋 Nutzungsbedingungen",
       acme_field_require_tos: "ToS-Akzeptanz erforderlich",
       acme_field_tos_url: "URL der Nutzungsbedingungen",
@@ -1481,6 +1485,7 @@ window.I18N = (function () {
       acme_hint_validation_mode: "En redes micro-segmentadas o DMZ estrictas, usar AutoApprove si el servidor no puede contactar a los clientes por el puerto HTTP.",
       acme_field_http_port: "Puerto HTTP Challenge",
       acme_field_timeout: "Tiempo límite Challenge (seg)",
+      acme_field_allow_private_ips: "Permitir IPs privadas (Intranet RFC 1918)",
       acme_tos_title: "📋 Términos de Servicio",
       acme_field_require_tos: "Requerir aceptación de ToS",
       acme_field_tos_url: "URL de Términos de Servicio",
@@ -1773,6 +1778,7 @@ window.I18N = (function () {
       acme_hint_validation_mode: "Em redes micro-segmentadas ou DMZs restritas, usar AutoApprove se o servidor não conseguir contactar os clientes pela porta HTTP.",
       acme_field_http_port: "Porta HTTP Challenge",
       acme_field_timeout: "Tempo limite Challenge (seg)",
+      acme_field_allow_private_ips: "Permitir IPs privados (Intranet RFC 1918)",
       acme_tos_title: "📋 Termos de Serviço",
       acme_field_require_tos: "Exigir aceitação dos ToS",
       acme_field_tos_url: "URL dos Termos de Serviço",
@@ -2065,6 +2071,7 @@ window.I18N = (function () {
       acme_hint_validation_mode: "在微分段网络或严格 DMZ 中，如果服务器无法通过 HTTP 端口联系客户端，请使用 AutoApprove。",
       acme_field_http_port: "HTTP 挑战端口",
       acme_field_timeout: "挑战超时（秒）",
+      acme_field_allow_private_ips: "允许私有 IP (企业内网 RFC 1918)",
       acme_tos_title: "📋 服务条款",
       acme_field_require_tos: "要求接受服务条款",
       acme_field_tos_url: "服务条款 URL",

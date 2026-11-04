@@ -28,7 +28,7 @@ public class AcmeValidationService : IAcmeValidationService
         string expectedKeyAuth,
         AcmeConfig config)
     {
-        // 1. Modalità AutoApprove: verifica bypassata (gate Applicato in
+        // 1. Modalità AutoApprove: verifica bypassata (gate applicato in
         //    AcmeService: richiede AllowedDomains non vuoto, altrimenti gli
         //    ordini vengono rifiutati a monte).
         if (string.Equals(config.ValidationMode, "AutoApprove", StringComparison.OrdinalIgnoreCase) ||
@@ -39,16 +39,20 @@ public class AcmeValidationService : IAcmeValidationService
             return (true, null);
         }
 
-        // 2. SECURITY (2.3.1, anti-SSRF): l'identifier è input di un client
-        //    anonimo. Deve essere un hostname DNS valido che risolva ESCLUSIVAMENTE
-        //    su indirizzi pubblici: si impedisce così di puntare la validazione
-        //    verso loopback, rete interna, metadata endpoint cloud (169.254.169.254)
-        //    o IP literal privati, e di leggere i loro contenuti.
-        string? ssrfError = ValidateIdentifierIsPublicDns(identifier, out IPAddress[] publicAddresses);
+        // 2. SECURITY (2.3.1/2.3.2, anti-SSRF): l'identifier è input di un client
+        //    anonimo. Deve essere un hostname DNS valido che risolva su indirizzi
+        //    ammessi (pubblici di default, oppure privati RFC 1918 se AllowPrivateIpValidation=true).
+        //    Loopback (127.0.0.1, ::1) e Cloud metadata (169.254.169.254, fe80::/10)
+        //    sono SEMPRE rigorosamente bloccati.
+        string? ssrfError = ValidateIdentifierAllowedDns(identifier, config.AllowPrivateIpValidation, out IPAddress[] targetAddresses);
         if (ssrfError != null)
         {
-            _logger.LogWarning("Validazione HTTP-01 rifiutata per identifier non pubblico '{Identifier}': {Reason}", identifier, ssrfError);
-            return (false, "Dominio non accettato per la validazione HTTP-01 (identificatore non valido o non risolvibile su indirizzi pubblici).");
+            _logger.LogWarning("Validazione HTTP-01 rifiutata per identifier '{Identifier}' (AllowPrivateIpValidation={AllowPrivate}): {Reason}",
+                identifier, config.AllowPrivateIpValidation, ssrfError);
+            string errorDetail = config.AllowPrivateIpValidation
+                ? "Dominio non accettato per la validazione HTTP-01 (identificatore non valido o non risolvibile su indirizzi di rete consentiti)."
+                : "Dominio non accettato per la validazione HTTP-01 (identificatore non valido o non risolvibile su indirizzi pubblici. Per ambienti intranet aziendali abilitare AllowPrivateIpValidation).";
+            return (false, errorDetail);
         }
 
         int port = config.HttpPort > 0 ? config.HttpPort : 80;
@@ -64,7 +68,7 @@ public class AcmeValidationService : IAcmeValidationService
             // SECURITY: User-Agent standard ACME (il client è condiviso dal
             // factory: non mutiamo la Timeout condivisa, usiamo un CTS per call).
             client.DefaultRequestHeaders.UserAgent.Clear();
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("PkiPortal-AcmeValidator/2.3.1 (+https://github.com/PkiPortal)");
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("PkiPortal-AcmeValidator/2.3.2 (+https://github.com/PkiPortal)");
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(Math.Max(5, config.ChallengeTimeoutSeconds)));
             HttpResponseMessage response;
@@ -153,25 +157,28 @@ public class AcmeValidationService : IAcmeValidationService
     }
 
     /// <summary>
-    /// SECURITY (2.3.1, anti-SSRF): verifica che l'identifier sia un hostname
-    /// DNS valido che risolva solo su indirizzi pubblici. Ritorna null se OK,
-    /// altrimenti il motivo del rifiuto (uso solo a scopo di log).
+    /// SECURITY (2.3.1/2.3.2, anti-SSRF): verifica che l'identifier sia un hostname
+    /// DNS valido che risolva su indirizzi ammessi.
+    /// Se allowPrivateIps = false: ammessi esclusivamente IP pubblici.
+    /// Se allowPrivateIps = true: ammessi anche IP privati RFC 1918, CGNAT e IPv6 ULA,
+    /// ma loopback (127.0.0.1, ::1) e Cloud metadata (169.254.169.254, fe80::/10)
+    /// restano SEMPRE rigorosamente bloccati.
+    /// Ritorna null se OK, altrimenti il motivo del rifiuto (uso a scopo di log).
     /// </summary>
-    private static string? ValidateIdentifierIsPublicDns(string identifier, out IPAddress[] publicAddresses)
+    private static string? ValidateIdentifierAllowedDns(string identifier, bool allowPrivateIps, out IPAddress[] targetAddresses)
     {
-        publicAddresses = Array.Empty<IPAddress>();
+        targetAddresses = Array.Empty<IPAddress>();
         identifier = identifier?.Trim().TrimEnd('.') ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(identifier))
             return "identifier vuoto.";
 
-        // IP literal: ammessi solo se pubblici (nessuna risoluzione, nessun
-        // vhost: il client non controlla più nulla).
+        // IP literal: ammessi solo se conformi alle regole
         if (IPAddress.TryParse(identifier, out var literal))
         {
-            if (!IsPublicIp(literal))
-                return "IP literal non pubblico.";
-            publicAddresses = new[] { literal };
+            if (!IsAllowedIp(literal, allowPrivateIps))
+                return allowPrivateIps ? "IP literal non consentito (riservato, loopback o metadata)." : "IP literal non pubblico.";
+            targetAddresses = new[] { literal };
             return null;
         }
 
@@ -197,22 +204,29 @@ public class AcmeValidationService : IAcmeValidationService
         if (addresses.Length == 0)
             return "nessuna risoluzione DNS.";
 
-        // Blocca se QUALSIASI indirizzo risolto è non pubblico: impedisce a un
-        // dominio sotto controllo dell'attaccante di puntare ad A record interni
-        // (DNS rebinding / record misti pubblico+privato).
+        // Blocca se QUALSIASI indirizzo risolto non è ammesso: impedisce a un
+        // dominio sotto controllo dell'attaccante di puntare ad A record proibiti
+        // (DNS rebinding / record misti ammesso+proibito).
         foreach (var addr in addresses)
         {
-            if (!IsPublicIp(addr))
-                return "l'hostname risolve anche su indirizzi non pubblici.";
+            if (!IsAllowedIp(addr, allowPrivateIps))
+            {
+                return allowPrivateIps
+                    ? "l'hostname risolve su indirizzi vietati (loopback, metadata o riservati)."
+                    : "l'hostname risolve anche su indirizzi non pubblici.";
+            }
         }
 
-        publicAddresses = addresses;
+        targetAddresses = addresses;
         return null;
     }
 
-    /// <summary>True solo per indirizzi IPv4/IPv6 "pubblici" (non loopback,
-    /// privati, link-local, multicast, reserved o metadata).</summary>
-    private static bool IsPublicIp(IPAddress ip)
+    /// <summary>
+    /// Verifica se un IP è consentito.
+    /// Loopback, link-local, multicast, 0.0.0.0/8 e metadata cloud sono SEMPRE bloccati.
+    /// Se allowPrivateIps è true, gli intervalli privati RFC 1918, CGNAT e IPv6 ULA sono ammessi.
+    /// </summary>
+    private static bool IsAllowedIp(IPAddress ip, bool allowPrivateIps)
     {
         // Mappature IPv4-in-IPv6 (::ffff:a.b.c.d) → ispeziona l'embedded IPv4.
         if (ip.AddressFamily == AddressFamily.InterNetworkV6)
@@ -220,7 +234,7 @@ public class AcmeValidationService : IAcmeValidationService
             if (ip.IsIPv4MappedToIPv6)
             {
                 byte[] v4 = ip.GetAddressBytes().Skip(12).Take(4).ToArray();
-                return IsPublicIp(new IPAddress(v4));
+                return IsAllowedIp(new IPAddress(v4), allowPrivateIps);
             }
 
             Span<byte> b = ip.GetAddressBytes();
@@ -230,28 +244,42 @@ public class AcmeValidationService : IAcmeValidationService
                 bool allZero = true;
                 for (int i = 0; i < 10; i++) if (b[i] != 0) { allZero = false; break; }
                 if (allZero) return false;
-                if (b[9] == 1) return false; // ::1
-                if (b[8] == 0xff) return false; // IPv4-mapped
+                if (b[9] == 1) return false; // ::1 loopback
+                if (b[8] == 0xff) return false; // IPv4-mapped (già gestito sopra)
             }
-            if (b[0] == 0xfe && (b[1] & 0xc0) == 0x80) return false; // fe80::/10 link-local
-            if (b[0] == 0xfc || b[0] == 0xfd) return false;          // fc00::/7 ULA
+            if (b[0] == 0xfe && (b[1] & 0xc0) == 0x80) return false; // fe80::/10 link-local (metadata)
             if (b[0] == 0xff) return false;                          // ff00::/8 multicast
             if (b[0] == 0x64 && b[1] == 0xff && b[2] == 0x9b) return false; // 64:ff9b::/96 NAT64
+
+            // IPv6 ULA (fc00::/7)
+            if (b[0] == 0xfc || b[0] == 0xfd)
+                return allowPrivateIps;
+
             // Il restante spazio IPv6 pubblico è accettato.
             return true;
         }
 
         byte[] o = ip.GetAddressBytes();
-        // 0.0.0.0/8, 10/8, 127/8, 169.254/16, 172.16/12, 192.168/16,
-        // 100.64/10 (CGNAT), 224/4 (multicast), 240/4 (reserved).
+        // Blocchi tassativi SEMPRE attivi (anti-SSRF):
+        // 0.0.0.0/8 (rete corrente / non assegnata)
         if (o[0] == 0) return false;
-        if (o[0] == 10) return false;
+        // 127.0.0.0/8 (loopback)
         if (o[0] == 127) return false;
+        // 169.254.0.0/16 (link-local, cloud metadata es. AWS/Azure 169.254.169.254)
         if (o[0] == 169 && o[1] == 254) return false;
-        if (o[0] == 172 && o[1] >= 16 && o[1] <= 31) return false;
-        if (o[0] == 192 && o[1] == 168) return false;
-        if (o[0] == 100 && (o[1] & 0xc0) == 64) return false;
+        // 224.0.0.0/4 e oltre (multicast e classe E riservata)
         if (o[0] >= 224) return false;
+
+        // Intervalli privati intranet RFC 1918 e CGNAT:
+        // 10.0.0.0/8
+        if (o[0] == 10) return allowPrivateIps;
+        // 172.16.0.0/12
+        if (o[0] == 172 && o[1] >= 16 && o[1] <= 31) return allowPrivateIps;
+        // 192.168.0.0/16
+        if (o[0] == 192 && o[1] == 168) return allowPrivateIps;
+        // 100.64.0.0/10 (CGNAT / Carrier-grade NAT)
+        if (o[0] == 100 && (o[1] & 0xc0) == 64) return allowPrivateIps;
+
         return true;
     }
 

@@ -60,6 +60,15 @@ public class AcmeConfig
     public int HttpPort { get; set; } = 80;
 
     /// <summary>
+    /// Se true, consente la validazione HTTP-01 anche verso indirizzi IP privati
+    /// della intranet aziendale (RFC 1918: 10/8, 172.16/12, 192.168/16; CGNAT 100.64/10; ULA fc00::/7).
+    /// Per protezione anti-SSRF, loopback (127.0.0.1, ::1) e Cloud metadata (169.254.169.254, fe80::/10)
+    /// rimangono SEMPRE bloccati. In modalità IP privati l'allowlist AllowedDomains è obbligatoria.
+    /// Default: false.
+    /// </summary>
+    public bool AllowPrivateIpValidation { get; set; } = false;
+
+    /// <summary>
     /// Timeout in secondi per la validazione della challenge http-01 (default: 15s).
     /// </summary>
     public int ChallengeTimeoutSeconds { get; set; } = 15;

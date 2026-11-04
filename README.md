@@ -530,8 +530,12 @@ The ACME endpoints operate with **anonymous HTTP transport access** (configured 
   "AllowedTemplates": [
     "WebServer5y"
   ],
+  "AllowedDomains": [
+    "corp.contoso.com"
+  ],
   "ValidationMode": "Http01",
   "HttpPort": 80,
+  "AllowPrivateIpValidation": true,
   "ChallengeTimeoutSeconds": 15,
   "RequireTermsOfServiceAgreed": true,
   "TermsOfServiceUrl": "/acme/terms"
