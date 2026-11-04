@@ -1,8 +1,11 @@
-﻿[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
+[🇮🇹 Italiano](README.it.md) | [🇬🇧 English](README.md)
 
 # Enterprise PKI Web Enrollment Portal (AD CS Modern Gateway)
 
 Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostituire l'obsoleto e deprecato **Microsoft Web Enrollment (`certsrv`)**, eliminando qualsiasi dipendenza da ActiveX/Internet Explorer e mitigando i rischi di sicurezza NTLM Relay (ESC8).
+
+> [!TIP]
+> 🚀 **New Feature! Server ACME Nativo Completo (RFC 8555)**: Emissione e rinnovo automatico di certificati SSL/TLS direttamente verso Microsoft AD CS tramite client standard (`win-acme`, `Certbot`, `Traefik`, `Caddy`, `acme.sh`) — senza bisogno di proxy o bridge esterni!
 
 ---
 
@@ -43,7 +46,7 @@ Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostit
 
    * Supporto completo per 7 lingue (**Italiano, Inglese, Francese, Tedesco, Spagnolo, Portoghese, Cinese**) con cambio dinamico istantaneo.
    * Selezione tema Chiaro/Scuro persistente in memoria locale.
-9. **Server ACME RFC 8555 Integrato & REST API (win-acme / Certbot / PowerShell)**:
+9. 🚀 **[New Feature!] Server ACME Nativo Completo (RFC 8555) & REST API (win-acme / Certbot / PowerShell)**:
 
    * **Server ACME (RFC 8555) Nativo**: Consente a client standard come **win-acme** (Windows/IIS), **Certbot** (Linux), **Traefik**, **Caddy** o **acme.sh** di rinnovare automaticamente certificati SSL/TLS direttamente verso Microsoft AD CS.
    * Supporto per challenge **`http-01`** (verifica automatica su porta 80), modalità **`AutoApprove`** (ideale per lab e reti interne) e firme JWS asimmetriche (RSA ed ECDSA).
@@ -452,7 +455,7 @@ Il simulatore:
 
 ---
 
-## 🤖 Server ACME (RFC 8555) e Automazione Rinnovi
+## 🤖 [New Feature!] Server ACME (RFC 8555) e Automazione Rinnovi
 
 A partire dalla versione **2.3.0**, il Portale PKI integra un **Server ACME nativo completo conforme a RFC 8555**, che permette di automatizzare l'emissione e il rinnovo dei certificati TLS/SSL direttamente verso **Microsoft Active Directory Certificate Services (AD CS)**, senza bisogno di proxy o bridge esterni di terze parti (come *ACME-Server-ADCS*, *Smallstep*, *Keyfactor* o *EJBCA*).
 
