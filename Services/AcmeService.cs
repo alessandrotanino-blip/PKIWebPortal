@@ -174,7 +174,7 @@ public class AcmeService : IAcmeService
             };
 
             await _store.SaveAccountAsync(newAccount);
-            _logger.LogInformation("Nuovo account ACME creato con successo: ID {AccountId}, Thumbprint {Thumbprint}", accountId, thumbprint);
+            _logger.LogInformation("Nuovo account ACME creato con successo.");
 
             string locationUrl = $"{baseUrl}/acme/account/{accountId}";
             var createdResult = Results.Created(locationUrl, newAccount);
@@ -209,7 +209,7 @@ public class AcmeService : IAcmeService
 
         if (!string.Equals(account!.Id, target.Id, StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogWarning("Tentativo di lettura account altrui ({Requested}) dall'account {Actual}.", accountId, account.Id);
+            _logger.LogWarning("Tentativo di lettura non autorizzato di un account ACME.");
             return (Problem(AcmeErrorTypes.Unauthorized, "L'account autenticato non corrisponde a quello richiesto.", 403), newNonce);
         }
 
@@ -309,7 +309,7 @@ public class AcmeService : IAcmeService
             // identifier deve coincidere con una voce o essere suo subdominio.
             if (!IsDomainAllowed(ident.Value))
             {
-                _logger.LogWarning("Ordine ACME rifiutato: identifier '{Domain}' non presente in AllowedDomains (account {AccountId}).", ident.Value, account!.Id);
+                _logger.LogWarning("Ordine ACME rifiutato: identifier '{Domain}' non presente in AllowedDomains.", ident.Value);
                 return (Problem(AcmeErrorTypes.RejectedIdentifier, $"Il dominio '{ident.Value}' non è emittibile da questo server ACME."), newNonce);
             }
         }
@@ -394,8 +394,8 @@ public class AcmeService : IAcmeService
         };
 
         await _store.SaveOrderAsync(order);
-        _logger.LogInformation("Nuovo ordine ACME creato: ID {OrderId} per conto di {AccountId} (Domini: {Domains})",
-            orderId, account.Id, string.Join(", ", req.Identifiers.Select(i => i.Value)));
+        _logger.LogInformation("Nuovo ordine ACME creato: ID {OrderId} (Domini: {Domains})",
+            orderId, string.Join(", ", req.Identifiers.Select(i => i.Value)));
 
         string location = $"{baseUrl}/acme/order/{orderId}";
         var created = Results.Created(location, order);
@@ -424,7 +424,7 @@ public class AcmeService : IAcmeService
 
         if (!string.Equals(order.AccountId, account!.Id, StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogWarning("Tentativo di lettura ordine altrui ({OrderId}) dall'account {Actual}.", orderId, account.Id);
+            _logger.LogWarning("Tentativo di lettura non autorizzato dell'ordine ACME {OrderId}.", orderId);
             return (Problem(AcmeErrorTypes.Unauthorized, "L'account autenticato non ha richiesto questo ordine.", 403), newNonce);
         }
 
@@ -910,7 +910,7 @@ public class AcmeService : IAcmeService
 
         if (!string.Equals(order.AccountId, account!.Id, StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogWarning("Revoca ACME rifiutata: l'account {Actual} non è proprietario dell'ordine {OrderId}.", account.Id, order.Id);
+            _logger.LogWarning("Revoca ACME rifiutata: account non proprietario dell'ordine {OrderId}.", order.Id);
             return (Problem(AcmeErrorTypes.Unauthorized, "Solo l'account che ha richiesto il certificato può revocarlo.", 403), newNonce);
         }
 
@@ -926,8 +926,8 @@ public class AcmeService : IAcmeService
             return (Results.Ok(), newNonce);
         }
 
-        _logger.LogInformation("Revoca ACME richiesta per l'ordine {OrderId} (serial {Serial}) dall'account {AccountId} {StatusDetail}.",
-            order.Id, serial, account.Id, req.StatusDetail ?? string.Empty);
+        _logger.LogInformation("Revoca ACME richiesta per l'ordine {OrderId} (serial {Serial}) {StatusDetail}.",
+            order.Id, serial, req.StatusDetail ?? string.Empty);
 
         var rev = await _adcsService.RevokeCertificateAsync(order.CaId, serial, "Revoca ACME richiesta dall'account");
         if (!rev.Success)
@@ -939,7 +939,7 @@ public class AcmeService : IAcmeService
         order.Status = "revoked";
         order.RevokedAt = DateTime.UtcNow;
         await _store.SaveOrderAsync(order);
-        _logger.LogInformation("Certificato ACME revocato: ordine {OrderId}, serial {Serial}, account {AccountId}.", order.Id, serial, account.Id);
+        _logger.LogInformation("Certificato ACME revocato: ordine {OrderId}, serial {Serial}.", order.Id, serial);
 
         return (Results.Ok(), newNonce);
     }
@@ -1018,7 +1018,7 @@ public class AcmeService : IAcmeService
         account.Jwk = innerHeader.Jwk;
         account.Thumbprint = newThumbprint;
         await _store.SaveAccountAsync(account);
-        _logger.LogInformation("Key-change ACME eseguito per l'account {AccountId} (nuovo thumbprint {Thumbprint}).", account.Id, newThumbprint);
+        _logger.LogInformation("Key-change ACME eseguito con successo.");
 
         return (Results.Ok(), newNonce);
     }
