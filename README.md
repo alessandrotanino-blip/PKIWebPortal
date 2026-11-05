@@ -1,6 +1,6 @@
 [🇬🇧 English](README.md) |[🇮🇹 Italiano](README.it.md)
 
-# Enterprise PKI Web Enrollment Portal w ACME (AD CS Modern Gateway)
+# Enterprise PKI Web Enrollment Portal w/ACME (AD CS Modern Gateway)
 
 Modern web portal built with **HTML5** and **ASP.NET Core 8 (C#)**, designed to replace the obsolete and deprecated **Microsoft Web Enrollment (`certsrv`)**, eliminating any dependency on ActiveX/Internet Explorer and mitigating the security risks associated with NTLM Relay (ESC8).
 
