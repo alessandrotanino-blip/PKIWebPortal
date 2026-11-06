@@ -785,11 +785,12 @@ else {
                      "web.config contains AspNetCoreModuleV2 (handler routing OK)."
         }
     }
-        # Remove app_offline.htm to allow the new version to start
-    $appOfflineFile = Join-Path $InstallPath "app_offline.htm"
-    if (Test-Path $appOfflineFile) {
-        Remove-Item -Path $appOfflineFile -Force -ErrorAction SilentlyContinue
-    }
+}
+# Always remove app_offline.htm to allow portal to start
+$appOfflineFile = Join-Path $InstallPath "app_offline.htm"
+if (Test-Path $appOfflineFile) {
+    Remove-Item -Path $appOfflineFile -Force -ErrorAction SilentlyContinue
+    Write-OK "Rimosso app_offline.htm per abilitare il portale." "Removed app_offline.htm to enable portal."
 }
 
 # Create the log folder for stdout
@@ -1205,6 +1206,13 @@ else {
 # ============================================================================
 
 Write-Step "STEP 9: Avvio sito e verifica" "STEP 9: Starting site and verification"
+
+# Ensure app_offline.htm is definitely removed before starting IIS
+$appOfflineFile = Join-Path $InstallPath "app_offline.htm"
+if (Test-Path $appOfflineFile) {
+    Remove-Item -Path $appOfflineFile -Force -ErrorAction SilentlyContinue
+    Write-OK "Rimosso app_offline.htm prima dell'avvio." "Removed app_offline.htm before startup."
+}
 
 try {
     # Start the pool and the site

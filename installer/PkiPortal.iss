@@ -885,9 +885,11 @@ begin
   begin
     MsgBox(CustomMessage('ErrPowerShellFailed'), mbError, MB_OK);
     DeleteFile(CmdFile);
+  DeleteFile(ExpandConstant('{app}\app_offline.htm'));
     Abort;
   end;
   DeleteFile(CmdFile);
+  DeleteFile(ExpandConstant('{app}\app_offline.htm'));
 
   // pulizia eventuale residua della password e della chiave
   RegDeleteValue(HKLM, RegPwKey, 'AppPoolPassword');
