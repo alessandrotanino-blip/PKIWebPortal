@@ -1,4 +1,4 @@
-; ============================================================================
+﻿; ============================================================================
 ; PkiPortal - Installer Windows (Inno Setup 6)
 ;
 ; Crea un setup EXE standard Windows che esegue le stesse operazioni di
@@ -103,6 +103,7 @@ var
   // --- Pagina 4: opzioni ---
   OptionsPage: TWizardPage;
   SkipFirewallCheck, OverwriteConfigCheck: TNewCheckbox;
+  CertThumbprints: TStringList;
 
 // ----------------------------------------------------------------------------
 // Utility
@@ -145,10 +146,13 @@ end;
 
 function SelectedIdentity: String;
 begin
-  if IdentityCombo.ItemIndex >= 0 then
-    Result := IdentityCombo.Items[IdentityCombo.ItemIndex * 2 + 1]
+  case IdentityCombo.ItemIndex of
+    1: Result := 'NetworkService';
+    2: Result := 'LocalSystem';
+    3: Result := 'CUSTOM';
   else
     Result := 'ApplicationPoolIdentity';
+  end;
 end;
 
 function IsCustomIdentity: Boolean;
@@ -158,16 +162,20 @@ end;
 
 function SelectedProtocol: String;
 begin
-  if ProtocolCombo.ItemIndex >= 0 then
-    Result := ProtocolCombo.Items[ProtocolCombo.ItemIndex * 2 + 1]
+  case ProtocolCombo.ItemIndex of
+    1: Result := 'http';
   else
     Result := 'https';
+  end;
 end;
 
 function SelectedCertThumbprint: String;
+var
+  Idx: Integer;
 begin
-  if CertCombo.ItemIndex >= 0 then
-    Result := CertCombo.Items[CertCombo.ItemIndex * 2 + 1]
+  Idx := CertCombo.ItemIndex - 1;
+  if (Idx >= 0) and (Idx < CertThumbprints.Count) then
+    Result := CertThumbprints.Strings[Idx]
   else
     Result := '';
 end;
@@ -251,37 +259,41 @@ end;
 // ----------------------------------------------------------------------------
 procedure LoadCertCombo;
 var
+  TmpFile: String;
   EC: Integer;
-  Args: String;
-  Output: TExecOutput;
+  Lines: TArrayOfString;
   I: Integer;
   Line: String;
 begin
-  Args := '-NoProfile -NonInteractive -Command "' +
-    'Get-ChildItem Cert:\LocalMachine\My | ' +
-    'Where-Object { (NotAfter -gt (Get-Date)) -and HasPrivateKey } | ' +
-    'Select-Object -ExpandProperty Thumbprint"';
-  if ExecAndCaptureOutput(GetPS, Args, '', SW_HIDE, ewWaitUntilTerminated, EC, Output) then
+  CertThumbprints := TStringList.Create;
+  TmpFile := ExpandConstant('{tmp}\pkiportal_certs.txt');
+  if Exec(GetPS,
+    '-NoProfile -NonInteractive -Command "Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.NotAfter -gt (Get-Date) -and $_.HasPrivateKey } | ForEach-Object { $_.Thumbprint } | Out-File -FilePath ''' + TmpFile + ''' -Encoding ascii"',
+    '', SW_HIDE, ewWaitUntilTerminated, EC) then
   begin
-    for I := 0 to Length(Output.StdOut) - 1 do
+    if LoadStringsFromFile(TmpFile, Lines) then
     begin
-      Line := Trim(Output.StdOut[I]);
-      if Line <> '' then
+      for I := 0 to GetArrayLength(Lines) - 1 do
       begin
-        CertCombo.Items.Add(Line);  // caption
-        CertCombo.Items.Add(Line);  // data (thumbprint)
+        Line := TrimS(Lines[I]);
+        if Line <> '' then
+        begin
+          CertThumbprints.Add(Line);
+          CertCombo.Items.Add(Line);
+        end;
       end;
     end;
+    DeleteFile(TmpFile);
   end;
 end;
-
+// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 procedure InitializeWizard;
 begin
   // ================= Pagina 1: parametri sito =================
-  SitePage := TWizardPage.Create(WizardForm);
-  SitePage.Caption := 'Parametri del sito IIS';
-  SitePage.Description := 'Configura nome, porta e host header del sito IIS del portale.';
+  SitePage := CreateCustomPage(wpSelectDir,
+    'Parametri del sito IIS',
+    'Configura nome, porta e host header del sito IIS del portale.');
   AddLabel(SitePage, 0, 'Nome del sito IIS:');
   SiteNameEdit := AddEdit(SitePage, 0, 250);
   SiteNameEdit.Text := 'PkiWebEnrollment';
@@ -292,19 +304,16 @@ begin
   HostHeaderEdit := AddEdit(SitePage, 2 * RowH, 250);
 
   // ================= Pagina 2: identità Application Pool =================
-  IdentityPage := TWizardPage.Create(WizardForm);
-  IdentityPage.Caption := 'Identità dell''Application Pool';
-  IdentityPage.Description := 'Identità con cui gira il pool IIS. Per un account di dominio inserire la password; per un gMSA non è necessaria.';
+  IdentityPage := CreateCustomPage(SitePage.ID,
+    'Identità dell''Application Pool',
+    'Identità con cui gira il pool IIS. Per un account di dominio inserire la password; per un gMSA non è necessaria.');
   AddLabel(IdentityPage, 0, 'Identità:');
   IdentityCombo := AddCombo(IdentityPage, 0, 250);
   IdentityCombo.Items.Add('ApplicationPoolIdentity (predefinita)');
-  IdentityCombo.Items.Add('ApplicationPoolIdentity');
   IdentityCombo.Items.Add('NetworkService');
-  IdentityCombo.Items.Add('NetworkService');
-  IdentityCombo.Items.Add('LocalSystem');
   IdentityCombo.Items.Add('LocalSystem');
   IdentityCombo.Items.Add('Account di dominio / gMSA');
-  IdentityCombo.Items.Add('CUSTOM');
+  IdentityCombo.ItemIndex := 0;
   IdentityCombo.OnChange := @IdentityComboChanged;
   AddLabel(IdentityPage, RowH, 'Account (es. DOMINIO\servizio):');
   AccountEdit := AddEdit(IdentityPage, RowH, 250);
@@ -315,29 +324,28 @@ begin
   GMSACheck.OnClick := @GMSACheckChanged;
 
   // ================= Pagina 3: protocollo e certificato =================
-  ProtocolPage := TWizardPage.Create(WizardForm);
-  ProtocolPage.Caption := 'Protocollo e certificato';
-  ProtocolPage.Description := 'HTTPS è fortemente consigliato in produzione: in HTTP in chiaro NTLM viaggia non cifrato (rischio capture/relay).';
+  ProtocolPage := CreateCustomPage(IdentityPage.ID,
+    'Protocollo e certificato',
+    'HTTPS è fortemente consigliato in produzione: in HTTP in chiaro NTLM viaggia non cifrato (rischio capture/relay).');
   AddLabel(ProtocolPage, 0, 'Protocollo:');
   ProtocolCombo := AddCombo(ProtocolPage, 0, 300);
   ProtocolCombo.Items.Add('HTTPS (consigliato)');
-  ProtocolCombo.Items.Add('https');
   ProtocolCombo.Items.Add('HTTP in chiaro (solo ambienti di test isolati)');
-  ProtocolCombo.Items.Add('http');
+  ProtocolCombo.ItemIndex := 0;
   ProtocolCombo.OnChange := @ProtocolComboChanged;
   AddLabel(ProtocolPage, RowH, 'Certificato SSL (LocalMachine\My):');
   CertCombo := AddCombo(ProtocolPage, RowH, 250);
   CertCombo.Items.Add('(Auto: più recente certificato valido nello store)');
-  CertCombo.Items.Add('');
   LoadCertCombo;
+  CertCombo.ItemIndex := 0;
   AddLabel(ProtocolPage, 2 * RowH, 'Thumbprint (immissione manuale):');
   ManualThumbEdit := AddEdit(ProtocolPage, 2 * RowH, 250);
   AllowHttpCheck := AddCheck(ProtocolPage, 3 * RowH, 'Consenti installazione su HTTP in chiaro (SOLO test isolati)');
 
   // ================= Pagina 4: opzioni =================
-  OptionsPage := TWizardPage.Create(WizardForm);
-  OptionsPage.Caption := 'Opzioni';
-  OptionsPage.Description := 'Impostazioni aggiuntive dell''installazione.';
+  OptionsPage := CreateCustomPage(ProtocolPage.ID,
+    'Opzioni',
+    'Impostazioni aggiuntive dell''installazione.');
   SkipFirewallCheck := AddCheck(OptionsPage, 0, 'Non creare regola del firewall Windows (-SkipFirewall)');
   OverwriteConfigCheck := AddCheck(OptionsPage, RowH, 'Sovrascrivi appsettings.json e web.config esistenti (-OverwriteConfig)');
 
@@ -345,7 +353,6 @@ begin
   RefreshIdentityVisibility;
   RefreshProtocolVisibility;
 end;
-
 // ----------------------------------------------------------------------------
 // Validazione dei valori al passaggio alla pagina successiva
 // ----------------------------------------------------------------------------
