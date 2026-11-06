@@ -402,7 +402,18 @@ if ($aspnetModule) {
 }
 
 # Also check for the .NET 8 x64 runtime
-$dotnetRuntimes = & "C:\Program Files\dotnet\dotnet.exe" --list-runtimes 2>&1 | Select-String "Microsoft.AspNetCore.App 8\."
+# Locate dotnet.exe safely
+$dotnetExe = "C:\Program Files\dotnet\dotnet.exe"
+if (-not (Test-Path $dotnetExe)) {
+    $dotnetCmd = Get-Command dotnet.exe -ErrorAction SilentlyContinue
+    if ($dotnetCmd) { $dotnetExe = $dotnetCmd.Source } else { $dotnetExe = $null }
+}
+$dotnetRuntimes = $null
+if ($dotnetExe -and (Test-Path $dotnetExe)) {
+    try {
+        $dotnetRuntimes = & $dotnetExe --list-runtimes 2>&1 | Select-String "Microsoft.AspNetCore.App 8\."
+    } catch { }
+}
 if ($dotnetRuntimes) {
     Write-OK "Runtime ASP.NET Core 8.x trovato: $($dotnetRuntimes -join ', ')" "ASP.NET Core 8.x runtime found: $($dotnetRuntimes -join ', ')"
 }
@@ -424,7 +435,7 @@ if (-not $aspnetModuleInstalled) {
     try {
         # Download attempt (may not work in air-gapped environments)
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.0/dotnet-hosting-8.0.0-win.exe" `
+        Invoke-WebRequest -Uri "https://aka.ms/dotnet/8.0/dotnet-hosting-win.exe" `
             -OutFile $hostingBundlePath -UseBasicParsing -ErrorAction Stop
 
         Write-Info "Download completato. Avvio installazione silenziosa..." "Download complete. Starting silent installation..."
