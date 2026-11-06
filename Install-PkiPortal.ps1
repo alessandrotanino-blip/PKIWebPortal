@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Installation script for the PKI Web Enrollment Portal on IIS Windows Server.
     Installs the site alongside Microsoft Web Enrollment (certsrv) without modifying it.
@@ -119,7 +119,8 @@ param(
     [switch]$SkipDotnetPublish,
     [switch]$SkipFirewall,
     [Alias("OverwriteAppSettings")]
-    [switch]$OverwriteConfig
+    [switch]$OverwriteConfig,
+    [switch]$Force
 )
 
 # ============================================================================
@@ -294,6 +295,11 @@ try {
 }
 catch { }
 
+$transcriptPath = Join-Path $env:TEMP "PkiPortal-Install.log"
+try {
+    Start-Transcript -Path $transcriptPath -Force -ErrorAction SilentlyContinue | Out-Null
+} catch { }
+
 try {
 
 Write-Host ""
@@ -446,7 +452,7 @@ if (-not $aspnetModuleInstalled) {
         }
         Write-Host ""
 
-        $continueChoice = Read-Host (Msg "Continuare comunque? (S/N)" "Continue anyway? (Y/N)")
+        $continueChoice = if ($Force) { 'S' } else { Read-Host (Msg "Continuare comunque? (S/N)" "Continue anyway? (Y/N)") }
         if ($continueChoice -notmatch '^[sSyY]$') {
             Write-Fail "Installazione interrotta." "Installation aborted."
             exit 1
@@ -481,7 +487,7 @@ else {
 $existingSite = Get-Website -Name $SiteName -ErrorAction SilentlyContinue
 if ($existingSite) {
     Write-Warn "Il sito '$SiteName' esiste già in IIS." "Site '$SiteName' already exists in IIS."
-    $overwrite = Read-Host (Msg "  Sovrascrivere la configurazione del sito esistente? (S/N)" "  Overwrite existing site configuration? (Y/N)")
+    $overwrite = if ($Force) { 'S' } else { Read-Host (Msg "  Sovrascrivere la configurazione del sito esistente? (S/N)" "  Overwrite existing site configuration? (Y/N)") }
     if ($overwrite -notmatch '^[sSyY]$') {
         Write-Fail "Installazione interrotta dall'utente." "Installation aborted by user."
         exit 1
@@ -917,7 +923,7 @@ if ($UseHttps) {
         if ($serverCerts.Count -gt 0) {
             $CertThumbprint = $serverCerts[0].Thumbprint
             Write-Info "Trovato certificato: $($serverCerts[0].Subject) (Thumbprint: $CertThumbprint)" "Found certificate: $($serverCerts[0].Subject) (Thumbprint: $CertThumbprint)"
-            $useCert = Read-Host (Msg "  Utilizzare questo certificato? (S/N)" "  Use this certificate? (Y/N)")
+            $useCert = if ($Force) { 'S' } else { Read-Host (Msg "  Utilizzare questo certificato? (S/N)" "  Use this certificate? (Y/N)") }
             if ($useCert -notmatch '^[sSyY]$') {
                 Write-Fail "Specificare un thumbprint con -CertThumbprint oppure usare -UseHttps:`$false" "Specify a thumbprint with -CertThumbprint or use -UseHttps:`$false"
                 exit 1
@@ -1289,6 +1295,10 @@ Write-Host ""
 
 }
 finally {
+    try { Stop-Transcript -ErrorAction SilentlyContinue | Out-Null } catch { }
+    if (Test-Path $InstallPath) {
+        try { Copy-Item -Path $transcriptPath -Destination (Join-Path $InstallPath "install.log") -Force -ErrorAction SilentlyContinue } catch { }
+    }
     if ($null -ne $prevConsoleEncoding) {
         try { [Console]::OutputEncoding = $prevConsoleEncoding } catch { }
     }

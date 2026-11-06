@@ -95,7 +95,7 @@ english.ErrAccountInvalid=The account name must not contain quotes or apostrophe
 english.ErrPasswordRequired=Please enter the account password, or check gMSA if it is a Group Managed Service Account.
 english.ErrHttpBlocked=Installation over unencrypted HTTP is BLOCKED (cleartext NTLM: risk of hash capture, NTLM relay, and exposure of sensitive portal payloads).%n%nSelect HTTPS or check "Allow unencrypted HTTP installation" (isolated test environments only).
 english.ErrPowerShellFailed=Unable to launch PowerShell for IIS installation. The installation was not completed.
-english.ErrScriptFailed=Installation NOT completed: Install-PkiPortal.ps1 terminated with exit code %1.%n%nReview errors in the PowerShell console, then rerun setup or run the script manually.
+english.ErrScriptFailed=Installation NOT completed: Install-PkiPortal.ps1 terminated with exit code %1.%n%nDetailed log available at:%n%TEMP%\PkiPortal-Install.log%n%nPlease review the error details, then rerun setup or run the script manually.
 english.MsgSuccess=Installation completed successfully.%n%nPortal:    %1%nAdmin:     %2%nACME:      %3%n%nNext steps: configure real Sub-CAs in %4\appsettings.json and verify AppPool identity permissions on AD CS templates.%n%nOpen the administration panel in your browser now?
 
 ; --- Italian ---
@@ -137,7 +137,7 @@ italian.ErrAccountInvalid=Il nome account non deve contenere apostrofi o virgole
 italian.ErrPasswordRequired=Inserire la password dell'account, oppure spuntare gMSA se è un Group Managed Service Account.
 italian.ErrHttpBlocked=Installazione su HTTP in chiaro BLOCCATA (NTLM non cifrato: rischio capture degli hash, NTLM relay e esposizione dei carichi sensibili del portale).%n%nSelezionare HTTPS oppure spuntare "Consenti installazione su HTTP in chiaro" (solo ambienti di test isolati).
 italian.ErrPowerShellFailed=Impossibile avviare PowerShell per l'installazione di IIS. L'installazione non è stata completata.
-italian.ErrScriptFailed=Installazione NON completata: Install-PkiPortal.ps1 ha terminato con codice %1.%n%nRivedere gli errori nella finestra di PowerShell, poi rieseguire il setup o lo script manuale.
+italian.ErrScriptFailed=Installazione NON completata: Install-PkiPortal.ps1 ha terminato con codice %1.%n%nLog dettagliato disponibile in:%n%TEMP%\PkiPortal-Install.log%n%nRivedere gli errori, poi rieseguire il setup o lo script manuale.
 italian.MsgSuccess=Installazione completata con successo.%n%nPortale:    %1%nPannello:   %2%nACME:       %3%n%nProssimi passi: configurare le Sub-CA reali in %4\appsettings.json e verificare i permessi dell'identità del pool sui template AD CS.%n%nAprire ora il pannello di amministrazione nel browser?
 
 ; --- French ---
@@ -773,7 +773,8 @@ var
   SiteName, SitePort, HostHeader, InstallPath, Script: String;
   Identity, Password, CertThumb, Protocol: String;
   IsGMSA, UseHttps, SkipFirewall, Overwrite: Boolean;
-  ScriptParams, PSArgs, PwParams: String;
+  ScriptParams, PwParams, CmdFile: String;
+  CmdLines: TStringList;
   EC: Integer;
   Url, BaseUrl: String;
 begin
@@ -833,35 +834,60 @@ begin
     ScriptParams := ScriptParams + ' -OverwriteConfig';
   // file applicativi forniti dall'installer: nessuna fase di build sul server
   ScriptParams := ScriptParams + ' -SkipDotnetPublish';
+  ScriptParams := ScriptParams + ' -Force';
 
-  if (Identity <> 'ApplicationPoolIdentity') and (Identity <> 'NetworkService') and
-     (Identity <> 'LocalSystem') and (not IsGMSA) and (Password <> '') then
-  begin
-    // Versione con password: comando PowerShell in cui i valori sono tra
-    // virgolette singole (nessuna virgoletta doppia all'interno, così la
-    // quote di riga di comando resta intatta).
-    PwParams := ScriptParams;
-    StringChange(PwParams, '"', '''');
-    PSArgs := '-NoProfile -ExecutionPolicy Bypass -Command "' +
-      '$pw = (Get-ItemProperty -Path ''HKLM:\' + RegPwKey + ''').AppPoolPassword; ' +
-      'Remove-ItemProperty -Path ''HKLM:\' + RegPwKey + ''' -Name AppPoolPassword -Force -ErrorAction SilentlyContinue; ' +
-      '$ss = $pw | ConvertTo-SecureString -AsPlainText -Force; ' +
-      '& ''' + Script + '''' +
-      PwParams + ' -AppPoolPassword $ss' +
-      '"';
-  end
-  else
-  begin
-    PSArgs := '-NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' + ScriptParams;
+  CmdFile := ExpandConstant('{tmp}\run-install.cmd');
+  CmdLines := TStringList.Create;
+  try
+    CmdLines.Add('@echo off');
+    CmdLines.Add('chcp 65001 >nul');
+    CmdLines.Add('echo ===============================================================');
+    CmdLines.Add('echo  PKI Web Enrollment Portal - Running Installation Script...');
+    CmdLines.Add('echo ===============================================================');
+    CmdLines.Add('echo.');
+
+    if (Identity <> 'ApplicationPoolIdentity') and (Identity <> 'NetworkService') and
+       (Identity <> 'LocalSystem') and (not IsGMSA) and (Password <> '') then
+    begin
+      PwParams := ScriptParams;
+      StringChange(PwParams, '"', '''');
+      CmdLines.Add('"' + GetPS + '" -NoProfile -ExecutionPolicy Bypass -Command "' +
+        '$pw = (Get-ItemProperty -Path ''HKLM:\' + RegPwKey + ''').AppPoolPassword; ' +
+        'Remove-ItemProperty -Path ''HKLM:\' + RegPwKey + ''' -Name AppPoolPassword -Force -ErrorAction SilentlyContinue; ' +
+        '$ss = $pw | ConvertTo-SecureString -AsPlainText -Force; ' +
+        '& ''' + Script + '''' + PwParams + ' -AppPoolPassword $ss"');
+    end
+    else
+    begin
+      CmdLines.Add('"' + GetPS + '" -NoProfile -ExecutionPolicy Bypass -File "' + Script + '"' + ScriptParams);
+    end;
+
+    CmdLines.Add('set PS_ERR=%ERRORLEVEL%');
+    CmdLines.Add('if %PS_ERR% NEQ 0 (');
+    CmdLines.Add('  echo.');
+    CmdLines.Add('  echo ===============================================================');
+    CmdLines.Add('  echo  [ERROR] Installation script terminated with error code %PS_ERR%.');
+    CmdLines.Add('  echo  Log: %TEMP%\PkiPortal-Install.log');
+    CmdLines.Add('  echo ===============================================================');
+    CmdLines.Add('  echo.');
+    CmdLines.Add('  echo Press any key to continue... / Premere un tasto per continuare...');
+    CmdLines.Add('  pause >nul');
+    CmdLines.Add(')');
+    CmdLines.Add('exit /b %PS_ERR%');
+    CmdLines.SaveToFile(CmdFile);
+  finally
+    CmdLines.Free;
   end;
 
   // --- esecuzione in console visibile: l'amministratore vede tutto
-  //     l'output e può rispondere ai prompt interattivi (Read-Host) ---
-  if not Exec(GetPS, PSArgs, '', SW_SHOWNORMAL, ewWaitUntilTerminated, EC) then
+  //     l'output e può rispondere ai prompt o verificare errori ---
+  if not Exec(ExpandConstant('{cmd}'), '/c "' + CmdFile + '"', '', SW_SHOWNORMAL, ewWaitUntilTerminated, EC) then
   begin
     MsgBox(CustomMessage('ErrPowerShellFailed'), mbError, MB_OK);
+    DeleteFile(CmdFile);
     Abort;
   end;
+  DeleteFile(CmdFile);
 
   // pulizia eventuale residua della password e della chiave
   RegDeleteValue(HKLM, RegPwKey, 'AppPoolPassword');
