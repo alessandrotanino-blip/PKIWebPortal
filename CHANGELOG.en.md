@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 [🇬🇧 English](CHANGELOG.en.md) | [🇮🇹 Italiano](CHANGELOG.md)
 
@@ -28,6 +28,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - **RESTful API Filtering**:
   - Endpoints GET /api/certificates/my-requests and GET /api/admin/held-requests now support optional query parameters (?requester=...&template=...&status=...&search=...) enabling native server-side filtering for PowerShell scripts and automation workflows.
+
+### Fixes & Hardening
+
+- **Content Security Policy (CSP) Compliance for `admin.html`**:
+  - Extracted the entire JavaScript logic of the administration panel into a dedicated external file `wwwroot/js/admin.js`.
+  - Fixed browser blocking (blank/empty panel) caused by the strict `script-src 'self'` CSP directive in `web.config`.
+- **ACME Configuration Save in IIS Least-Privilege Environments**:
+  - Resolved `System.UnauthorizedAccessException` on `appsettings.json.acmetmp` when saving ACME configuration.
+  - Writing is now performed directly onto `appsettings.json` (where the IIS AppPool holds `Modify` permissions), avoiding temporary file creation in the root folder protected with `ReadAndExecute`.
 ## [2.3.2] - 2026-11-04
 
 ### New Features & Intranet ACME Support

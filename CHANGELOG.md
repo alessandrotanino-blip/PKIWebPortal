@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 [🇮🇹 Italiano](CHANGELOG.md) | [🇬🇧 English](CHANGELOG.en.md)
 
@@ -27,6 +27,15 @@ Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/)
 
 - **Filtri API RESTful**:
   - Gli endpoint GET /api/certificates/my-requests e GET /api/admin/held-requests supportano ora parametri di query opzionali (?requester=...&template=...&status=...&search=...) consentendo il filtraggio nativo anche via script e automazioni PowerShell/CLI.
+
+### Correzioni & Robustezza
+
+- **Conformità Content Security Policy (CSP) per `admin.html`**:
+  - Separata l'intera logica JavaScript del pannello di amministrazione in un file esterno dedicato `wwwroot/js/admin.js`.
+  - Risolto il blocco da parte del browser (pannello vuoto) causato dalla direttiva CSP `script-src 'self'` definita in `web.config`.
+- **Salvataggio Configurazione ACME in Ambienti IIS Least-Privilege**:
+  - Risolta l'eccezione `System.UnauthorizedAccessException` su `appsettings.json.acmetmp` durante il salvataggio delle impostazioni ACME.
+  - La scrittura viene ora eseguita direttamente su `appsettings.json` (su cui l'AppPool IIS possiede il diritto di `Modify`), senza tentare di creare file temporanei nella cartella radice protetta in sola `ReadAndExecute`.
 ## [2.3.2] - 2026-11-04
 
 ### Novità & Funzionalità ACME Intranet
