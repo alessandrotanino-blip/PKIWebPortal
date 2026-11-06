@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using PkiPortal.Models;
 using PkiPortal.Services;
@@ -815,12 +815,9 @@ admin.MapPut("/acme-config", async (HttpContext ctx, AcmeConfig newAcmeCfg) =>
             }
             root["AcmeConfig"] = newAcmeCfg;
 
-            // SECURITY (2.3.1): scrittura atomica (tmp + move) — un crash a
-            // metà scrittura non deve corrompere appsettings.json.
+            // Scrittura diretta su appsettings.json (su cui l'AppPool ha Modify).
             string updatedJson = JsonSerializer.Serialize(root, options);
-            string tmpPath = filePath + ".acmetmp";
-            await File.WriteAllTextAsync(tmpPath, updatedJson);
-            File.Move(tmpPath, filePath, overwrite: true);
+            await File.WriteAllTextAsync(filePath, updatedJson);
         }
 
         (app.Configuration as IConfigurationRoot)?.Reload();
