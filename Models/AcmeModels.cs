@@ -356,6 +356,12 @@ public class AcmeOrder
     /// </summary>
     [JsonIgnore]
     public DateTime? RevokedAt { get; set; }
+
+    /// <summary>
+    /// Indirizzo IP del richiedente ACME (RFC 8555) registrato durante new-order o finalize.
+    /// </summary>
+    [JsonIgnore]
+    public string? ClientIp { get; set; }
 }
 
 /// <summary>

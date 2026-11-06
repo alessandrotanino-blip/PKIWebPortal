@@ -7,6 +7,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [2.4.0] - 2026-11-06
+
+### New Features & Improvements
+
+- **ACME Requester Identification & Client IP Tracking**:
+  - In certificate and request listings (both in the main portal and in the administration panel), certificates issued via the ACME protocol (RFC 8555) are now clearly identified in the *Requester* column/field.
+  - Automatic tracking of the ACME client IP address (ACME (<ip>), e.g., ACME (192.168.1.50)) captured during order creation or finalization, with transparent support for X-Forwarded-For proxy headers and IPv6-to-IPv4 mapping.
+  - If the client IP address is unavailable, ACME is displayed as the requester.
+  - Distinctive high-visibility badge (⚡ ACME (...)) rendered in both the portal table and the admin request cards.
+  - Full backwards compatibility: all existing ACME requests stored in the persistent database (held-requests.json) are automatically recognized and labeled as ACME.
+
+- **Advanced Certificate Request Filtering (Portal & Admin)**:
+  - New modern filter toolbar embedded in the portal request view (index.html) and the admin request tab (dmin.html).
+  - **Requester Filter**: dynamically populated dropdown with all distinct requesters, including a quick option ⚡ ACME Only (all) to immediately isolate all ACME-issued certificates.
+  - **Template Filter**: dynamically populated dropdown with all available Certificate Templates.
+  - **Status Filter**: filter by Issued/Approved, Pending, or Rejected.
+  - **Full-Text Live Search**: instantaneous live search filtering across Common Name (CN), Request ID, Requester (including ACME IPs), Template, and CA.
+  - **Live Counter & Reset Button**: real-time counter (Showing X of Y requests) and one-click ✕ Reset button to clear all active filters.
+
+- **RESTful API Filtering**:
+  - Endpoints GET /api/certificates/my-requests and GET /api/admin/held-requests now support optional query parameters (?requester=...&template=...&status=...&search=...) enabling native server-side filtering for PowerShell scripts and automation workflows.
 ## [2.3.2] - 2026-11-04
 
 ### New Features & Intranet ACME Support

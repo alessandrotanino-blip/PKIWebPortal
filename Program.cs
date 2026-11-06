@@ -293,14 +293,8 @@ api.MapPost("/certificates/request", async ([FromBody] CertificateSubmissionRequ
 
     // Passa il nome dell'utente autenticato richiedente per tracciamento della proprietà
     string requesterUser = ctx.User.Identity.Name ?? "Utente";
-    if (adcsService is AdcsService concreteService)
-    {
-        var response = await concreteService.SubmitCertificateRequestInternalAsync(request, requesterUser);
-        return Results.Ok(response);
-    }
-
-    var fallbackResponse = await adcsService.SubmitCertificateRequestAsync(request);
-    return Results.Ok(fallbackResponse);
+    var response = await adcsService.SubmitCertificateRequestAsync(request, requesterUser);
+    return Results.Ok(response);
 })
 .RequireRateLimiting("portal-submit");
 
@@ -349,8 +343,14 @@ api.MapGet("/certificates/status/{caId}/{requestId:int}", async (string caId, in
     return Results.Ok(response);
 });
 
-// 5. Lista delle proprie richieste certificato per l'utente collegato
-api.MapGet("/certificates/my-requests", async (HttpContext ctx, IHeldRequestStore holdStore) =>
+// 5. Lista delle proprie richieste certificato per l'utente collegato (con filtri opzionali)
+api.MapGet("/certificates/my-requests", async (
+    HttpContext ctx,
+    IHeldRequestStore holdStore,
+    string? requester,
+    string? template,
+    string? status,
+    string? search) =>
 {
     if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
     {
@@ -370,7 +370,54 @@ api.MapGet("/certificates/my-requests", async (HttpContext ctx, IHeldRequestStor
         requests = await holdStore.GetRequestsByUserAsync(currentUser);
     }
 
-    return Results.Ok(requests.Select(r => new
+    static string ResolveRequester(HeldCertificateRequest r)
+    {
+        if (!string.IsNullOrWhiteSpace(r.RequesterUser))
+            return r.RequesterUser;
+        if (r.RequesterComments?.StartsWith("ACME order", StringComparison.OrdinalIgnoreCase) == true)
+            return "ACME";
+        return string.Empty;
+    }
+
+    var query = requests.AsEnumerable();
+
+    if (!string.IsNullOrWhiteSpace(status) && !status.Equals("all", StringComparison.OrdinalIgnoreCase))
+    {
+        query = query.Where(r => r.Status.ToString().Equals(status, StringComparison.OrdinalIgnoreCase));
+    }
+
+    if (!string.IsNullOrWhiteSpace(requester))
+    {
+        if (requester.Equals("__acme__", StringComparison.OrdinalIgnoreCase) || requester.Equals("acme", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(r => ResolveRequester(r).StartsWith("ACME", StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            query = query.Where(r => ResolveRequester(r).Contains(requester, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    if (!string.IsNullOrWhiteSpace(template))
+    {
+        query = query.Where(r =>
+            (!string.IsNullOrEmpty(r.TemplateName) && r.TemplateName.Contains(template, StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrEmpty(r.TemplateDisplayName) && r.TemplateDisplayName.Contains(template, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    if (!string.IsNullOrWhiteSpace(search))
+    {
+        query = query.Where(r =>
+            (!string.IsNullOrEmpty(r.SubjectCommonName) && r.SubjectCommonName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+            ResolveRequester(r).Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrEmpty(r.TemplateName) && r.TemplateName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrEmpty(r.TemplateDisplayName) && r.TemplateDisplayName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrEmpty(r.CaId) && r.CaId.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+            r.CaRequestId.ToString().Contains(search) ||
+            (!string.IsNullOrEmpty(r.HoldId) && r.HoldId.Contains(search, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    return Results.Ok(query.Select(r => new
     {
         r.HoldId,
         r.CaId,
@@ -378,7 +425,8 @@ api.MapGet("/certificates/my-requests", async (HttpContext ctx, IHeldRequestStor
         r.TemplateName,
         r.TemplateDisplayName,
         r.SubjectCommonName,
-        r.RequesterUser,
+        RequesterUser = ResolveRequester(r),
+        r.RequesterComments,
         r.SubmittedAt,
         Status = r.Status.ToString(),
         HasCertificate = !string.IsNullOrEmpty(r.CertificatePem),
@@ -792,8 +840,14 @@ admin.MapPut("/acme-config", async (HttpContext ctx, AcmeConfig newAcmeCfg) =>
 
 // ===== Gestione Richieste Trattenute (Hold) =====
 
-// GET /api/admin/held-requests - Lista richieste trattenute (default: solo PendingApproval)
-admin.MapGet("/held-requests", async (HttpContext ctx, IHeldRequestStore holdStore, string? status) =>
+// GET /api/admin/held-requests - Lista richieste trattenute (default: solo PendingApproval, con filtri)
+admin.MapGet("/held-requests", async (
+    HttpContext ctx,
+    IHeldRequestStore holdStore,
+    string? status,
+    string? requester,
+    string? template,
+    string? search) =>
 {
     if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
         return Results.Challenge();
@@ -806,23 +860,70 @@ admin.MapGet("/held-requests", async (HttpContext ctx, IHeldRequestStore holdSto
         "pending" => HoldStatus.PendingApproval,
         "approved" => HoldStatus.Approved,
         "rejected" => HoldStatus.Rejected,
+        "issued" => HoldStatus.Issued,
+        "undersubmission" => HoldStatus.UnderSubmission,
         "all" => null,
         _ => HoldStatus.PendingApproval // default: solo pending
     };
 
     var requests = await holdStore.GetAllRequestsAsync(statusFilter);
+
+    static string ResolveRequester(HeldCertificateRequest r)
+    {
+        if (!string.IsNullOrWhiteSpace(r.RequesterUser))
+            return r.RequesterUser;
+        if (r.RequesterComments?.StartsWith("ACME order", StringComparison.OrdinalIgnoreCase) == true)
+            return "ACME";
+        return string.Empty;
+    }
+
+    var query = requests.AsEnumerable();
+
+    if (!string.IsNullOrWhiteSpace(requester))
+    {
+        if (requester.Equals("__acme__", StringComparison.OrdinalIgnoreCase) || requester.Equals("acme", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(r => ResolveRequester(r).StartsWith("ACME", StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            query = query.Where(r => ResolveRequester(r).Contains(requester, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    if (!string.IsNullOrWhiteSpace(template))
+    {
+        query = query.Where(r =>
+            (!string.IsNullOrEmpty(r.TemplateName) && r.TemplateName.Contains(template, StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrEmpty(r.TemplateDisplayName) && r.TemplateDisplayName.Contains(template, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    if (!string.IsNullOrWhiteSpace(search))
+    {
+        query = query.Where(r =>
+            (!string.IsNullOrEmpty(r.SubjectCommonName) && r.SubjectCommonName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+            ResolveRequester(r).Contains(search, StringComparison.OrdinalIgnoreCase) ||
+            (!string.IsNullOrEmpty(r.TemplateName) && r.TemplateName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrEmpty(r.TemplateDisplayName) && r.TemplateDisplayName.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+            (!string.IsNullOrEmpty(r.CaId) && r.CaId.Contains(search, StringComparison.OrdinalIgnoreCase)) ||
+            r.CaRequestId.ToString().Contains(search) ||
+            (!string.IsNullOrEmpty(r.HoldId) && r.HoldId.Contains(search, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    var filteredList = query.ToList();
+
     return Results.Ok(new
     {
-        count = requests.Count,
+        count = filteredList.Count,
         statusFilter = statusFilter?.ToString() ?? "All",
-        requests = requests.Select(r => new
+        requests = filteredList.Select(r => new
         {
             r.HoldId,
             r.SubmittedAt,
             r.CaId,
             r.TemplateName,
             r.TemplateDisplayName,
-            r.RequesterUser,
+            RequesterUser = ResolveRequester(r),
             r.SubjectCommonName,
             r.SanAttribute,
             r.CaRequestId,
@@ -830,7 +931,9 @@ admin.MapGet("/held-requests", async (HttpContext ctx, IHeldRequestStore holdSto
             r.ReviewedAt,
             r.ReviewedBy,
             r.RejectionReason,
-            r.RequesterComments
+            r.RequesterComments,
+            HasCertificate = !string.IsNullOrEmpty(r.CertificatePem),
+            HasPrivateKey = !string.IsNullOrEmpty(r.PrivateKeyPem)
         })
     });
 });
@@ -1028,6 +1131,24 @@ void ApplyAcmeResponseHeaders(HttpContext ctx, string? newNonce, string baseUrl)
     ctx.Response.Headers.Append("Link", $"<{baseUrl}/acme/directory>;rel=\"index\"");
 }
 
+string? GetClientIp(HttpContext ctx)
+{
+    if (ctx.Request.Headers.TryGetValue("X-Forwarded-For", out var forwarded) && !string.IsNullOrWhiteSpace(forwarded))
+    {
+        var first = forwarded.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(first))
+            return first;
+    }
+    var ip = ctx.Connection.RemoteIpAddress;
+    if (ip != null)
+    {
+        if (ip.IsIPv4MappedToIPv6)
+            ip = ip.MapToIPv4();
+        return ip.ToString();
+    }
+    return null;
+}
+
 var acme = app.MapGroup("/acme")
     .AllowAnonymous()
     .RequireRateLimiting("acme-policy");
@@ -1106,7 +1227,8 @@ acme.MapPost("/new-order", async (HttpContext ctx, IAcmeService acmeSvc, Microso
             contentType: "application/problem+json", statusCode: 400);
     }
 
-    var (result, newNonce) = await acmeSvc.HandleNewOrderAsync(jws, baseUrl);
+    string? clientIp = GetClientIp(ctx);
+    var (result, newNonce) = await acmeSvc.HandleNewOrderAsync(jws, baseUrl, clientIp);
     ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
     return result;
 });
@@ -1137,7 +1259,8 @@ acme.MapPost("/order/{id}/finalize", async (string id, HttpContext ctx, IAcmeSer
             contentType: "application/problem+json", statusCode: 400);
     }
 
-    var (result, newNonce) = await acmeSvc.HandleFinalizeOrderAsync(id, jws, baseUrl);
+    string? clientIp = GetClientIp(ctx);
+    var (result, newNonce) = await acmeSvc.HandleFinalizeOrderAsync(id, jws, baseUrl, clientIp);
     ApplyAcmeResponseHeaders(ctx, newNonce, baseUrl);
     return result;
 });

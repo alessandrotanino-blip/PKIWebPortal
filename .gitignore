@@ -1,4 +1,4 @@
-﻿# Segreti e configurazioni locali
+# Segreti e configurazioni locali
 .env
 .env.*
 *.key
@@ -9,8 +9,6 @@ secrets/
 credentials/
 config.local.*
 appsettings.json
-*.dokuwiki
-DOCUMENTATION.dokuwiki
 
 # File temporanei e database locali
 *.log

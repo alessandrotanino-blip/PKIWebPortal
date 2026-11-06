@@ -315,7 +315,9 @@ Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 * **Service Account**: L'Application Pool di IIS deve eseguire con un account che abbia i permessi *Request Certificates* (Enroll) sui template ADCS desiderati. Per la modalità Standalone all'interno della foresta, `NetworkService` o un Managed Service Account è sufficiente.
 * **Separazione da certsrv**: Il portale utilizza un sito IIS e un Application Pool completamente separati, garantendo che un problema sul portale non impatti certsrv e viceversa.
 
-### Hardening e Novità (v2.1.0 - v2.3.0)
+### Hardening e Novità (v2.1.0 - v2.4.0)
+
+* **Tracciamento Richiedenti ACME & Filtraggio Richieste (v2.4.0)**: Identificazione automatica del richiedente per i certificati emessi via ACME RFC 8555 con indirizzo IP del client (ACME (<ip>) o ACME) ed evidenziazione con badge grafica. Nuova barra filtri dinamica (per richiedente, template, stato e ricerca libera live) nel portale e nel pannello admin, con supporto query parameters nelle API RESTful.
 
 * **Server ACME RFC 8555 Integrato (v2.3.0)**: Server ACME nativo completo integrato in ASP.NET Core per rinnovo automatico certificati con `win-acme`, `certbot`, `acme.sh` o Traefik direttamente verso Microsoft AD CS. Include supporto per challenge `http-01`, modalità `AutoApprove` per ambienti isolati, verifica firme JWS asimmetriche (RSA/ECDSA), store persistente atomico e script di collaudo `Test-AcmeProtocol.ps1`.
 * **Configurazione IIS Dual-Auth per ACME (v2.3.0)**: Accesso anonimo autorizzato esclusivamente per `/acme/*` e `/.well-known/*`, mantenendo Windows Authentication obbligatoria sul resto del portale.

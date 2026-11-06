@@ -543,6 +543,10 @@ public class HeldRequestStore : IHeldRequestStore
                 bool legacyUnencryptedFound = false;
                 foreach (var item in items)
                 {
+                    if (string.IsNullOrWhiteSpace(item.RequesterUser) && item.RequesterComments?.StartsWith("ACME order", StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        item.RequesterUser = "ACME";
+                    }
                     if (!string.IsNullOrEmpty(item.PrivateKeyPem))
                     {
                         bool wasEncrypted = item.PrivateKeyPem.StartsWith(DpapiPrefix, StringComparison.Ordinal) ||

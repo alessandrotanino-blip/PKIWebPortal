@@ -6,7 +6,7 @@ public interface IAdcsService
 {
     Task<List<CaConfig>> GetAvailableCAsAsync();
     Task<CaConfig?> GetCaConfigAsync(string? caId);
-    Task<CertificateSubmissionResponse> SubmitCertificateRequestAsync(CertificateSubmissionRequest request);
+    Task<CertificateSubmissionResponse> SubmitCertificateRequestAsync(CertificateSubmissionRequest request, string? requesterUser = null);
     Task<CertificateSubmissionResponse> RetrievePendingCertificateAsync(string? caId, int requestId);
 
     /// <summary>

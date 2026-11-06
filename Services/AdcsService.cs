@@ -119,9 +119,9 @@ public class AdcsService : IAdcsService
         return Task.FromResult(ca);
     }
 
-    public async Task<CertificateSubmissionResponse> SubmitCertificateRequestAsync(CertificateSubmissionRequest request)
+    public async Task<CertificateSubmissionResponse> SubmitCertificateRequestAsync(CertificateSubmissionRequest request, string? requesterUser = null)
     {
-        return await SubmitCertificateRequestInternalAsync(request, requesterUser: null);
+        return await SubmitCertificateRequestInternalAsync(request, requesterUser);
     }
 
     /// <summary>
@@ -129,6 +129,11 @@ public class AdcsService : IAdcsService
     /// </summary>
     internal async Task<CertificateSubmissionResponse> SubmitCertificateRequestInternalAsync(CertificateSubmissionRequest request, string? requesterUser)
     {
+        if (string.IsNullOrWhiteSpace(requesterUser) && request.RequesterComments?.StartsWith("ACME order", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            requesterUser = "ACME";
+        }
+
         var ca = await GetCaConfigAsync(request.CaId);
         if (ca == null)
         {
@@ -364,6 +369,7 @@ public class AdcsService : IAdcsService
             await _heldRequestStore.SaveRequestAsync(pendingRecord);
         }
 
+        caResponse.RequesterUser ??= requesterUser;
         return caResponse;
     }
 

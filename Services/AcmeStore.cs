@@ -232,6 +232,7 @@ public class AcmeStore : IAcmeStore
         public string? CertificateChainPem { get; set; }
         public string? CaCertificatePem { get; set; }
         public DateTime? RevokedAt { get; set; }
+        public string? ClientIp { get; set; }
     }
 
     private class AcmeAuthorizationRecord
@@ -311,7 +312,8 @@ public class AcmeStore : IAcmeStore
                     CertificatePem = ord.CertificatePem,
                     CertificateChainPem = ord.CertificateChainPem,
                     CaCertificatePem = ord.CaCertificatePem,
-                    RevokedAt = ord.RevokedAt
+                    RevokedAt = ord.RevokedAt,
+                    ClientIp = ord.ClientIp
                 };
             }
 
@@ -392,7 +394,8 @@ public class AcmeStore : IAcmeStore
                     CertificatePem = o.CertificatePem,
                     CertificateChainPem = o.CertificateChainPem,
                     CaCertificatePem = o.CaCertificatePem,
-                    RevokedAt = o.RevokedAt
+                    RevokedAt = o.RevokedAt,
+                    ClientIp = o.ClientIp
                 }).ToList(),
                 Authorizations = _authorizations.Values.Select(x => new AcmeAuthorizationRecord
                 {

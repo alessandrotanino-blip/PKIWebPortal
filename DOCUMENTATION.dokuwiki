@@ -1,0 +1,860 @@
+====== Portale PKI Web Enrollment per Microsoft AD CS ======
+^ Autore | Alessandro Tanino - a.tanino@liguriadigitale.it |
+^ Versione | 2.4.0 |
+^ Data | 6 Novembre 2026 |
+^ Compatibilità | Windows Server 2016, 2019, 2022, 2025 | IIS 10.0+ | .NET 8.0 LTS |
+^ Requisiti Browser | Chrome, Microsoft Edge, Mozilla Firefox, Safari, Mobile (Zero ActiveX) |
+
+===== 1. Introduzione e Obiettivi =====
+
+Il **Portale PKI Web Enrollment** è una soluzione moderna sviluppata in **ASP.NET Core 8 (C#)** e **HTML5 Web Crypto API**, progettata per sostituire o affiancare l'obsoleto componente Microsoft **Active Directory Certificate Services (AD CS) Web Enrollment** (''/certsrv'').
+
+==== 1.1 Perché sostituire Microsoft certsrv? ====
+  * **Fine del supporto per controlli ActiveX**: Il vecchio ''certsrv'' (introdotto con Windows 2000) si basava su librerie ActiveX (''xenroll.dll'' / ''certenroll.dll'') funzionanti unicamente con Internet Explorer o Microsoft Edge in "IE Mode".
+  * **Mitigazione Vulnerabilità ESC8 / NTLM Relay**: L'endpoint nativo ''certsrv'' espone storicamente superfici di attacco critiche per l'escalation di privilegi di dominio tramite NTLM relay (PetitPotam / ESC8). Il nuovo portale elimina tale rischio.
+  * **Generazione Client-Side e Custodia Sicura Cifrata**: La coppia di chiavi viene generata dal browser dell'utente in memoria locale (Web Crypto API). L'archiviazione della chiave privata sul server per consentire il successivo recupero del pacchetto **PKCS#12 (.pfx)** è configurabile per ciascun template tramite ''StorePrivateKeyForRetrieval'' (**attivo di default, ''true''**) oltre che per i template con approvazione (''RequiresApproval: true''). In questi casi la chiave privata transita su canale HTTPS protetto e viene **custodita sul server rigorosamente cifrata a riposo** (DPAPI machine-scope / AES-256-GCM in ''App_Data/''), consentendo al richiedente e agli amministratori autorizzati di recuperare il PFX anche successivamente. Se impostato a ''false'', la chiave privata **non lascia il browser** (recupero successivo limitato al certificato .crt). Se l'utente sottomette un CSR generato esternamente, la chiave privata non tocca mai il server.
+  * **Supporto Multi-Foresta Non Trustata**: Permette l'emissione da CA appartenenti a domini e foreste diverse non federate e prive di forest trust, tramite autenticazione sicura basata su **Windows Credential Manager** (senza mai salvare password in chiaro nei file di configurazione).
+  * **Template RBAC (AllowedGroups)**: Controllo degli accessi granulare sui singoli template basato sull'appartenenza a gruppi Active Directory, limitando la visibilità e l'utilizzo dei template solo agli utenti autorizzati.
+
+---
+
+===== 2. Architettura della Soluzione =====
+
+Il portale supporta due modalità operative configurabili tramite ''appsettings.json'', oltre a una modalità di simulazione integrata per ambienti di sviluppo e test (''UseSimulator: true''):
+
+=== 2.1 Modalità A: Standalone (Installato a fianco di certsrv in ciascuna foresta) ===
+  * L'istanza risiede direttamente sul web server della foresta locale.
+  * Dialoga con la Sub-CA locale via DCOM/RPC nativo tramite l'identità dell'Application Pool IIS (''AuthMode: "LocalIdentity"'').
+  * **Impatto di rete nullo**: zero regole firewall cross-forest.
+  * **Nessuna modifica a certsrv**: il portale viene installato come sito IIS autonomo con Application Pool dedicato.
+
+=== 2.2 Modalità B: Hub Centralizzato (In DMZ verso foreste NON trustate) ===
+  * Un'unica interfaccia web esposta su rete interna o DMZ.
+  * Gli utenti possono selezionare la Sub-CA della foresta desiderata da un menu a tendina.
+  * Il backend si autentica verso la Sub-CA remota estraendo le credenziali dell'account di servizio da **Windows Credential Manager** e applicando l'impersonazione di rete via ''LogonUser'' (''LOGON32_LOGON_NEW_CREDENTIALS'') in un blocco ''WindowsIdentity.RunImpersonated''.
+  * **Zero password in chiaro**: le password risiedono esclusivamente nel Credential Vault cifrato dal DPAPI di Windows.
+
+<code>
+[ Browser Utente (HTML5) ]
+            |  (HTTPS: Richiesta CSR Base64 + Scelta Template)
+            v
+[ Portale PKI Gateway (ASP.NET Core 8 / IIS) ]
+            |
+            +---> Modalità Locale: Token AppPool IIS ------> [ Sub-CA Foresta Locale ]
+            |
+            +---> Modalità Hub: Windows Credential Mgr ----> [ Sub-CA Foresta Remota (Non Trustata) ]
+</code>
+
+---
+
+===== 3. Struttura dei File del Progetto =====
+
+<code>
+C:\inetpub\PkiWebEnrollment\ (o cartella sorgente)
+├── Models/
+│   ├── PortalConfig.cs          # Modelli dati di configurazione CA, Auth e Template
+│   ├── AdminConfig.cs           # Modello autorizzativo amministratori (AllowedUsers, AllowedGroups)
+│   ├── HeldCertificateRequest.cs# Modello e stati (HoldStatus) richieste trattenute/pending
+│   └── EnrollmentDto.cs         # DTO per richieste CSR, sottomissioni e download certificati
+├── Services/
+│   ├── IAdcsService.cs          # Interfaccia di astrazione verso AD CS
+│   ├── AdcsService.cs           # Motore DCOM CCertRequest + certreq.exe + Credential Manager + Hold logic
+│   ├── IHeldRequestStore.cs     # Interfaccia per gestione archivio richieste trattenute
+│   ├── HeldRequestStore.cs      # Store thread-safe in-memory con persistenza su disco JSON
+│   └── CsrParserService.cs      # Parser X.509/PKCS#10 nativo (.NET 8)
+├── wwwroot/
+│   ├── css/styles.css           # Interfaccia grafica responsive moderna (Dark & Light mode)
+│   ├── js/
+│   │   ├── vendor/forge.min.js  # Libreria crittografica per bundling PKCS#12 (.pfx)
+│   │   ├── crypto-helper.js     # Generazione coppie di chiavi RSA/ECC e CSR nel browser
+│   │   ├── i18n.js              # Modulo internazionalizzazione (IT, EN, FR, DE, ES, PT, ZH)
+│   │   └── app.js               # Logica client, validazioni e download file
+│   ├── index.html               # Portale utente (SPA per generazione chiavi, invio CSR e ritiro)
+│   └── admin.html               # Pannello amministrativo (gestione richieste trattenute & config CA)
+├── App_Data/
+│   ├── held-requests.json       # Archivio persistente delle richieste con chiavi cifrate a riposo
+│   ├── store-entropy.bin        # Entropia crittografica locale per cifratura DPAPI
+│   └── store-key.bin            # Chiave crittografica di installazione a 256 bit per AES-GCM
+├── appsettings.json             # File di configurazione portale, CA, template e admin ACL
+├── Program.cs                   # Minimal Web API, endpoint /api/* e /api/admin/*, pipeline middleware
+├── web.config                   # Configurazione IIS AspNetCoreModuleV2 (InProcess)
+├── Install-PkiPortal.ps1        # Script PowerShell per installazione automatizzata su IIS (supporto gMSA)
+├── Uninstall-PkiPortal.ps1      # Script PowerShell per disinstallazione sicura
+├── Add-CaCredential.ps1         # Utility per registrare credenziali in Windows Credential Manager
+└── run.ps1                      # Script di avvio per test ed esecuzione locale
+</code>
+
+---
+
+===== 4. Prerequisiti di Sistema =====
+
+==== 4.1 Server Web (IIS) ====
+  * **Sistema Operativo**: Windows Server 2016, 2019, 2022 o 2025.
+  * **Ruolo IIS**: Con moduli HTTP statici, log e console di gestione (lo script di installazione li attiva in automatico).
+  * **.NET 8.0 Hosting Bundle**: Contiene il runtime .NET 8 e il modulo ''AspNetCoreModuleV2'' per IIS.
+
+==== 4.2 Active Directory Certificate Services (AD CS) ====
+  * Subordinate Enterprise Issuing CA operativa.
+  * Certificate Template configurati con permessi di **Read** e **Enroll** assegnati all'account con cui il portale contatta la CA.
+
+==== 4.3 Requisiti Browser Client ====
+  * **Browser supportati**: Chrome, Microsoft Edge, Mozilla Firefox, Safari o qualsiasi browser moderno con supporto per le Web Crypto API native (''window.crypto.subtle'') e Web Workers.
+  * Non richiede controlli ActiveX, plugin NPAPI o modalità Internet Explorer (IE Mode).
+  * **IMPORTANTE - Contesto Sicuro (Secure Context / HTTPS Obbligatorio)**: Per standard di sicurezza W3C, i browser abilitano i Web Worker isolati (Blob URL) e le API crittografiche avanzate solo su contesti sicuri (**HTTPS** o ''localhost''). L'accesso tramite HTTP puro su indirizzi IP/FQDN remoti (es. ''http://server:81'') provoca il blocco o forte rallentamento della generazione crittografica locale.
+
+---
+
+===== 5. Guida all'Installazione su IIS =====
+
+Lo script ''Install-PkiPortal.ps1'' automatizza l'intero processo di installazione creando un **sito IIS e un Application Pool completamente separati** da ''Default Web Site'', garantendo che l'eventuale installazione di Microsoft ''certsrv'' rimanga inalterata.
+Inoltre, lo script assegna automaticamente i permessi di **FullControl** all'identità dell'Application Pool su tutta la cartella di installazione e, se non ancora presente, rinomina automaticamente ''appsettings.example.json'' in ''appsettings.json''.
+
+==== 5.1 Esempio 1: Installazione Base HTTP (Porta 8443) ====
+
+Aprire una console PowerShell come **Amministratore**:
+
+<code powershell>
+cd C:\Users\tanino\Documents\SSL\Portale
+.\Install-PkiPortal.ps1 -SitePort 8443
+</code>
+
+Lo script eseguirà:
+  - Verifica e attivazione delle feature IIS mancanti.
+  - Verifica della presenza del runtime ASP.NET Core Module V2.
+  - Compilazione e deploy dell'applicazione in ''C:\inetpub\PkiWebEnrollment''.
+  - Creazione dell'Application Pool ''PkiWebEnrollment_Pool'' (modalità No Managed Code).
+  - Creazione del sito IIS ''PkiWebEnrollment'' in ascolto sulla porta TCP 8443.
+  - Configurazione delle ACL NTFS per i log di diagnostica.
+  - Aggiunta della regola nel Windows Firewall.
+  - Verifica di non interferenza con ''certsrv''.
+
+==== 5.2 Esempio 2: Installazione HTTPS di Produzione con Service Account ====
+
+Per ambienti di produzione con binding HTTPS e Service Account dedicato:
+
+<code powershell>
+# Richiesta sicura della password del service account
+$pass = Read-Host -AsSecureString "Inserire password dell'account di servizio"
+
+# Esecuzione installazione
+.\Install-PkiPortal.ps1 `
+    -SiteName "PkiWebEnrollment" `
+    -SitePort 443 `
+    -SiteHostHeader "pki.azienda.lan" `
+    -UseHttps `
+    -CertThumbprint "3A1F7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2E3F4A" `
+    -AppPoolIdentity "DOMINIO\svc-pki-portal" `
+    -AppPoolPassword $pass
+</code>
+
+==== 5.3 Esempio 3: Installazione con gMSA (Group Managed Service Account) ====
+
+I gMSA non hanno password e offrono la massima sicurezza enterprise:
+
+<code powershell>
+# Installazione con gMSA (il nome account viene normalizzato con '$' se omesso)
+.\Install-PkiPortal.ps1 -SitePort 8443 -AppPoolIdentity "VD\T0_PKI_WEB" -IsGMSA
+</code>
+
+Lo script configurerà l'Application Pool in IIS con password vuota, assegnerà il diritto locale //SeBatchLogonRight// ("Accesso come processo batch") e verificherà con ''Test-ADServiceAccount'' l'abilitazione della macchina.
+
+Esempio di installazione con gMSA su un server win2019/win2022 che non ha git e winget.
+<code powershell>
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+Set-ExecutionPolicy Bypass -Scope Process -Force
+iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+wget https://download.visualstudio.microsoft.com/download/pr/2d6bb6b2-226a-4baa-bdec-798822606ff1/8494001c276a4b96804cde7829c04d7f/ndp48-x86-x64-allos-enu.exe
+
+choco install git -y
+
+New-Item -Path 'C:\Deploy\PKIPortal' -ItemType Directory -Force
+Set-Location 'C:\Deploy\PKIPortal'
+C:\ProgramData\chocolatey\lib\git\git clone https://github.com/alessandrotanino-blip/PKIWebPortal.git
+
+
+## sul DC
+## New-ADServiceAccount -name T0_PKI_WEB -DNSHostName ldpkicrl1.ld.ge -PrincipalsAllowedToRetrieveManagedPassword LDPKICRL1$ -Path "OU=gMSA,OU=ServiceAccounts,OU=Tier1,OU=TierModel,DC=ld,DC=ge” -Description “gMSA per servizi PKI WebEnrollment"
+
+
+Add-WindowsFeature RSAT-AD-PowerShell
+
+Install-ADServiceAccount -Identity T0_PKI_WEB
+
+Test-ADServiceAccount -Identity T0_PKI_WEB
+
+.\Install-PkiPortal.ps1 -SitePort 81 -AppPoolIdentity "LD\T0_PKI_WEB" -IsGMSA
+</code>
+==== 5.4 Tabella dei Parametri di Installazione ====
+
+^ Parametro ^ Tipo ^ Default ^ Descrizione ^
+| ''-SiteName'' | String | ''PkiWebEnrollment'' | Nome del nuovo sito IIS |
+| ''-SitePort'' | Int | ''8443'' | Porta TCP di ascolto del sito |
+| ''-SiteHostHeader'' | String | ''""'' (tutti) | FQDN per l'Host Header (es. ''pki.azienda.lan'') |
+| ''-InstallPath'' | String | ''C:\inetpub\PkiWebEnrollment'' | Directory fisica di deploy |
+| ''-AppPoolIdentity'' | String | ''ApplicationPoolIdentity'' | Identità dell'AppPool (''NetworkService'', ''LocalSystem'', ''DOM\Account$'' o ''DOM\User'') |
+| ''-AppPoolPassword'' | SecureString | ''$null'' | Password per account utente standard (non necessaria per gMSA) |
+| ''-IsGMSA'' | Switch | ''$false'' | Specifica che l'identità è un gMSA (senza password, aggiunge ''$'' se mancante) |
+| ''-UseHttps'' | Switch | ''$false'' | Se presente, crea binding HTTPS (obbligatorio in produzione: da v2.1.0 l'HTTP in chiaro è bloccato) |
+| ''-AllowInsecureHttp'' | Switch | ''$false'' | Override esplicito per installare su HTTP in chiaro (solo test isolati; senza questo switch lo script si arresta con errore) |
+| ''-CertThumbprint'' | String | ''""'' | Impronta digitale del certificato SSL per HTTPS |
+| ''-SkipFirewall'' | Switch | ''$false'' | Salta la creazione della regola firewall locale |
+| ''-SourcePath'' | String | ''(directory corrente)'' | Percorso del progetto sorgente |
+| ''-SkipDotnetPublish'' | Switch | ''$false'' | Salta la compilazione e utilizza i file già pubblicati |
+
+===== 5.5 Attenzione alla Sicurezza HTTP e Requisito Secure Context (HTTPS) =====
+**A partire dalla v2.1.0 l'installazione su HTTP in chiaro è BLOCCATA by default**: lo script si arresta con errore se non viene specificato ''-UseHttps''. Per ambienti di test isolati esiste lo switch esplicito ''-AllowInsecureHttp'' (override documentato e tracciabile, **non** per produzione).
+In produzione è **obbligatorio** usare HTTPS per due motivi fondamentali:
+  1. **Sicurezza di Rete (Mitigazione ESC8)**: Prevenire attacchi NTLM Relay (ESC8 / PetitPotam). Installare sempre con i parametri ''-UseHttps -CertThumbprint''; dalla v2.1.0 lo script configura inoltre da solo **Extended Protection for Authentication (EPAL)** con ''extendedProtection:outbound'' e disabilita l'autenticazione anonima sul sito IIS.
+  2. **Funzionalità Browser (W3C Secure Context)**: I browser web moderni (Chrome, Edge, Firefox) richiedono un contesto sicuro per abilitare la piena esecuzione dei **Web Workers** (Blob URL) e delle API crittografiche (''crypto.subtle''). Se il portale è aperto in HTTP su hostname o IP remoti (es. ''http://server:81''), il browser blocca o degrada la generazione locale delle chiavi crittografiche. Sebbene il portale includa un fallback a single-thread (timeout 15 secondi), l'adozione di un binding HTTPS elimina del tutto il problema garantendo prestazioni istantanee.
+
+==== 5.6 Hardening v2.1.0 / v2.1.1 / v2.2.1 ====
+Le versioni v2.1.0, v2.1.1 e v2.2.1 introducono un pacchetto di contromisure di sicurezza (riferimenti dettagliati nel changelog):
+
+  * **Remediazione avvisi CodeQL (v2.2.1)**: mitigazione di alert relativi a XSS nel DOM client-side, log forging (sanitizzazione dell'output dei log) e command injection (validazione e hardening degli argomenti verso AD CS).
+
+  * **HTTP in chiaro bloccato by default** (vedi 5.5) + header ''Strict-Transport-Security'' (HSTS) in ''web.config''.
+  * **Extended Protection (EPAL)** configurata automaticamente dallo script di installazione (''extendedProtection:outbound''); **autenticazione anonima disabilitata** su IIS: anche i file statici e ''/admin.html'' attraversano il challenge NTLM/Kerberos.
+  * **Minimo privilegio sul file system**: l'identità dell'App Pool riceve ''ReadAndExecute'' sulla cartella applicativa (niente più ''FullControl'' sui binari: impedisce il DLL swap) e ''Modify'' solo su ''appsettings.json'', ''App_Data'' e ''logs'' (cartelle blindate con ACL esclusive).
+  * **Content-Security-Policy** restrittiva in ''web.config'' (solo same-origin, nessun script inline: preloader del tema e handler in file esterni, ''js/theme-init.js'').
+  * **Chiave privata e recupero PFX (StorePrivateKeyForRetrieval)**: configurabile per template (attivo di default, ''true'') per consentire all'utente e agli admin il recupero differito del pacchetto PFX (con catena completa e chiave custodita cifrata a riposo con DPAPI/AES-GCM in ''App_Data/''). Il PFX usa **AES-256-CBC** (dismesso 3DES) e la **password del PFX è obbligatoria** in tutti i flussi. La generazione delle chiavi richiede il CSPRNG nativo del browser (''window.crypto.getRandomValues'').
+  * **Anti-CSRF per sessione**: token legato all'identità (HMAC-SHA256, 30 minuti) emesso da ''GET /api/admin/csrf'' e richiesto nell'header ''X-Pki-Portal-Admin'' su ogni richiesta mutante admin; il valore statico pubblico ''pki-admin'' non è più accettato.
+  * **Rate limiting per identità**: 5 req/min su sottomissioni, 20 req/min su parsing CSR, 120 req/min di default (HTTP 429).
+  * **LDAPS per la lettura dei template AD** (porta 636): in modalità Hub le credenziali esplicite non transitano mai in chiaro; il fallback su LDAP 389 è consentito solo con identità di processo (senza password in transito).
+  * **Add-CaCredential.ps1**: la password non viene più passata come argomento a ''cmdkey'' (visibile in command line): si usa il prompt interattivo (''/pass:'' vuoto).
+  * **Information disclosure**: ''GET /api/config'' non espone più i nomi dei gruppi AD (solo ''IsAllowed''); gli errori admin non restituiscono più i dettagli delle eccezioni.
+
+==== 5.8 Tracciamento Richiedenti ACME e Filtraggio Avanzato (v2.4.0) ====
+La versione v2.4.0 introduce l'identificazione trasparente dei client ACME e un sistema completo di filtraggio live per lo storico richieste:
+
+  * **Identificazione Richiedente ACME e Rilevamento IP Client**: per tutti i certificati emessi tramite protocollo ACME RFC 8555, il campo *Richiedente* non rimane più vuoto ma viene valorizzato automaticamente con l'indicazione ''ACME (<ip>)'' (es. ''ACME (192.168.1.50)'') o ''ACME'' qualora l'IP non sia desumibile. L'indirizzo IP del client viene catturato in fase di creazione dell'ordine (''/acme/new-order'') o di sottomissione della CSR (''/acme/order/{id}/finalize''), gestendo correttamente proxy e reverse proxy via header ''X-Forwarded-For'' e normalizzando gli indirizzi IPv4-mapped IPv6.
+  * **Badge Grafico Distintivo**: nell'elenco certificati del portale e nelle card del pannello di amministrazione, le richieste ACME sono contrassegnate da un badge ciano ad alta visibilità ''⚡ ACME (<ip>)'', distinguendosi a colpo d'occhio dalle richieste manuali di account utente Windows (''👤 DOMINIO\utente'').
+  * **Retrocompatibilità Automatica Record Preesistenti**: tutte le richieste ACME registrate nello store persistente (''held-requests.json'') da release precedenti vengono identificate ed etichettate automaticamente come ''ACME'' al caricamento o all'interrogazione API.
+  * **Barra di Filtraggio Dinamica (Portale & Admin)**: nuova toolbar di filtri interattivi disponibile sia nel portale utente (''index.html'') che nella gestione richieste del pannello admin (''admin.html''):
+    - **Filtro Richiedente**: menu a tendina auto-popolato dinamicamente con tutti i richiedenti distinti, comprensivo dell'opzione rapida ''⚡ Solo ACME (tutti)'' per isolare istantaneamente tutte le emissioni automatizzate.
+    - **Filtro Template**: selezione a tendina per isolare specifici Certificate Template AD CS.
+    - **Filtro Stato**: selezione rapida per emessi/approvati, in attesa o rifiutati.
+    - **Ricerca Testuale Full-Text Live**: campo di ricerca in tempo reale su Common Name (CN), Request ID (#), Richiedente/IP, Template, CA e Hold ID.
+    - **Contatore e Reset**: indicatore dinamico delle richieste visibili (''Mostrate X su Y richieste'') e pulsante rapido ''✕ Azzera''.
+  * **Filtri RESTful API**: gli endpoint ''GET /api/certificates/my-requests'' e ''GET /api/admin/held-requests'' supportano i parametri di query opzionali (''?requester=...&template=...&status=...&search=...'') per consentire interrogazioni mirate e automazioni da script PowerShell, Ansible o pipeline CI/CD.
+
+==== 5.7 Hardening del Server ACME (v2.3.1 / v2.3.2) ====
+Le versioni v2.3.1 e v2.3.2 introducono un pacchetto completo di sicurezza e hardening dedicato al Server ACME RFC 8555:
+
+  * **Binding CSR<->Ordine (critica)**: verifica crittografica e DER a livello binario affinché tutti i SAN DNS e il CN della CSR corrispondano esattamente agli identificatori autorizzati dell'ordine. Rifiuto tassativo di SAN IP, URI o email.
+  * **Difesa Anti-SSRF su validazione HTTP-01 (critica)**: il richiedente non può forzare il server ACME a contattare indirizzi arbitrari. Loopback (127.0.0.1, ::1) e Cloud Metadata service (169.254.169.254, AWS/Azure/GCP, fe80::/10) sono **sempre categoricamente bloccati**.
+  * **Supporto Intranet RFC 1918 (v2.3.2)**: l'opzione ''AllowPrivateIpValidation'' consente la verifica reale HTTP-01 anche verso IP privati interni (10/8, 172.16/12, 192.168/16, CGNAT 100.64/10, ULA fc00::/7). Quando attiva, l'allowlist ''AllowedDomains'' è **obbligatoria** per impedire tentativi di SSRF su nodi interni non autorizzati.
+  * **Allowlist Domini (AllowedDomains)**: elenco vincolante dei suffissi di dominio emittibili (es. ''azienda.lan''). Obbligatoria per le modalità ''AutoApprove'' e per la validazione su IP privati.
+  * **Ownership degli Account e Fix IDOR**: tutte le interrogazioni di account, ordini e autorizzazioni richiedono firma crittografica JWS valida e verificano la titolarità dell'account richiedente (401/403).
+  * **Revoca e Key-Change Reali**: revoca effettiva eseguita su AD CS con ''certutil -revoke'' e procedura RFC 8555 di key rollover con doppia firma JWS (vecchia e nuova chiave).
+
+---
+
+===== 6. Configurazione delle Sub-CA e dei Template (appsettings.json) =====
+
+Il file di configurazione principale si trova in ''C:\inetpub\PkiWebEnrollment\appsettings.json''.
+
+**Validità dei template:** il campo ''ValidityDays'' di un template NON viene inserito manualmente dall'amministratore nell'interfaccia di gestione (il campo è in sola lettura). Con la funzione ''Scopri dalla CA'' la validità viene letta direttamente dalla DEFINIZIONE del template AD CS: il portale interroga Active Directory (contenitore ''CN=Certificate Templates,CN=Public Key Services,CN=Services'') e legge l'attributo ''pKIDefaultLifetime'' dell'oggetto del template (valore in unità da 100 ns, convertito in giorni). In modalità Hub (foresta remota via CredentialManager) la query LDAP usa le credenziali della foresta di destinazione; dalla v2.1.0 la connessione parte da **LDAPS (porta 636, cifrato)** e il fallback su LDAP non cifrato (389) è consentito solo quando non sono presenti credenziali esplicite (identità del processo, nessuna password in transito). In fallback, se AD non è accessibile, si tenta ''certutil -config "server\CA" -template NomeTemplate'' (KeyUsagePeriod). Il valore viene salvato in appsettings.json e mostrato all'utente nel portale. Per le CA in modalità simulatore la validità è definita dalle definizioni mock dei template.
+
+==== 6.1 Esempio di Configurazione: Modalità Locale (Affiancata a certsrv) ====
+
+In questo scenario il portale interroga la CA della stessa foresta. Viene utilizzata l'identità dell'Application Pool:
+
+<code json>
+{
+  "PortalConfig": {
+    "PortalMode": "Standalone",
+    "PortalTitle": "Portale Web Enrollment - Foresta 1",
+    "DefaultCaId": "ca-foresta1",
+    "CAs": [
+      {
+        "Id": "ca-foresta1",
+        "DisplayName": "Foresta 1 - Issuing CA Locale",
+        "ForestOrDomain": "foresta1.lan",
+        "ConfigString": "subca01.foresta1.lan\\Foresta1-SubCA",
+        "IsDefault": true,
+        "UseSimulator": false,
+        "AuthMode": "LocalIdentity",
+        "Description": "Subordinate CA Enterprise della foresta corrente",
+        "Templates": [
+          {
+            "Name": "WebServer",
+            "DisplayName": "Web Server SSL/TLS (1 Anno)",
+            "Description": "Certificato server per IIS, Apache, Linux con SAN multipli",
+            "RequiresApproval": false,
+            "ValidityDays": 365,
+            "AllowedKeyTypes": ["RSA-2048", "RSA-3072", "RSA-4096", "ECDSA-P256", "ECDSA-P384"],
+            "KeyUsages": ["DigitalSignature", "KeyEncipherment"],
+            "ExtendedKeyUsages": ["ServerAuthentication"],
+            "AllowedGroups": []
+          },
+          {
+            "Name": "WebServer-2Years",
+            "DisplayName": "Web Server SSL/TLS (2 Anni)",
+            "Description": "Certificato a lunga validità (approvazione manuale obbligatoria)",
+            "RequiresApproval": true,
+            "ValidityDays": 730,
+            "AllowedKeyTypes": ["RSA-2048", "RSA-4096"],
+            "KeyUsages": ["DigitalSignature", "KeyEncipherment"],
+            "ExtendedKeyUsages": ["ServerAuthentication"],
+            "AllowedGroups": ["DOMINIO\\PKI-Admins"]
+          }
+        ]
+      }
+    ]
+  }
+}
+</code>
+
+==== 6.2 Esempio di Configurazione: Modalità Hub Centralizzata (Multi-Foresta) ====
+
+In questo scenario il portale risiede in una DMZ o zona condivisa e contatta due Sub-CA in due foreste completamente non trustate:
+
+<code json>
+{
+  "PortalConfig": {
+    "PortalMode": "Hub",
+    "PortalTitle": "Enterprise PKI Web Gateway - Multi-Forest",
+    "DefaultCaId": "ca-foresta1",
+    "CAs": [
+      {
+        "Id": "ca-foresta1",
+        "DisplayName": "Foresta 1 - Produzione (foresta1.lan)",
+        "ForestOrDomain": "foresta1.lan",
+        "ConfigString": "subca01.foresta1.lan\\Foresta1-SubCA",
+        "IsDefault": true,
+        "UseSimulator": false,
+        "AuthMode": "CredentialManager",
+        "CredentialTarget": "subca01.foresta1.lan",
+        "Templates": [
+          {
+            "Name": "WebServer",
+            "DisplayName": "Web Server (1 Anno)",
+            "RequiresApproval": false,
+            "ValidityDays": 365
+          }
+        ]
+      },
+      {
+        "Id": "ca-foresta2",
+        "DisplayName": "Foresta 2 - Sviluppo/DMZ (foresta2.lan)",
+        "ForestOrDomain": "foresta2.lan",
+        "ConfigString": "subca02.foresta2.lan\\Foresta2-SubCA",
+        "IsDefault": false,
+        "UseSimulator": false,
+        "AuthMode": "CredentialManager",
+        "CredentialTarget": "subca02.foresta2.lan",
+        "Templates": [
+          {
+            "Name": "WebServer",
+            "DisplayName": "Web Server (1 Anno)",
+            "RequiresApproval": false,
+            "ValidityDays": 365
+          },
+          {
+            "Name": "NetworkDevice",
+            "DisplayName": "Dispositivi di Rete (Switch/Firewall)",
+            "RequiresApproval": false,
+            "ValidityDays": 730
+          }
+        ]
+      }
+    ]
+  }
+}
+</code>
+
+=== 6.3 Controllo di Accesso ai Template (RBAC per Gruppo AD) ===
+
+È possibile limitare l'accesso a template specifici a determinati gruppi Active Directory tramite il campo ''AllowedGroups'':
+
+<code json>
+{
+  "Name": "WebServer-Secure",
+  "DisplayName": "Web Server SSL/TLS (Solo Admins)",
+  "Description": "Template riservato al gruppo PKI-Admins",
+  "RequiresApproval": true,
+  "ValidityDays": 365,
+  "AllowedKeyTypes": ["RSA-2048", "RSA-4096"],
+  "KeyUsages": ["DigitalSignature", "KeyEncipherment"],
+  "ExtendedKeyUsages": ["ServerAuthentication"],
+  "AllowedGroups": ["VD\\PKI-Admins"]
+}
+</code>
+
+Quando ''AllowedGroups'' contiene uno o più gruppi, solo gli utenti appartenenti a quei gruppi potranno visualizzare e utilizzare il template. Gli utenti non autorizzati vedranno il template disabilitato con un'icona di lucchetto.
+
+=== 6.4 Riferimento Completo Campi Template ===
+
+^ Campo ^ Tipo ^ Default ^ Descrizione ^
+| ''Name'' | String | — | Nome di sistema del template in AD CS (es. ''WebServer''). |
+| ''DisplayName'' | String | — | Nome mostrato all'utente nell'interfaccia. |
+| ''Description'' | String | — | Breve descrizione mostrata nel portale. |
+| ''RequiresApproval'' | Bool | ''false'' | Se ''true'', i certificati emessi vengono trattenuti per approvazione admin. |
+| ''StorePrivateKeyForRetrieval'' | Bool | ''true'' | Se ''true'' (default), memorizza la chiave privata cifrata a riposo per consentire il recupero differito del file PFX. Se ''false'', la chiave non lascia il client. |
+| ''ValidityDays'' | Int | ''365'' | Validità del certificato in giorni (sola lettura se scoperto dalla CA). |
+| ''AllowedKeyTypes'' | String[] | ''["RSA-2048","RSA-4096","ECDSA-P256"]'' | Algoritmi chiave ammessi. Supporta anche ''RSA-3072'' e ''ECDSA-P384''. |
+| ''KeyUsages'' | String[] | ''["DigitalSignature","KeyEncipherment"]'' | Valori X.509 Key Usage. |
+| ''ExtendedKeyUsages'' | String[] | ''["ServerAuthentication"]'' | OID/nomi X.509 Extended Key Usage. |
+| ''AllowedGroups'' | String[] | ''[]'' (tutti gli utenti) | Gruppi Active Directory autorizzati all'uso del template (RBAC). |
+
+---
+
+===== 7. Gestione delle Credenziali con Windows Credential Manager =====
+
+Per garantire che **nessuna password rimanga mai scritta in chiaro** su disco o in repository, il portale utilizza lo store crittografato del sistema operativo tramite lo script ''Add-CaCredential.ps1''.
+
+==== 7.1 Registrazione di una Credenziale ====
+
+Eseguire su PowerShell (come Amministratore sul server del portale):
+
+<code powershell>
+# Registrazione credenziali per Foresta 1
+.\Add-CaCredential.ps1 -Target "subca01.foresta1.lan" -UserName "FORESTA1\svc-pki-enroll"
+
+# Registrazione credenziali per Foresta 2 (Foresta non trustata)
+.\Add-CaCredential.ps1 -Target "subca02.foresta2.lan" -UserName "FORESTA2\svc-pki-enroll"
+</code>
+
+Lo script richiederà la password tramite input sicuro mascherato e la registrerà nel Credential Vault di Windows.
+
+==== 7.2 Visualizzazione e Rimozione delle Credenziali ====
+
+<code powershell>
+# Elenco di tutti i target attualmente memorizzati nel Vault
+.\Add-CaCredential.ps1 -List
+
+# Rimozione di un target non più necessario
+.\Add-CaCredential.ps1 -Target "subca02.foresta2.lan" -Remove
+</code>
+
+---
+
+===== 8. Utilizzo del Portale Web (Funzionalità Utente) =====
+
+Accedendo via browser all'indirizzo configurato (es. ''https://pki.azienda.lan'' o ''http://localhost:8443''):
+
+==== 8.1 Nuova Richiesta con Generazione Chiave nel Browser (Web Crypto) ====
+  1. Selezionare la **CA di Emissione** in alto a destra.
+  2. Cliccare sulla scheda **"Nuova Richiesta (Browser Web Crypto)"**.
+  3. Scegliere il **Certificate Template** desiderato.
+  4. Compilare il **Common Name (CN)** e i dati opzionali (O, OU, C).
+  5. Aggiungere eventuali **Subject Alternative Names (SAN)** specificando tipologia (DNS, IP, Email, URI).
+  6. Selezionare l'algoritmo (RSA 2048, RSA 3072, RSA 4096 bit, ECDSA P-256 o ECDSA P-384).
+  7. Aggiungere eventuali **note opzionali** per fornire contesto agli amministratori.
+  8. Inserire la password con cui proteggere il file **.PFX**.
+  9. Cliccare su **"Genera Chiave & Richiedi Certificato"**:
+     * Il browser genera la chiave privata ed esporta il CSR PKCS#10.
+     * Il CSR viene firmato dalla Sub-CA.
+     * Il browser confeziona il file **.pfx** completo e rende disponibili i pulsanti di download:
+       * **Scarica PFX (.pfx)** (certificato + chiave privata cifrata per Windows/IIS)
+       * **Scarica Certificato (.crt)** (certificato X.509 Base64)
+       * **Scarica Catena (.p7b)** (catena Sub-CA e Root CA)
+
+Esempio di richiesta (to be approved) e (Autoapproved)
+
+----
+
+^ User Portal ^ Auto-enrollment ^ To be approved ^
+| {{:wiki_windows:1-pki-userportal.jpeg?direct&400|}} \\ **User Portal** | {{:wiki_windows:1-pki-userportal_auto.jpeg?direct&400|}} \\ **Auto-enrollment** | {{:wiki_windows:1-pki-userportal_tobeapproved.jpeg?direct&400|}} \\ **To be approved** |
+----
+==== 8.2 Invia CSR Esistente (Base64 / File) ====
+Ideale per server Linux, apparati di rete F5, firewall Cisco/Fortinet o certificati generati tramite OpenSSL:
+  1. Accedere alla scheda **"Invia CSR Esistente"**.
+  2. Incollare il testo PEM del CSR o caricare il file ''.csr''.
+  3. Cliccare su **"Ispeziona CSR"** per verificare Common Name, SAN rilevati e dimensione chiave.
+  4. Selezionare il Template AD CS e inviare.
+  5. Scaricare il certificato firmato ''.crt'' e la catena ''.p7b''.
+
+{{:wiki_windows:2-pki-userportal.jpeg?direct&400|}}
+==== 8.3 Ritiro Certificati (Pending o già Emessi) & Controllo di Sicurezza ====
+Il portale consente il recupero sia di richieste rimaste in sospeso per approvazione, sia di certificati già precedentemente emessi:
+  1. Alla sottomissione di ogni richiesta, il portale registra l'identità dell'utente richiedente Windows (''ctx.User.Identity.Name'') e associa in modo univoco il ''Request ID''.
+  2. Per ritirare un certificato emesso o verificarne l'approvazione, accedere alla scheda **"Ritiro Certificati (Pending o Emessi)"**.
+  3. È possibile inserire direttamente il numero di richiesta (es. ''#1042'') oppure selezionare il certificato dalla tabella **"I Tuoi Certificati e Richieste"**.
+  4. **Protezione e Sicurezza degli Accessi**:
+    * Il recupero è consentito **esclusivamente all'utente che ha effettuato la richiesta** oppure agli **amministratori di sistema** autorizzati.
+    * Eventuali tentativi di accesso a numeri di richiesta altrui da parte di utenti non autorizzati vengono bloccati con stato HTTP 403 Forbidden.
+    * L'endpoint rispetta la Windows Authentication integrata (Negotiate/NTLM/Kerberos).
+  5. **Filtraggio e Ricerca (Novità v2.4.0)**: La tabella include una barra filtri dinamica con ricerca testuale libera full-text (su CN, ID, Richiedente, Template, CA), filtri a tendina dedicati per Richiedente (inclusa opzione rapida ''⚡ Solo ACME (tutti)''), Template e Stato, nonché badge grafici ''⚡ ACME (<ip>)'' per riconoscere immediatamente le emissioni automatizzate.
+{{:wiki_windows:3-pki-userportal.jpeg?direct&400|}}
+
+**Self-healing catena certificati**: per le richieste registrate con versioni precedenti del portale, al momento del ritiro il sistema ricostruisce automaticamente la catena completa (P7B + foglia) e aggiorna il record nello store, garantendo che anche i PFX ritirati successivamente contengano la catena Sub-CA e Root CA completa.
+
+---
+
+==== 8.4 Interfaccia Multilingua e Tema ====
+
+Il portale supporta **7 lingue** con cambio dinamico istantaneo:
+  * 🇮🇹 Italiano (it)
+  * 🇬🇧 Inglese (en)
+  * 🇫🇷 Francese (fr)
+  * 🇩🇪 Tedesco (de)
+  * 🇪🇸 Spagnolo (es)
+  * 🇵🇹 Portoghese (pt)
+  * 🇨🇳 Cinese (zh)
+
+La lingua viene rilevata automaticamente dal browser (''navigator.language'') con fallback sull'inglese. La selezione è persistente in ''localStorage'' (chiave ''pki-portal-lang'').
+
+È inoltre disponibile la selezione del tema **Chiaro/Scuro**, anch'essa persistente in ''localStorage''.
+
+==== 8.5 Note Tecniche sullo Store delle Richieste e Cifratura a Riposo ====
+
+  * **Cifratura Obbligatoria a Riposo delle Private Key**: Tutte le chiavi private archiviate nello store per la successiva rigenerazione/ritiro del PFX vengono cifrate prima della scrittura su disco. Viene utilizzato lo standard DPAPI machine-scope (prefisso ''PKEY1:'') vincolato ad un'entropia casuale a 256 bit specifica dell'installazione (''App_Data/store-entropy.bin''), con fallback automatico e cross-platform su AES-256-GCM (prefisso ''AESGCM1:'') basato sulla chiave di installazione (''App_Data/store-key.bin''). È fatto divieto assoluto di memorizzare chiavi in chiaro: se nessun modulo crittografico è disponibile, la scrittura su disco viene rifiutata lanciando un'eccezione di sicurezza.
+  * **Validazione DPAPI e Self-Test all'Avvio**: Il modulo ''HeldRequestStore'' esegue all'avvio dell'applicazione un self-test funzionale crittografico (protect/unprotect di una probe casuale) per verificare la piena operatività di DPAPI nel contesto di sicurezza del processo prima di abilitarlo.
+  * **Migrazione Automatica dei Record Legacy**: All'avvio, qualora vengano rilevati nel file JSON record contenenti chiavi in chiaro generati con versioni precedenti, il modulo provvede automaticamente a cifrarli a riposo e a riscrivere il file persistito, bonificando ed eliminando contestualmente copie legacy non protette nella root dell'applicazione.
+  * **Dual-write configurazione**: Il salvataggio della configurazione scrive contemporaneamente in ''ContentRootPath'' e ''BaseDirectory'', mantenendo la coerenza tra percorsi di sviluppo e di deploy.
+  * **Store thread-safe e Scrittura Atomica**: L'accesso allo store delle richieste trattenute è protetto da ''SemaphoreSlim'' con persistenza atomica su file temporaneo (.tmp) e rename atomico su ''App_Data/held-requests.json''.
+
+---
+
+===== 9. Automazione Script e Server ACME RFC 8555 (win-acme / certbot) =====
+
+Il portale supporta l'automazione sia tramite endpoint RESTful proprietari (PowerShell, bash, Ansible), sia tramite un **Server ACME (RFC 8555) nativo integrato** direttamente nel processo web ASP.NET Core, senza richiedere proxy esterni (come ''ACME-Server-ADCS'', ''Smallstep'' o ''Keyfactor'').
+
+==== 9.1 Server ACME RFC 8555 Integrato (win-acme, certbot, Traefik, acme.sh) ====
+
+A partire dalla versione 2.3.0, il portale agisce come Registration Authority (RA) ACME completa:
+
+^ Metodo ^ Endpoint ACME ^ Descrizione RFC 8555 ^ Autenticazione ^
+| GET | ''/acme/directory'' | Elenco degli endpoint della risorsa ACME | Anonimo |
+| GET / HEAD | ''/acme/new-nonce'' | Generazione token anti-replay (header ''Replay-Nonce'') | Anonimo |
+| POST | ''/acme/new-account'' | Registrazione account client con chiave pubblica JWS | Anonimo + JWS |
+| GET / POST | ''/acme/account/{id}'' | Ispezione e gestione account (POST-as-GET) | JWS (kid) |
+| GET / POST | ''/acme/account/{id}/orders'' | Elenco degli ordini associati all'account | JWS (kid) |
+| POST | ''/acme/new-order'' | Creazione ordine certificato con lista identificatori DNS | JWS (kid) |
+| GET / POST | ''/acme/order/{id}'' | Query stato dell'ordine (pending, ready, valid) | JWS (kid) |
+| GET / POST | ''/acme/authz/{id}'' | Query autorizzazione e challenge di dominio | JWS (kid) |
+| POST | ''/acme/chall/{authId}/{type}'' | Trigger validazione challenge (http-01 / dns-01) | JWS (kid) |
+| POST | ''/acme/order/{id}/finalize'' | Invio del CSR in Base64Url DER ed emissione su AD CS | JWS (kid) |
+| GET / POST | ''/acme/cert/{id}'' | Download catena certificati (''application/pem-certificate-chain'') | Anonimo / JWS |
+| POST | ''/acme/revoke-cert'' | Revoca certificato | JWS (kid) |
+| POST | ''/acme/key-change'' | Modifica chiave account | JWS (kid) |
+| GET | ''/acme/terms'' | Termini di servizio del server ACME | Anonimo |
+
+=== Configurazione ACME in appsettings.json ===
+
+<code json>
+"AcmeConfig": {
+  "Enabled": true,
+  "BaseUrl": "https://pki.azienda.lan",
+  "DefaultCaId": "CloudLD Sub CA",
+  "DefaultTemplateName": "WebServer5y",
+  "AllowedTemplates": [
+    "WebServer5y"
+  ],
+  "AllowedDomains": [
+    "azienda.lan"
+  ],
+  "ValidationMode": "Http01",
+  "HttpPort": 80,
+  "AllowPrivateIpValidation": true,
+  "ChallengeTimeoutSeconds": 15,
+  "RequireTermsOfServiceAgreed": true,
+  "TermsOfServiceUrl": "/acme/terms"
+}
+</code>
+
+  * **ValidationMode**:
+    - ''"Http01"'': Standard RFC 8555 Sez. 8.3. Il portale contatta via HTTP porta 80 il server target su ''http://<dominio>/.well-known/acme-challenge/<token>'' e verifica che il file contenga ''<token>.<jwk_thumbprint>''.
+    - ''"AutoApprove"'': Approvazione immediata senza controlli di rete esterni (ideale per reti isolate, lab, macchine offline). Richiede obbligatoriamente la compilazione di ''AllowedDomains''.
+    - ''"Http01WithAutoFallback"'': Esegue la verifica HTTP-01 e, in caso di mancata risposta (firewall interno), approva con fallback automatico.
+  * **AllowPrivateIpValidation** (Novità v2.3.2):
+    - Se ''true'', consente la verifica reale HTTP-01 anche verso server attestati su indirizzi IP privati (RFC 1918: ''10.0.0.0/8'', ''172.16.0.0/12'', ''192.168.0.0/16'', CGNAT ''100.64.0.0/10'', ULA ''fc00::/7'').
+    - I controlli di sicurezza anti-SSRF mantengono **sempre e inderogabilmente bloccati** loopback (''127.0.0.1'', ''::1'') e endpoint metadata cloud (''169.254.169.254'', ''fe80::/10'').
+    - Richiede obbligatoriamente la configurazione di ''AllowedDomains''.
+  * **AllowedDomains**:
+    - Allowlist vincolante dei suffissi di dominio emittibili (es. ''azienda.lan''). Obbligatoria sia con ''AutoApprove'' che con ''AllowPrivateIpValidation: true''.
+
+=== Esempio di utilizzo con win-acme (Windows Server / IIS) ===
+
+''win-acme'' (''wacs.exe'') è il client ACME standard per ambienti Windows Server.
+
+^ Scenario ^ Comando wacs.exe ^
+| **Binding automatico IIS** | ''wacs.exe --baseurl "https://pki.azienda.lan/acme/directory" --target iis --siteid 1 --validation selfhosting --accepttos --emailaddress "admin@azienda.lan"'' |
+| **Certificato manuale / PFX** | ''wacs.exe --baseurl "https://pki.azienda.lan/acme/directory" --target manual --host "servizio.azienda.lan" --validation filesystem --webroot "C:\inetpub\wwwroot" --store certman'' |
+
+* ''win-acme'' provvede automaticamente a creare un **Task Pianificato Windows** (''Task Scheduler'') che controllerà ed effettuerà il rinnovo periodico prima della scadenza del certificato.
+
+=== Esempio di utilizzo con Certbot (Linux / Nginx / Apache) ===
+
+Per server Linux, container Docker e appliance di rete:
+
+^ Scenario ^ Comando Certbot ^
+| **Modalità Standalone (Porta 80 libera)** | ''certbot certonly --standalone --server "https://pki.azienda.lan/acme/directory" --email "admin@azienda.lan" --agree-tos -d "app01.azienda.lan"'' |
+| **Modalità Webroot (Nginx / Apache attivo)** | ''certbot certonly --webroot -w /var/www/html --server "https://pki.azienda.lan/acme/directory" --email "admin@azienda.lan" --agree-tos -d "web01.azienda.lan"'' |
+| **Test di Rinnovo (Dry-Run)** | ''certbot renew --dry-run'' |
+
+=== Test Automatico di Collaudo con Test-AcmeProtocol.ps1 ===
+
+Il repository include lo script di collaudo end-to-end ''Test-AcmeProtocol.ps1'' che simula un client ACME completo senza dipendenze esterne:
+
+<code powershell>
+# Esecuzione test contro istanza locale o di produzione
+.\Test-AcmeProtocol.ps1 -PortalUrl "https://pki.azienda.lan" -DomainName "server01.azienda.lan" -ContactEmail "admin@azienda.lan"
+</code>
+
+Lo script verifica e riporta con output diagnostico a colori:
+  - Recupero directory e Replay-Nonce anti-replay iniziale;
+  - Generazione chiave privata RSA-2048 in memoria e calcolo del JWK Thumbprint (RFC 7638);
+  - Registrazione account tramite firma JWS asimmetrica (POST /acme/new-account, status 201);
+  - Creazione ordine con identificatori DNS (POST /acme/new-order, status pending);
+  - Recupero autorizzazioni e token challenge (POST-as-GET /acme/authz);
+  - Invio challenge HTTP-01 e attesa transizione a stato ''ready'';
+  - Generazione CSR PKCS#10 in memoria con estensione SAN;
+  - Finalizzazione ordine e sottomissione CSR su AD CS (POST /acme/order/{id}/finalize, status valid);
+  - Download catena certificati X.509 (GET /acme/cert/{id}) e parsing crittografico completo.
+
+
+==== 9.1.1 Configurazione dal Pannello Admin (v2.3.1+) ====
+
+A partire dalla versione **2.3.1**, tutta la configurazione ACME e' gestibile direttamente dal pannello di amministrazione del portale (''%%/admin%%''), senza necessita' di editare manualmente ''appsettings.json''.
+
+**Accesso**: aprire ''%%/admin%%'' con un account membro di **Domain Admins** o del gruppo **PKI Admins**, poi cliccare sul tab **Server ACME**.
+
+^ Campo ^ Descrizione ^ Valore predefinito ^
+| Abilitato | Toggle per abilitare/disabilitare il server ACME | ''true'' |
+| Base URL | URL pubblico del portale (dedotto automaticamente se vuoto) | ''(auto)'' |
+| CA Predefinita (ID) | ID della CA AD CS configurata in PortalConfig | Stessa del portale |
+| Template AD CS | Template predefinito per richieste ACME | ''WebServer'' |
+| Template Consentiti | Lista separata da virgola dei template autorizzati | ''(solo default)'' |
+| Modalita' Validazione | ''Http01'' / ''AutoApprove'' / ''Http01WithAutoFallback'' | ''Http01'' |
+| Porta HTTP Challenge | Porta per la challenge http-01 verso il client | ''80'' |
+| Timeout Challenge (sec) | Timeout massimo per la validazione HTTP-01 | ''15'' |
+| Consenti IP Privati (RFC 1918) | Abilita validazione HTTP-01 su IP privati intranet aziendali con protezione anti-SSRF attiva (loopback e metadata cloud sempre bloccati) | ''false'' |
+| Domini Emittibili (Allowlist) | Elenco separato da virgola dei domini ammessi (obbligatorio con AutoApprove e AllowPrivateIpValidation) | ''(nessuno)'' |
+| Richiedi Accettazione ToS | Obbligo di accettazione ToS alla registrazione account | ''true'' |
+| URL Termini di Servizio | Percorso o URL dei termini di servizio | ''/acme/terms'' |
+
+Il pannello espone anche il pulsante **Testa Directory** per verificare in tempo reale la raggiungibilita' dell'endpoint ''%%/acme/directory%%'' e la corretta restituzione degli endpoint RFC 8555.
+
+<WRAP info>
+**Sicurezza**: gli endpoint ''%%GET /api/admin/acme-config%%'' e ''%%PUT /api/admin/acme-config%%'' richiedono Windows Authentication (Negotiate) e un token anti-CSRF con scadenza 30 minuti, identico al pannello di configurazione CA. La configurazione viene scritta atomicamente su ''appsettings.json'' con reload immediato della configurazione in memoria senza riavvio del servizio.\n</WRAP>
+==== 9.2 Automazione Script via REST API (PowerShell & Bash / cURL) ====
+
+Oltre al protocollo ACME standard, il portale continua ad esporre i propri endpoint RESTful utilizzabili direttamente da pipeline CI/CD o script di manutenzione:
+
+=== Esempio PowerShell (Windows) ===
+
+<code powershell>
+# Lettura di un CSR generato localmente
+$csr = Get-Content -Path "C:\certs\server01.csr" -Raw
+
+# Payload JSON
+$body = @{
+    CaId = "CloudLD Sub CA"
+    TemplateName = "WebServer5y"
+    CsrPem = $csr
+} | ConvertTo-Json
+
+# Invocazione endpoint REST con credenziali di dominio
+$response = Invoke-RestMethod -Uri "https://pki.azienda.lan/api/certificates/request" `
+    -Method Post `
+    -Body $body `
+    -ContentType "application/json" `
+    -UseDefaultCredentials
+
+if ($response.success -and $response.disposition -eq "Issued") {
+    $response.certificatePem | Out-File "C:\certs\server01.cer" -Encoding ascii
+    Write-Host "Certificato rilasciato con successo!" -ForegroundColor Green
+} elseif ($response.disposition -eq "UnderSubmission") {
+    Write-Host "Richiesta in attesa di approvazione. ID: #$($response.requestId)" -ForegroundColor Yellow
+}
+</code>
+
+=== Esempio Bash / cURL (Linux con SPNEGO / Negotiate) ===
+
+<code bash>
+# Richiesta certificato tramite cURL autenticato con Kerberos
+curl --negotiate -u : -X POST "https://pki.azienda.lan/api/certificates/request" \
+  -H "Content-Type: application/json" \
+  -d @- <<EOF
+{
+  "caId": "CloudLD Sub CA",
+  "templateName": "WebServer5y",
+  "csrPem": "$(cat /etc/ssl/server.csr | sed ':a;N;$!ba;s/\n/\\n/g')"
+}
+EOF
+</code>
+    Write-Host "Certificato rilasciato con successo!" -ForegroundColor Green
+} elseif ($response.disposition -eq "UnderSubmission") {
+    Write-Host "Richiesta in attesa di approvazione. ID: #$($response.requestId)" -ForegroundColor Yellow
+}
+</code>
+
+==== 9.3 Endpoint REST Utente ====
+
+^ Metodo ^ Endpoint ^ Descrizione ^ Permessi ^
+| GET | ''/api/cas'' | Elenco delle CA configurate con i relativi template | Autenticato |
+| GET | ''/api/templates/{caId}'' | Elenco template per una CA specifica (filtro RBAC applicato) | Autenticato |
+| POST | ''/api/certificates/request'' | Sottomissione CSR per firma (workflow Hold se configurato) | Autenticato |
+| GET | ''/api/certificates/status/{caId}/{requestId}'' | Stato/ritiro certificato (controllo proprietà: solo richiedente o admin) | Autenticato |
+| GET | ''/api/certificates/my-requests'' | Elenco richieste dell'utente (o tutte se admin), con filtri opzionali: ''requester'', ''template'', ''status'', ''search'' | Autenticato |
+
+---
+
+===== 10. Disinstallazione e Manutenzione =====
+
+Per rimuovere il portale in modo pulito senza alterare lo stato del web server o di ''certsrv'':
+
+<code powershell>
+# Rimuove il sito IIS, l'Application Pool dedicato e la regola firewall
+.\Uninstall-PkiPortal.ps1
+
+# Rimuove anche la cartella fisica dei file pubblicati
+.\Uninstall-PkiPortal.ps1 -RemoveFiles
+</code>
+
+---
+
+===== 11. FAQ e Risoluzione Problemi =====
+
+==== D: L'installazione del portale può danneggiare certsrv? ====
+**R:** No. Lo script crea un Application Pool dedicato con configurazione non gestita (No Managed Code) e un sito IIS autonomo su porta separata. Il sito preesistente ''Default Web Site'' e la directory virtuale ''/CertSrv'' rimangono completamente invariati.
+
+==== D: Cosa fare se il portale mostra "Accesso Negato" verso la CA remota? ====
+**R:** Verificare che:
+  1. La credenziale memorizzata con ''.\Add-CaCredential.ps1'' appartenga al dominio della CA remota.
+  2. L'account abbia i permessi "Request Certificates" (Enroll) nelle proprietà di sicurezza della CA e del Certificate Template in Active Directory.
+  3. Le porte firewall RPC/DCOM (TCP 135 e porte dinamiche RPC 49152-65535, o porta RPC statica) siano aperte tra il server del portale e la Sub-CA.
+
+==== D: È possibile abilitare Windows Authentication integrata sul portale? ====
+**R:** Sì. Nel caso di installazione Standalone all'interno di una singola foresta, è possibile abilitare la Windows Authentication su IIS per tracciare l'identità dell'operatore connesso.
+
+---
+
+===== 12. Pannello di Amministrazione e Gestione Richieste Trattenute (Hold / Pending) =====
+
+Il portale integra un'area di gestione avanzata accessibile da ''/admin.html'', protetta da autenticazione integrata Windows e autorizzazione basata su ruoli/utenti.
+
+==== 12.1 Controllo degli Accessi Amministrativi (AdminConfig) ====
+
+La configurazione degli utenti abilitati al pannello admin viene definita in ''appsettings.json'' sotto la sezione ''AdminConfig'':
+
+<code json>
+{
+  "AdminConfig": {
+    "AllowedGroups": [
+      "BUILTIN\\Administrators",
+      "VD\\Domain Admins"
+    ],
+    "AllowedUsers": [
+      "vd\\tanino-t1"
+    ]
+  }
+}
+</code>
+
+  * **AllowedGroups**: Gruppi locali o di dominio abilitati ad accedere (es. Domain Admins o Local Administrators).
+  * **AllowedUsers**: Account specifici esplicitamente autorizzati (es. utente amministratore Tier-1).
+  * Qualsiasi altro utente che tenti di accedere a ''/admin.html'' o agli endpoint ''/api/admin/*'' riceverà una schermata di **Accesso Negato (HTTP 403 Forbidden)**.
+
+==== 12.2 Workflow Post-Submission Hold (Approvazione Manuale dei Certificati) ====
+
+Quando un Certificate Template ha l'opzione **''RequiresApproval: true''** (configurabile dall'interfaccia o da ''appsettings.json''):
+  1. L'utente sottomesso richiede il certificato (tramite Web Crypto o CSR esterno).
+  2. La CA AD CS emette tecnicamente il certificato.
+  3. **Il Portale intercetta ed isola il certificato emesso**: non lo restituisce al client ma lo salva nello store persistente cifrato a riposo (''App_Data/held-requests.json''), unitamente alla chiave privata protetta tramite DPAPI/AES-GCM, impostando lo stato su **''PendingApproval''** (In Attesa Approvazione).
+  4. All'utente viene restituito l'identificativo di trattenuta (''Hold ID'', es. ''REQ-20261003-...'') e la notifica che la richiesta è in attesa di approvazione da parte di un amministratore.
+  5. Il certificato **non è scaricabile** finché un amministratore non lo autorizza.
+
+==== 12.3 Stati delle Richieste Trattenute (HoldStatus) ====
+
+^ Stato ^ Badge UI ^ Descrizione ^ Azioni Disponibili ^
+| ''PendingApproval'' | **IN ATTESA APPROVAZIONE** (Giallo) | Certificato trattenuto in attesa di autorizzazione admin | **✓ Approva & Rilascia**, **✕ Rifiuta Richiesta** |
+| ''Approved'' | **APPROVATO** (Verde) | Richiesta approvata dall'amministratore | **📄 Visualizza Certificato Emesso** (download abilitato per l'utente) |
+| ''Issued'' | **EMESSO** (Verde) | Certificato rilasciato direttamente (senza approvazione preventiva) | **📄 Visualizza Certificato Emesso** |
+| ''UnderSubmission'' | **IN SOSPESO (CA)** (Giallo/Blu) | Richiesta sottomessa alla CA ma in sospeso su AD CS (approvazione diretta da CA MMC) | Visualizzazione dettagli |
+| ''Rejected'' | **RIFIUTATO** (Rosso) | Richiesta respinta dall'admin portale con motivazione | Visualizzazione motivazione rifiuto |
+
+==== 12.4 Funzionalità del Pannello Amministrativo (/admin.html) ====
+
+La pagina è divisa in due sezioni tramite tab:
+
+=== Scheda 1: Richieste Certificato ===
+  * **Filtro Stato Rapido**: Permette di visualizzare le sole richieste //In Attesa di Approvazione//, //Tutte le Richieste//, //Solo Approvate// o //Solo Rifiutate//.
+  * **Badge Contatore**: Il badge numerico nella tab notifica in tempo reale il numero di richieste pendenti.
+  * **Card Dettagliata**: Ogni card mostra:
+    * Stato (badge colorato) e Nome Template.
+    * Hold ID univoco e Data/Ora di sottomissione (localizzata in formato italiano).
+    * Richiedente originario (Account Windows).
+    * Common Name (CN) e Subject Alternative Names (SAN).
+    * CA Target e Request ID assegnato dalla CA AD CS.
+    * Eventuali note del richiedente, data/autore revisione o motivo del rifiuto.
+  * **Approvazione**: Il click su //Approva & Rilascia Certificato// sblocca il certificato e lo rende immediatamente scaricabile all'utente dalla scheda "Ritiro Certificati" del portale principale.
+  * **Rifiuto**: Il click su //Rifiuta Richiesta// richiede un motivo opzionale e marca la richiesta come respinta, impedendo il rilascio.
+
+-->     {{:wiki_windows:5-pki-adminpending.jpeg?direct&700|}}
+
+=== Scheda 2: Configurazione Portale & CA ===
+  * **Impostazioni Generali**: Titolo del portale, modalità operativa (Standalone o Hub Multi-CA) e CA predefinita.
+  * **Gestione Sub-CA**: Aggiunta, rimozione o modifica delle connessioni CA, config string, modalità di autenticazione e credential target.
+  * **Scoperta Automatica Template (Discovery)**: Pulsante "🔍 Scopri dalla CA" per interrogare via DCOM/certutil i template pubblicati sulla Sub-CA e aggiungerli con un clic.
+  * **Configurazione Template**: Impostazione dei parametri di validità (giorni), algoritmi ammessi, Key Usages e toggle per **Approvazione Manuale** (''RequiresApproval'').
+  * **Salvataggio Istantaneo**: Il salvataggio aggiorna contemporaneamente i file di configurazione (''ContentRootPath'' e ''BaseDirectory'') e invoca il ricaricamento a caldo del provider di configurazione in memoria, senza necessità di riavviare l'Application Pool IIS.
+
+-->    {{:wiki_windows:6-pki-adminsettings.jpeg?direct&700|}}
+==== 12.5 Endpoint RESTful Amministrazione ====
+
+^ Metodo ^ Endpoint ^ Descrizione ^ Permessi ^
+| GET | ''/api/admin/check'' | Verifica se l'utente corrente è amministratore del portale | Autenticato |
+| GET | ''/api/admin/csrf'' | Emette il token anti-CSRF legato all'identità (v2.1.0) | Admin |
+| GET | ''/api/admin/config'' | Restituisce la configurazione completa del portale | Admin |
+| PUT | ''/api/admin/config'' | Aggiorna e salva la configurazione su disco ricaricandola in memoria | Admin |
+| POST | ''/api/admin/templates/discover'' | Interroga una CA per elencare i template pubblicati | Admin |
+| GET | ''/api/admin/held-requests?status={filter}'' | Elenca le richieste trattenute/storico con filtri opzionali: ''requester'', ''template'', ''search'' | Admin |
+| GET | ''/api/admin/held-requests/{holdId}'' | Dettaglio singola richiesta e certificato archiviato | Admin |
+| POST | ''/api/admin/held-requests/{holdId}/approve'' | Approva la richiesta e autorizza il rilascio del certificato | Admin |
+| POST | ''/api/admin/held-requests/{holdId}/reject'' | Rifiuta la richiesta specificando opzionalmente il motivo | Admin |
+
+---
+
+===== 13. Modalità Simulatore per Sviluppo e Test =====
+
+Per ambienti di sviluppo, test o demo offline, è possibile attivare il simulatore integrato impostando ''UseSimulator: true'' nella configurazione della CA:
+
+<code json>
+{
+  "Id": "ca-test",
+  "DisplayName": "CA Simulata (Test/Demo)",
+  "ForestOrDomain": "test.local",
+  "ConfigString": "simulator",
+  "IsDefault": true,
+  "UseSimulator": true,
+  "AuthMode": "LocalIdentity",
+  "Templates": []
+}
+</code>
+
+Il simulatore:
+  * Genera certificati auto-firmati con l'API ''CertificateRequest'' di .NET 8.
+  * Produce risposte PKCS#7 (P7B) realistiche con certificato emesso e Root CA simulata.
+  * Supporta template simulati con nomi, display name e validità predefiniti.
+  * Supporta il workflow ''RequiresApproval'' (approvazione manuale).
+  * Non richiede alcuna CA AD CS reale né connettività di rete.
+
+
+---
+
+===== 14. Risoluzione dei Problemi (Troubleshooting) =====
+
+==== 14.1 Il browser rimane bloccato su "Generazione Crittografica Locale" ====
+  * **Sintomo**: L'interfaccia utente mostra il loader circolare con la dicitura //"Creazione della coppia di chiavi RSA/ECC nel browser..."// senza mai procedere.
+  * **Causa**: Il portale è stato aperto via protocollo HTTP non cifrato su un nome host o IP di rete (es. ''http://serverpki:81/''). Le policy di sicurezza W3C (Secure Contexts) e le restrizioni di sistema (come IE ESC su Windows Server) impediscono la creazione di Web Worker in background via Blob URL in contesti non sicuri.
+  * **Soluzione**:
+    * Configurare un certificato e un binding **HTTPS** in IIS (tramite ''-UseHttps -CertThumbprint'' nello script o dalla console IIS Manager). In alternativa per test locali aprire il sito da ''http://localhost:81''.
+    * Nel portale è integrato un meccanismo di auto-recovery: dopo 15 secondi di mancata risposta dei Web Worker, il modulo client commuta automaticamente sulla modalità single-thread per completare la generazione.
+
+==== 14.2 Errore durante l'installazione: "Cannot find path 'IIS:\AppPools\... because it does not exist" ====
+  * **Causa**: Nelle versioni precedenti dello script di installazione, ''Get-WebAppPoolState'' veniva invocato anche durante la prima installazione quando il pool non era ancora stato creato.
+  * **Soluzione**: Risolto in ''Install-PkiPortal.ps1'' verificando preventivamente la presenza del percorso IIS con ''Test-Path'' prima di interrogare lo stato dell'Application Pool.
+
+==== 14.3 Permessi e configurazione iniziale di appsettings.json ====
+  * **Comportamento**: Lo script ''Install-PkiPortal.ps1'' assegna automaticamente i permessi di **FullControl** con ereditarietà all'identità dell'Application Pool (inclusi account gMSA) su tutta la cartella ''C:\inetpub\PkiWebEnrollment''.
+  * Se si tratta di una nuova installazione e il file ''appsettings.json'' non esiste ancora, lo script rinomina in automatico il template ''appsettings.example.json'' in ''appsettings.json'', rendendo il portale immediatamente avviabile.
+
+---
+
+===== 15. Licenza =====
+
+Il software è rilasciato sotto licenza open source **MIT License** (consultare il file ''LICENSE'' nella root del progetto).
+

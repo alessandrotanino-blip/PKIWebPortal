@@ -816,14 +816,327 @@
     }
   }
 
-  // 8b. Caricamento lista richieste dell'utente autenticato
+  // 8b. Caricamento lista richieste dell'utente autenticato (con filtri e identificazione ACME)
+  let cachedMyRequests = [];
+  let myRequestsFiltersBound = false;
+
+  function initMyRequestsFilters() {
+    if (myRequestsFiltersBound) return;
+    const searchInput = document.getElementById('filter-req-search');
+    const userSelect = document.getElementById('filter-req-user');
+    const tplSelect = document.getElementById('filter-req-template');
+    const statusSelect = document.getElementById('filter-req-status');
+    const clearBtn = document.getElementById('btn-clear-req-filters');
+
+    if (searchInput) {
+      searchInput.addEventListener('input', () => applyAndRenderMyRequests());
+    }
+    if (userSelect) {
+      userSelect.addEventListener('change', () => applyAndRenderMyRequests());
+    }
+    if (tplSelect) {
+      tplSelect.addEventListener('change', () => applyAndRenderMyRequests());
+    }
+    if (statusSelect) {
+      statusSelect.addEventListener('change', () => applyAndRenderMyRequests());
+    }
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (searchInput) searchInput.value = '';
+        if (userSelect) userSelect.value = '';
+        if (tplSelect) tplSelect.value = '';
+        if (statusSelect) statusSelect.value = '';
+        applyAndRenderMyRequests();
+      });
+    }
+    myRequestsFiltersBound = true;
+  }
+
+  function populateMyRequestsFilterOptions(requests) {
+    const userSelect = document.getElementById('filter-req-user');
+    const tplSelect = document.getElementById('filter-req-template');
+    if (!userSelect || !tplSelect) return;
+
+    const prevUser = userSelect.value;
+    const prevTpl = tplSelect.value;
+
+    const allReqLabel = window.I18N ? window.I18N.t('filter_all_requesters', 'Tutti i richiedenti') : 'Tutti i richiedenti';
+    const allTplLabel = window.I18N ? window.I18N.t('filter_all_templates', 'Tutti i template') : 'Tutti i template';
+    const acmeOnlyLabel = window.I18N ? window.I18N.t('filter_acme_only', '⚡ Solo ACME (tutti)') : '⚡ Solo ACME (tutti)';
+
+    // Richiedenti
+    const userSet = new Set();
+    let hasAcme = false;
+    requests.forEach(r => {
+      const u = (r.requesterUser || '').trim();
+      if (u) {
+        if (u.startsWith('ACME')) hasAcme = true;
+        userSet.add(u);
+      } else if (r.requesterComments && r.requesterComments.startsWith('ACME')) {
+        hasAcme = true;
+        userSet.add('ACME');
+      }
+    });
+
+    const sortedUsers = Array.from(userSet).sort((a, b) => a.localeCompare(b));
+    let userOptionsHtml = `<option value="">${escapeHtml(allReqLabel)}</option>`;
+    if (hasAcme) {
+      userOptionsHtml += `<option value="__acme__">${escapeHtml(acmeOnlyLabel)}</option>`;
+    }
+    sortedUsers.forEach(u => {
+      userOptionsHtml += `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`;
+    });
+    userSelect.innerHTML = userOptionsHtml;
+    if (prevUser && (sortedUsers.includes(prevUser) || prevUser === '__acme__')) {
+      userSelect.value = prevUser;
+    }
+
+    // Template
+    const tplSet = new Set();
+    requests.forEach(r => {
+      const t = (r.templateDisplayName || r.templateName || '').trim();
+      if (t) tplSet.add(t);
+    });
+    const sortedTpls = Array.from(tplSet).sort((a, b) => a.localeCompare(b));
+    let tplOptionsHtml = `<option value="">${escapeHtml(allTplLabel)}</option>`;
+    sortedTpls.forEach(t => {
+      tplOptionsHtml += `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`;
+    });
+    tplSelect.innerHTML = tplOptionsHtml;
+    if (prevTpl && sortedTpls.includes(prevTpl)) {
+      tplSelect.value = prevTpl;
+    }
+  }
+
+  function applyAndRenderMyRequests() {
+    const area = document.getElementById('my-requests-area');
+    if (!area) return;
+
+    const searchVal = (document.getElementById('filter-req-search')?.value || '').trim().toLowerCase();
+    const userVal = (document.getElementById('filter-req-user')?.value || '').trim();
+    const tplVal = (document.getElementById('filter-req-template')?.value || '').trim().toLowerCase();
+    const statusVal = (document.getElementById('filter-req-status')?.value || '').trim().toLowerCase();
+    const counterEl = document.getElementById('filter-req-counter');
+
+    const filtered = cachedMyRequests.filter(r => {
+      const reqUser = (r.requesterUser || '').trim();
+      const isAcme = reqUser.startsWith('ACME') || (!reqUser && r.requesterComments && r.requesterComments.startsWith('ACME'));
+      const effectiveUser = reqUser || (isAcme ? 'ACME' : '');
+      const tplName = (r.templateName || '').toLowerCase();
+      const tplDisplay = (r.templateDisplayName || '').toLowerCase();
+      const cn = (r.subjectCommonName || '').toLowerCase();
+      const ca = (r.caId || '').toLowerCase();
+      const reqId = String(r.caRequestId || '');
+      const status = (r.status || '').toLowerCase();
+
+      // Filtro Richiedente
+      if (userVal) {
+        if (userVal === '__acme__') {
+          if (!isAcme) return false;
+        } else if (effectiveUser !== userVal) {
+          return false;
+        }
+      }
+
+      // Filtro Template
+      if (tplVal) {
+        if (tplName !== tplVal && tplDisplay !== tplVal) return false;
+      }
+
+      // Filtro Stato
+      if (statusVal) {
+        if (statusVal === 'issued') {
+          if (status !== 'issued' && status !== 'approved') return false;
+        } else if (statusVal === 'pending') {
+          if (status !== 'pendingapproval' && status !== 'undersubmission' && status !== 'pending') return false;
+        } else if (statusVal === 'rejected') {
+          if (status !== 'rejected') return false;
+        }
+      }
+
+      // Ricerca testo libera
+      if (searchVal) {
+        const matches = cn.includes(searchVal) ||
+          effectiveUser.toLowerCase().includes(searchVal) ||
+          tplName.includes(searchVal) ||
+          tplDisplay.includes(searchVal) ||
+          ca.includes(searchVal) ||
+          reqId.includes(searchVal);
+        if (!matches) return false;
+      }
+
+      return true;
+    });
+
+    if (counterEl) {
+      if (window.I18N) {
+        counterEl.textContent = window.I18N.t('filter_counter_format', null, { shown: filtered.length, total: cachedMyRequests.length });
+      } else {
+        counterEl.textContent = `Mostrate ${filtered.length} su ${cachedMyRequests.length} richieste`;
+      }
+    }
+
+    if (filtered.length === 0) {
+      const noResultsMsg = window.I18N ? window.I18N.t('filter_no_results', 'Nessuna richiesta corrisponde ai filtri selezionati.') : 'Nessuna richiesta corrisponde ai filtri selezionati.';
+      area.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-muted, #94a3b8); font-size: 0.9rem;">${escapeHtml(noResultsMsg)}</div>`;
+      return;
+    }
+
+    const thReq = window.I18N ? window.I18N.t('th_requester', 'Richiedente') : 'Richiedente';
+    const thDate = window.I18N ? window.I18N.t('th_date', 'Data') : 'Data';
+    const thStatus = window.I18N ? window.I18N.t('th_status', 'Stato') : 'Stato';
+    const thAction = window.I18N ? window.I18N.t('th_action', 'Azione') : 'Azione';
+    const userLocale = window.I18N ? window.I18N.getLocale() : 'it-IT';
+
+    let html = `
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem;">
+        <thead>
+          <tr style="border-bottom: 2px solid var(--border-color, #334155); text-align: left;">
+            <th style="padding: 0.6rem 0.5rem;">ID (#)</th>
+            <th style="padding: 0.6rem 0.5rem;">${escapeHtml(thReq)}</th>
+            <th style="padding: 0.6rem 0.5rem;">CA</th>
+            <th style="padding: 0.6rem 0.5rem;">Template</th>
+            <th style="padding: 0.6rem 0.5rem;">Common Name</th>
+            <th style="padding: 0.6rem 0.5rem;">${escapeHtml(thDate)}</th>
+            <th style="padding: 0.6rem 0.5rem;">${escapeHtml(thStatus)}</th>
+            <th style="padding: 0.6rem 0.5rem; text-align: center;">${escapeHtml(thAction)}</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for (const r of filtered) {
+      const dateStr = r.submittedAt ? new Date(r.submittedAt).toLocaleString(userLocale) : '-';
+      let statusBadge = '';
+      if (r.status === 'Issued' || r.status === 'Approved') {
+        const lbl = window.I18N ? window.I18N.t('status_issued', 'Emesso') : 'Emesso';
+        statusBadge = `<span style="background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${escapeHtml(lbl)}</span>`;
+      } else if (r.status === 'PendingApproval' || r.status === 'UnderSubmission') {
+        const lbl = window.I18N ? window.I18N.t('status_pending', 'In Attesa') : 'In Attesa';
+        statusBadge = `<span style="background: rgba(234, 179, 8, 0.2); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${escapeHtml(lbl)}</span>`;
+      } else if (r.status === 'Rejected') {
+        const lbl = window.I18N ? window.I18N.t('status_rejected', 'Rifiutato') : 'Rifiutato';
+        statusBadge = `<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${escapeHtml(lbl)}</span>`;
+      } else {
+        statusBadge = `<span style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px;">${escapeHtml(r.status)}</span>`;
+      }
+
+      const reqUser = (r.requesterUser || '').trim();
+      const isAcme = reqUser.startsWith('ACME') || (!reqUser && r.requesterComments && r.requesterComments.startsWith('ACME'));
+      let requesterDisplayHtml = '';
+      if (isAcme) {
+        const acmeText = reqUser || 'ACME';
+        requesterDisplayHtml = `<span style="display:inline-flex; align-items:center; gap:0.3rem; background:rgba(6, 182, 212, 0.15); color:#0891b2; border:1px solid rgba(6, 182, 212, 0.35); padding:0.18rem 0.5rem; border-radius:4px; font-weight:600; font-size:0.8rem;" title="Certificato emesso via protocollo ACME RFC 8555">⚡ ${escapeHtml(acmeText)}</span>`;
+      } else {
+        requesterDisplayHtml = `<span style="display:inline-flex; align-items:center; gap:0.25rem;">👤 ${escapeHtml(reqUser || '-')}</span>`;
+      }
+
+      const canDownload = (r.status === 'Issued' || r.status === 'Approved') && r.hasCertificate;
+      let actionHtml = `<span style="color: var(--text-muted, #94a3b8);">-</span>`;
+      if (canDownload) {
+        const tipCrt = window.I18N ? window.I18N.t('btn_dl_row_crt_title', 'Scarica Certificato .CRT') : 'Scarica Certificato .CRT';
+        const tipPfx = window.I18N ? window.I18N.t('btn_dl_row_pfx_title', 'Scarica Archivio PFX con chiave privata') : 'Scarica Archivio PFX con chiave privata';
+        actionHtml = `
+          <div style="display: inline-flex; gap: 0.35rem; justify-content: center; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm btn-dl-row-crt" data-ca="${escapeHtml(r.caId)}" data-reqid="${r.caRequestId}" data-cn="${escapeHtml(r.subjectCommonName || 'cert')}" style="padding: 0.25rem 0.55rem; font-size: 0.78rem;" title="${escapeHtml(tipCrt)}">.CRT</button>
+            ${r.hasPrivateKey ? `<button type="button" class="btn btn-primary btn-sm btn-dl-row-pfx" data-ca="${escapeHtml(r.caId)}" data-reqid="${r.caRequestId}" data-cn="${escapeHtml(r.subjectCommonName || 'cert')}" style="padding: 0.25rem 0.55rem; font-size: 0.78rem;" title="${escapeHtml(tipPfx)}">.PFX</button>` : ''}
+          </div>
+        `;
+      }
+
+      html += `
+        <tr style="border-bottom: 1px solid var(--border-color, #334155);">
+          <td style="padding: 0.6rem 0.5rem; font-weight: 600;">#${r.caRequestId}</td>
+          <td style="padding: 0.6rem 0.5rem;">${requesterDisplayHtml}</td>
+          <td style="padding: 0.6rem 0.5rem;">${escapeHtml(r.caId)}</td>
+          <td style="padding: 0.6rem 0.5rem;">${escapeHtml(r.templateDisplayName || r.templateName)}</td>
+          <td style="padding: 0.6rem 0.5rem; font-family: monospace;">${escapeHtml(r.subjectCommonName || '-')}</td>
+          <td style="padding: 0.6rem 0.5rem;">${dateStr}</td>
+          <td style="padding: 0.6rem 0.5rem;">${statusBadge}</td>
+          <td style="padding: 0.6rem 0.5rem; text-align: center;">${actionHtml}</td>
+        </tr>
+      `;
+    }
+
+    html += `</tbody></table>`;
+    area.innerHTML = html;
+
+    // Attach event listeners
+    area.querySelectorAll('.btn-dl-row-crt').forEach(button => {
+      button.addEventListener('click', async () => {
+        const caId = button.dataset.ca;
+        const reqId = button.dataset.reqid;
+        const cn = button.dataset.cn || `cert_${reqId}`;
+        showProgress(
+          window.I18N ? window.I18N.t('progress_retrieving_cert_title', 'Recupero Certificato') : 'Recupero Certificato',
+          window.I18N ? window.I18N.t('progress_retrieving_cert_desc', null, { requestId: reqId }) : `Download certificato per richiesta #${reqId}...`
+        );
+        try {
+          const resp = await fetch(`/api/certificates/status/${caId}/${reqId}`);
+          const result = await resp.json();
+          hideProgress();
+          if (result.success && result.certificatePem) {
+            downloadFile(`${cn}.crt`, result.certificatePem, 'application/x-x509-ca-cert');
+          } else {
+            let alertMsg = result.statusMessage;
+            if (result.errorCode === 'NotOwner' || (result.statusMessage && result.statusMessage.includes('non risulta associata'))) {
+              const currentUserName = result.requesterUser || (cachedUserData && cachedUserData.userName) || '';
+              alertMsg = window.I18N
+                ? window.I18N.t('access_denied_security_not_owner', null, { requestId: reqId, currentUser: currentUserName })
+                : `Accesso negato: La richiesta #${reqId} non risulta associata al tuo account (${currentUserName}). Solo il richiedente originale o un amministratore possono recuperare il certificato.`;
+            }
+            alert(alertMsg || (window.I18N ? window.I18N.t('cert_not_available_dl', 'Certificato non disponibile per il download.') : 'Certificato non disponibile per il download.'));
+          }
+        } catch (err) {
+          hideProgress();
+          alert('Errore download: ' + err.message);
+        }
+      });
+    });
+
+    area.querySelectorAll('.btn-dl-row-pfx').forEach(button => {
+      button.addEventListener('click', async () => {
+        const caId = button.dataset.ca;
+        const reqId = button.dataset.reqid;
+        const cn = button.dataset.cn || `cert_${reqId}`;
+        showProgress(
+          window.I18N ? window.I18N.t('progress_pfx_retrieving_title', 'Recupero Certificato & Chiave') : 'Recupero Certificato & Chiave',
+          window.I18N ? window.I18N.t('progress_pfx_retrieving_desc', null, { requestId: reqId }) : `Recupero archivio PKCS#12 per richiesta #${reqId}...`
+        );
+        try {
+          const resp = await fetch(`/api/certificates/status/${caId}/${reqId}`);
+          const result = await resp.json();
+          hideProgress();
+          if (result.success && result.certificatePem && result.privateKeyPem) {
+            promptAndDownloadPfx(result.privateKeyPem, result.certificatePem, result.certificateChainPem, cn);
+          } else {
+            let alertMsg = result.statusMessage;
+            if (result.errorCode === 'NotOwner' || (result.statusMessage && result.statusMessage.includes('non risulta associata'))) {
+              const currentUserName = result.requesterUser || (cachedUserData && cachedUserData.userName) || '';
+              alertMsg = window.I18N
+                ? window.I18N.t('access_denied_security_not_owner', null, { requestId: reqId, currentUser: currentUserName })
+                : `Accesso negato: La richiesta #${reqId} non risulta associata al tuo account (${currentUserName}). Solo il richiedente originale o un amministratore possono recuperare il certificato.`;
+            }
+            const noKeyMsg = window.I18N ? window.I18N.t('err_pfx_no_key', 'Chiave privata non disponibile per questa richiesta.') : 'Chiave privata non disponibile per questa richiesta.';
+            alert(alertMsg || noKeyMsg);
+          }
+        } catch (err) {
+          hideProgress();
+          alert('Errore download PFX: ' + err.message);
+        }
+      });
+    });
+  }
+
   async function loadMyRequests() {
     const area = document.getElementById('my-requests-area');
+    const filterContainer = document.getElementById('my-requests-filter-container');
     if (!area) return;
 
     try {
       const resp = await fetch('/api/certificates/my-requests');
       if (resp.status === 401) {
+        if (filterContainer) filterContainer.style.display = 'none';
         const loginReqMsg = window.I18N ? window.I18N.t('login_required', 'Effettua l\'accesso per visualizzare lo storico delle tue richieste.') : 'Effettua l\'accesso per visualizzare lo storico delle tue richieste.';
         area.innerHTML = `<p style="color: var(--text-muted, #94a3b8); font-size: 0.9rem;">🔒 ${escapeHtml(loginReqMsg)}</p>`;
         return;
@@ -831,153 +1144,25 @@
       if (!resp.ok) throw new Error('Errore durante il recupero delle richieste.');
 
       const requests = await resp.json();
-      if (!requests || requests.length === 0) {
+      cachedMyRequests = requests || [];
+
+      if (cachedMyRequests.length === 0) {
+        if (filterContainer) filterContainer.style.display = 'none';
         const noReqMsg = window.I18N ? window.I18N.t('no_requests_found', 'Nessuna richiesta certificato trovata a tuo nome.') : 'Nessuna richiesta certificato trovata a tuo nome.';
         area.innerHTML = `<p style="color: var(--text-muted, #94a3b8); font-size: 0.9rem;">${escapeHtml(noReqMsg)}</p>`;
         return;
       }
 
-      const thReq = window.I18N ? window.I18N.t('th_requester', 'Richiedente') : 'Richiedente';
-      const thDate = window.I18N ? window.I18N.t('th_date', 'Data') : 'Data';
-      const thStatus = window.I18N ? window.I18N.t('th_status', 'Stato') : 'Stato';
-      const thAction = window.I18N ? window.I18N.t('th_action', 'Azione') : 'Azione';
-      const userLocale = window.I18N ? window.I18N.getLocale() : 'it-IT';
-
-      let html = `
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem;">
-          <thead>
-            <tr style="border-bottom: 2px solid var(--border-color, #334155); text-align: left;">
-              <th style="padding: 0.6rem 0.5rem;">ID (#)</th>
-              <th style="padding: 0.6rem 0.5rem;">${escapeHtml(thReq)}</th>
-              <th style="padding: 0.6rem 0.5rem;">CA</th>
-              <th style="padding: 0.6rem 0.5rem;">Template</th>
-              <th style="padding: 0.6rem 0.5rem;">Common Name</th>
-              <th style="padding: 0.6rem 0.5rem;">${escapeHtml(thDate)}</th>
-              <th style="padding: 0.6rem 0.5rem;">${escapeHtml(thStatus)}</th>
-              <th style="padding: 0.6rem 0.5rem; text-align: center;">${escapeHtml(thAction)}</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-
-      for (const r of requests) {
-        const dateStr = r.submittedAt ? new Date(r.submittedAt).toLocaleString(userLocale) : '-';
-        let statusBadge = '';
-        if (r.status === 'Issued' || r.status === 'Approved') {
-          const lbl = window.I18N ? window.I18N.t('status_issued', 'Emesso') : 'Emesso';
-          statusBadge = `<span style="background: rgba(34, 197, 94, 0.2); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${escapeHtml(lbl)}</span>`;
-        } else if (r.status === 'PendingApproval' || r.status === 'UnderSubmission') {
-          const lbl = window.I18N ? window.I18N.t('status_pending', 'In Attesa') : 'In Attesa';
-          statusBadge = `<span style="background: rgba(234, 179, 8, 0.2); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${escapeHtml(lbl)}</span>`;
-        } else if (r.status === 'Rejected') {
-          const lbl = window.I18N ? window.I18N.t('status_rejected', 'Rifiutato') : 'Rifiutato';
-          statusBadge = `<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 500;">${escapeHtml(lbl)}</span>`;
-        } else {
-          statusBadge = `<span style="background: rgba(100, 116, 139, 0.2); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.4); padding: 0.2rem 0.5rem; border-radius: 4px;">${escapeHtml(r.status)}</span>`;
-        }
-
-        const canDownload = (r.status === 'Issued' || r.status === 'Approved') && r.hasCertificate;
-        let actionHtml = `<span style="color: var(--text-muted, #94a3b8);">-</span>`;
-        if (canDownload) {
-          const tipCrt = window.I18N ? window.I18N.t('btn_dl_row_crt_title', 'Scarica Certificato .CRT') : 'Scarica Certificato .CRT';
-          const tipPfx = window.I18N ? window.I18N.t('btn_dl_row_pfx_title', 'Scarica Archivio PFX con chiave privata') : 'Scarica Archivio PFX con chiave privata';
-          actionHtml = `
-            <div style="display: inline-flex; gap: 0.35rem; justify-content: center; flex-wrap: wrap;">
-              <button type="button" class="btn btn-secondary btn-sm btn-dl-row-crt" data-ca="${escapeHtml(r.caId)}" data-reqid="${r.caRequestId}" data-cn="${escapeHtml(r.subjectCommonName || 'cert')}" style="padding: 0.25rem 0.55rem; font-size: 0.78rem;" title="${escapeHtml(tipCrt)}">.CRT</button>
-              ${r.hasPrivateKey ? `<button type="button" class="btn btn-primary btn-sm btn-dl-row-pfx" data-ca="${escapeHtml(r.caId)}" data-reqid="${r.caRequestId}" data-cn="${escapeHtml(r.subjectCommonName || 'cert')}" style="padding: 0.25rem 0.55rem; font-size: 0.78rem;" title="${escapeHtml(tipPfx)}">.PFX</button>` : ''}
-            </div>
-          `;
-        }
-
-        html += `
-          <tr style="border-bottom: 1px solid var(--border-color, #334155);">
-            <td style="padding: 0.6rem 0.5rem; font-weight: 600;">#${r.caRequestId}</td>
-            <td style="padding: 0.6rem 0.5rem;"><span style="display:inline-flex; align-items:center; gap:0.25rem;">👤 ${escapeHtml(r.requesterUser || '-')}</span></td>
-            <td style="padding: 0.6rem 0.5rem;">${escapeHtml(r.caId)}</td>
-            <td style="padding: 0.6rem 0.5rem;">${escapeHtml(r.templateDisplayName || r.templateName)}</td>
-            <td style="padding: 0.6rem 0.5rem; font-family: monospace;">${escapeHtml(r.subjectCommonName || '-')}</td>
-            <td style="padding: 0.6rem 0.5rem;">${dateStr}</td>
-            <td style="padding: 0.6rem 0.5rem;">${statusBadge}</td>
-            <td style="padding: 0.6rem 0.5rem; text-align: center;">${actionHtml}</td>
-          </tr>
-        `;
-      }
-
-      html += `</tbody></table>`;
-      area.innerHTML = html;
-
-      // Eventi pulsante .CRT della tabella
-      area.querySelectorAll('.btn-dl-row-crt').forEach(button => {
-        button.addEventListener('click', async () => {
-          const caId = button.dataset.ca;
-          const reqId = button.dataset.reqid;
-          const cn = button.dataset.cn || `cert_${reqId}`;
-          showProgress(
-            window.I18N ? window.I18N.t('progress_retrieving_cert_title', 'Recupero Certificato') : 'Recupero Certificato',
-            window.I18N ? window.I18N.t('progress_retrieving_cert_desc', null, { requestId: reqId }) : `Download certificato per richiesta #${reqId}...`
-          );
-          try {
-            const resp = await fetch(`/api/certificates/status/${caId}/${reqId}`);
-            const result = await resp.json();
-            hideProgress();
-            if (result.success && result.certificatePem) {
-              downloadFile(`${cn}.crt`, result.certificatePem, 'application/x-x509-ca-cert');
-            } else {
-              let alertMsg = result.statusMessage;
-              if (result.errorCode === 'NotOwner' || (result.statusMessage && result.statusMessage.includes('non risulta associata'))) {
-                const currentUserName = result.requesterUser || (cachedUserData && cachedUserData.userName) || '';
-                alertMsg = window.I18N
-                  ? window.I18N.t('access_denied_security_not_owner', null, { requestId: reqId, currentUser: currentUserName })
-                  : `Accesso negato: La richiesta #${reqId} non risulta associata al tuo account (${currentUserName}). Solo il richiedente originale o un amministratore possono recuperare il certificato.`;
-              }
-              alert(alertMsg || (window.I18N ? window.I18N.t('cert_not_available_dl', 'Certificato non disponibile per il download.') : 'Certificato non disponibile per il download.'));
-            }
-          } catch (err) {
-            hideProgress();
-            alert('Errore download: ' + err.message);
-          }
-        });
-      });
-
-      // Eventi pulsante .PFX della tabella
-      area.querySelectorAll('.btn-dl-row-pfx').forEach(button => {
-        button.addEventListener('click', async () => {
-          const caId = button.dataset.ca;
-          const reqId = button.dataset.reqid;
-          const cn = button.dataset.cn || `cert_${reqId}`;
-          showProgress(
-            window.I18N ? window.I18N.t('progress_pfx_retrieving_title', 'Recupero Certificato & Chiave') : 'Recupero Certificato & Chiave',
-            window.I18N ? window.I18N.t('progress_pfx_retrieving_desc', null, { requestId: reqId }) : `Recupero archivio PKCS#12 per richiesta #${reqId}...`
-          );
-          try {
-            const resp = await fetch(`/api/certificates/status/${caId}/${reqId}`);
-            const result = await resp.json();
-            hideProgress();
-            if (result.success && result.certificatePem && result.privateKeyPem) {
-              promptAndDownloadPfx(result.privateKeyPem, result.certificatePem, result.certificateChainPem, cn);
-            } else {
-              let alertMsg = result.statusMessage;
-              if (result.errorCode === 'NotOwner' || (result.statusMessage && result.statusMessage.includes('non risulta associata'))) {
-                const currentUserName = result.requesterUser || (cachedUserData && cachedUserData.userName) || '';
-                alertMsg = window.I18N
-                  ? window.I18N.t('access_denied_security_not_owner', null, { requestId: reqId, currentUser: currentUserName })
-                  : `Accesso negato: La richiesta #${reqId} non risulta associata al tuo account (${currentUserName}). Solo il richiedente originale o un amministratore possono recuperare il certificato.`;
-              }
-              const noKeyMsg = window.I18N ? window.I18N.t('err_pfx_no_key', 'Chiave privata non disponibile per questa richiesta.') : 'Chiave privata non disponibile per questa richiesta.';
-              alert(alertMsg || noKeyMsg);
-            }
-          } catch (err) {
-            hideProgress();
-            alert('Errore download PFX: ' + err.message);
-          }
-        });
-      });
+      if (filterContainer) filterContainer.style.display = 'block';
+      initMyRequestsFilters();
+      populateMyRequestsFilterOptions(cachedMyRequests);
+      applyAndRenderMyRequests();
 
     } catch (err) {
+      if (filterContainer) filterContainer.style.display = 'none';
       area.innerHTML = `<p style="color: #ef4444; font-size: 0.9rem;">Errore caricamento richieste: ${escapeHtml(err.message)}</p>`;
     }
   }
-
   // 8c. Controllo utente autenticato da /api/me
   let cachedUserData = null;
   async function checkCurrentUser() {

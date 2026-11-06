@@ -6,8 +6,8 @@
   <title>Enterprise PKI Web Enrollment Portal</title>
   <link rel="preload" href="/fonts/titillium-web-v19-latin_latin-ext-regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/titillium-web-v19-latin_latin-ext-600.woff2" as="font" type="font/woff2" crossorigin>
-  <script src="/js/theme-init.js?v=2.3.2"></script>
-  <link rel="stylesheet" href="/css/styles.css?v=2.3.2">
+  <script src="/js/theme-init.js?v=2.4.0"></script>
+  <link rel="stylesheet" href="/css/styles.css?v=2.4.0">
 </head>
 <body>
 
@@ -17,7 +17,7 @@
       <div class="brand-icon">PKI</div>
       <div class="brand-text">
         <h1 id="portal-title" data-i18n="portal_title">Enterprise PKI Web Enrollment</h1>
-        <p id="portal-subtitle"><span data-i18n="portal_subtitle">Active Directory Certificate Services (AD CS) Modern Gateway</span> <span class="brand-version">v2.3.2</span></p>
+        <p id="portal-subtitle"><span data-i18n="portal_subtitle">Active Directory Certificate Services (AD CS) Modern Gateway</span> <span class="brand-version">v2.4.0</span></p>
       </div>
     </div>
     <div class="nav-actions">
@@ -289,6 +289,39 @@
             </button>
           </div>
 
+          <!-- Filtri Richieste Utente / Admin -->
+          <div id="my-requests-filter-container" style="display: none; background: rgba(15, 23, 42, 0.45); border: 1px solid var(--border-color, #334155); border-radius: 8px; padding: 0.65rem 0.85rem; margin-bottom: 1rem;">
+            <div style="display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;">
+              <div style="flex: 2 1 200px; min-width: 170px;">
+                <input type="text" id="filter-req-search" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.65rem;" placeholder="🔍 Cerca (CN, ID, richiedente, template)..." data-i18n-placeholder="filter_search_placeholder">
+              </div>
+              <div style="flex: 1 1 160px; min-width: 140px;">
+                <select id="filter-req-user" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.65rem;">
+                  <option value="" data-i18n="filter_all_requesters">Tutti i richiedenti</option>
+                </select>
+              </div>
+              <div style="flex: 1 1 150px; min-width: 130px;">
+                <select id="filter-req-template" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.65rem;">
+                  <option value="" data-i18n="filter_all_templates">Tutti i template</option>
+                </select>
+              </div>
+              <div style="flex: 1 1 130px; min-width: 120px;">
+                <select id="filter-req-status" class="form-control" style="font-size: 0.85rem; padding: 0.4rem 0.65rem;">
+                  <option value="" data-i18n="filter_all_statuses">Tutti gli stati</option>
+                  <option value="issued" data-i18n="filter_status_issued">Solo Emessi / Approvati</option>
+                  <option value="pending" data-i18n="filter_status_pending">Solo In Attesa</option>
+                  <option value="rejected" data-i18n="filter_status_rejected">Solo Rifiutati</option>
+                </select>
+              </div>
+              <div style="display: flex; gap: 0.5rem; align-items: center; margin-left: auto;">
+                <button type="button" id="btn-clear-req-filters" class="btn btn-secondary btn-sm" style="font-size: 0.8rem; padding: 0.35rem 0.65rem;" title="Azzera filtri" data-i18n="filter_clear_btn">
+                  ✕ Azzera
+                </button>
+                <span id="filter-req-counter" style="font-size: 0.8rem; color: var(--text-muted, #94a3b8); font-weight: 500; white-space: nowrap;"></span>
+              </div>
+            </div>
+          </div>
+
           <div id="my-requests-area" style="overflow-x: auto;">
             <p style="color: var(--text-muted, #94a3b8); font-size: 0.9rem;" data-i18n="loading_my_requests">Caricamento delle tue richieste in corso...</p>
           </div>
@@ -409,9 +442,9 @@ if ($response.success -and $response.disposition -eq "Issued") {
   </footer>
 
   <!-- Script Libraries -->
-  <script src="/js/vendor/forge.min.js?v=2.3.2"></script>
-  <script src="/js/crypto-helper.js?v=2.3.2"></script>
-  <script src="/js/i18n.js?v=2.3.2"></script>
-  <script src="/js/app.js?v=2.3.2"></script>
+  <script src="/js/vendor/forge.min.js?v=2.4.0"></script>
+  <script src="/js/crypto-helper.js?v=2.4.0"></script>
+  <script src="/js/i18n.js?v=2.4.0"></script>
+  <script src="/js/app.js?v=2.4.0"></script>
 </body>
 </html>

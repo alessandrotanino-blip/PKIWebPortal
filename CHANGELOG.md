@@ -6,6 +6,27 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.4.0] - 2026-11-06
+
+### Novità & Funzionalità
+
+- **Identificazione Richiedente Certificati ACME & Indirizzo IP Client**:
+  - Negli elenchi dei certificati e delle richieste (sia nel portale principale che nel pannello di amministrazione), i certificati emessi tramite protocollo ACME (RFC 8555) sono ora chiaramente identificabili nel campo *Richiedente*.
+  - Registrazione automatica dell'indirizzo IP del client richiedente ACME (ACME (<ip>), es. ACME (192.168.1.50)) rilevato durante la creazione o finalizzazione dell'ordine, con supporto trasparente per proxy/reverse-proxy (X-Forwarded-For) e mapping IPv6-to-IPv4.
+  - Se l'indirizzo IP non è disponibile, viene riportato ACME.
+  - Badge grafico distintivo ad alta visibilità (⚡ ACME (...)) sia nella tabella del portale che nelle schede di amministrazione.
+  - Retrocompatibilità automatica: tutte le richieste ACME pregresse archiviate nello store persistente (held-requests.json) vengono automaticamente riconosciute ed etichettate come ACME.
+
+- **Filtraggio Avanzato Richieste Certificato (Portale & Admin)**:
+  - Nuova barra dei filtri integrata nell'elenco certificati del portale (index.html) e nel tab richieste del pannello admin (dmin.html).
+  - **Filtro Richiedente**: menu a tendina auto-popolato dinamicamente con tutti i richiedenti presenti nello storico, inclusa l'opzione rapida ⚡ Solo ACME (tutti) per isolare istantaneamente tutte le emissioni ACME.
+  - **Filtro Template**: menu a tendina auto-popolato con tutti i Certificate Template presenti.
+  - **Filtro Stato**: selezione per visualizzare solo emessi/approvati, in attesa o rifiutati.
+  - **Ricerca Testuale Libera**: input di ricerca live full-text istantaneo che filtra in tempo reale su Common Name (CN), Request ID, Richiedente (inclusi IP ACME), Template e CA.
+  - **Contatore e Pulsante Reset**: contatore dinamico delle richieste visibili (Mostrate X su Y richieste) e pulsante ✕ Azzera per ripristinare i filtri con un solo clic.
+
+- **Filtri API RESTful**:
+  - Gli endpoint GET /api/certificates/my-requests e GET /api/admin/held-requests supportano ora parametri di query opzionali (?requester=...&template=...&status=...&search=...) consentendo il filtraggio nativo anche via script e automazioni PowerShell/CLI.
 ## [2.3.2] - 2026-11-04
 
 ### Novità & Funzionalità ACME Intranet

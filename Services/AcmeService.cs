@@ -248,7 +248,7 @@ public class AcmeService : IAcmeService
         return (Results.Ok(new { orders = orderUrls }), newNonce);
     }
 
-    public async Task<(IResult Result, string NewNonce)> HandleNewOrderAsync(AcmeJwsRequest jws, string baseUrl)
+    public async Task<(IResult Result, string NewNonce)> HandleNewOrderAsync(AcmeJwsRequest jws, string baseUrl, string? clientIp = null)
     {
         baseUrl = NormalizeBaseUrl(baseUrl);
         string newNonce = CreateNonce();
@@ -391,7 +391,8 @@ public class AcmeService : IAcmeService
             Finalize = $"{baseUrl}/acme/order/{orderId}/finalize",
             CreatedAt = DateTime.UtcNow,
             CaId = caId,
-            TemplateName = tpl
+            TemplateName = tpl,
+            ClientIp = clientIp
         };
 
         await _store.SaveOrderAsync(order);
@@ -663,7 +664,7 @@ public class AcmeService : IAcmeService
         return (Results.Ok(challenge), newNonce);
     }
 
-    public async Task<(IResult Result, string NewNonce)> HandleFinalizeOrderAsync(string orderId, AcmeJwsRequest jws, string baseUrl)
+    public async Task<(IResult Result, string NewNonce)> HandleFinalizeOrderAsync(string orderId, AcmeJwsRequest jws, string baseUrl, string? clientIp = null)
     {
         baseUrl = NormalizeBaseUrl(baseUrl);
         string newNonce = CreateNonce();
@@ -747,6 +748,13 @@ public class AcmeService : IAcmeService
             _logger.LogInformation("Sottomissione CSR ad AD CS per ordine ACME {OrderId} (CA: {CaId}, Template: {Template})",
                 order.Id, caId, templateName);
 
+            if (!string.IsNullOrWhiteSpace(clientIp))
+            {
+                order.ClientIp = clientIp;
+            }
+            string effectiveIp = !string.IsNullOrWhiteSpace(clientIp) ? clientIp : (order.ClientIp ?? string.Empty);
+            string requester = !string.IsNullOrWhiteSpace(effectiveIp) ? $"ACME ({effectiveIp})" : "ACME";
+
             var submission = new CertificateSubmissionRequest
             {
                 CaId = caId,
@@ -757,7 +765,7 @@ public class AcmeService : IAcmeService
 
             try
             {
-                var adcsResponse = await _adcsService.SubmitCertificateRequestAsync(submission);
+                var adcsResponse = await _adcsService.SubmitCertificateRequestAsync(submission, requester);
 
                 if (adcsResponse.Success && string.Equals(adcsResponse.Disposition, "Issued", StringComparison.OrdinalIgnoreCase))
                 {
