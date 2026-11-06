@@ -84,7 +84,7 @@ english.AllowHttpCheck=Allow unencrypted HTTP installation (isolated test enviro
 english.OptionsPageCaption=Options
 english.OptionsPageDesc=Additional installation settings.
 english.SkipFirewallCheck=Do not create Windows Firewall rule (-SkipFirewall)
-english.OverwriteConfigCheck=Overwrite existing appsettings.json and web.config (-OverwriteConfig)
+english.OverwriteConfigCheck=Overwrite existing web.config (-OverwriteConfig)
 english.ErrSiteNameRequired=Please enter a name for the IIS site.
 english.ErrSiteNameInvalid=The IIS site name must not contain spaces, quotes, or special characters.
 english.ErrPortInvalid=Invalid port: enter a number between 1 and 65535.
@@ -126,7 +126,7 @@ italian.AllowHttpCheck=Consenti installazione su HTTP in chiaro (SOLO test isola
 italian.OptionsPageCaption=Opzioni
 italian.OptionsPageDesc=Impostazioni aggiuntive dell'installazione.
 italian.SkipFirewallCheck=Non creare regola del firewall Windows (-SkipFirewall)
-italian.OverwriteConfigCheck=Sovrascrivi appsettings.json e web.config esistenti (-OverwriteConfig)
+italian.OverwriteConfigCheck=Sovrascrivi web.config esistente (-OverwriteConfig)
 italian.ErrSiteNameRequired=Inserire un nome per il sito IIS.
 italian.ErrSiteNameInvalid=Il nome del sito IIS non deve contenere spazi, virgolette o caratteri speciali.
 italian.ErrPortInvalid=Porta non valida: inserire un numero tra 1 e 65535.
@@ -168,7 +168,7 @@ french.AllowHttpCheck=Autoriser l'installation en HTTP clair (tests isolés UNIQ
 french.OptionsPageCaption=Options
 french.OptionsPageDesc=Paramètres d'installation supplémentaires.
 french.SkipFirewallCheck=Ne pas créer de règle de pare-feu Windows (-SkipFirewall)
-french.OverwriteConfigCheck=Écraser appsettings.json et web.config existants (-OverwriteConfig)
+french.OverwriteConfigCheck=Écraser web.config existant (-OverwriteConfig)
 french.ErrSiteNameRequired=Veuillez saisir un nom pour le site IIS.
 french.ErrSiteNameInvalid=Le nom du site IIS ne doit pas contenir d'espaces, de guillemets ou de caractères spéciaux.
 french.ErrPortInvalid=Port invalide : entrez un nombre entre 1 et 65535.
@@ -210,7 +210,7 @@ german.AllowHttpCheck=Installation über Klartext-HTTP zulassen (NUR isolierte T
 german.OptionsPageCaption=Optionen
 german.OptionsPageDesc=Zusätzliche Installationseinstellungen.
 german.SkipFirewallCheck=Keine Windows-Firewall-Regel erstellen (-SkipFirewall)
-german.OverwriteConfigCheck=Vorhandene appsettings.json und web.config überschreiben (-OverwriteConfig)
+german.OverwriteConfigCheck=Vorhandene web.config überschreiben (-OverwriteConfig)
 german.ErrSiteNameRequired=Bitte geben Sie einen Namen für die IIS-Site ein.
 german.ErrSiteNameInvalid=Der Name der IIS-Site darf keine Leerzeichen, Anführungszeichen oder Sonderzeichen enthalten.
 german.ErrPortInvalid=Ungültiger Port: Geben Sie eine Zahl zwischen 1 und 65535 ein.
@@ -252,7 +252,7 @@ spanish.AllowHttpCheck=Permitir instalación en HTTP en texto plano (SOLO prueba
 spanish.OptionsPageCaption=Opciones
 spanish.OptionsPageDesc=Configuración adicional de instalación.
 spanish.SkipFirewallCheck=No crear regla de firewall de Windows (-SkipFirewall)
-spanish.OverwriteConfigCheck=Sobrescribir appsettings.json y web.config existentes (-OverwriteConfig)
+spanish.OverwriteConfigCheck=Sobrescribir web.config existente (-OverwriteConfig)
 spanish.ErrSiteNameRequired=Ingrese un nombre para el sitio IIS.
 spanish.ErrSiteNameInvalid=El nombre del sitio IIS no debe contener espacios, comillas ni caracteres especiales.
 spanish.ErrPortInvalid=Puerto no válido: ingrese un número entre 1 y 65535.
@@ -294,7 +294,7 @@ portuguese.AllowHttpCheck=Permitir instalação em HTTP em texto simples (APENAS
 portuguese.OptionsPageCaption=Opções
 portuguese.OptionsPageDesc=Configurações adicionais de instalação.
 portuguese.SkipFirewallCheck=Não criar regra de firewall do Windows (-SkipFirewall)
-portuguese.OverwriteConfigCheck=Substituir appsettings.json e web.config existentes (-OverwriteConfig)
+portuguese.OverwriteConfigCheck=Substituir web.config existente (-OverwriteConfig)
 portuguese.ErrSiteNameRequired=Insira um nome para o site IIS.
 portuguese.ErrSiteNameInvalid=O nome do site IIS não deve conter espaços, aspas ou caracteres especiais.
 portuguese.ErrPortInvalid=Porta inválida: insira um número entre 1 e 65535.
@@ -336,7 +336,7 @@ brazilianportuguese.AllowHttpCheck=Permitir instalação em HTTP em texto claro 
 brazilianportuguese.OptionsPageCaption=Opções
 brazilianportuguese.OptionsPageDesc=Configurações adicionais de instalação.
 brazilianportuguese.SkipFirewallCheck=Não criar regra de firewall do Windows (-SkipFirewall)
-brazilianportuguese.OverwriteConfigCheck=Substituir appsettings.json e web.config existentes (-OverwriteConfig)
+brazilianportuguese.OverwriteConfigCheck=Substituir web.config existente (-OverwriteConfig)
 brazilianportuguese.ErrSiteNameRequired=Insira um nome para o site IIS.
 brazilianportuguese.ErrSiteNameInvalid=O nome do site IIS não deve conter espaços, aspas ou caracteres especiais.
 brazilianportuguese.ErrPortInvalid=Porta inválida: insira um número entre 1 e 65535.
@@ -352,14 +352,15 @@ brazilianportuguese.MsgSuccess=Instalação concluída com sucesso.%n%nPortal:  
 
 ; ----------------------------------------------------------------------------
 ; File applicativi pre-pubblicati (output di dotnet publish, v2.4.0)
-; appsettings.json e web.config sono copiati solo alla PRIMA installazione
-; (o sempre con la casella "Sovrascrivi configurazione"), in modo da
-; preservare la configurazione esistente durante gli aggiornamenti,
-; esattamente come fa lo script originale.
+; NOTA: appsettings.json NON viene inserito nell'installer poiché contiene la
+; configurazione specifica d'ambiente. Alla prima installazione lo script
+; genera appsettings.json partendo dal modello pulito appsettings.example.json;
+; durante gli aggiornamenti la configurazione esistente viene preservata al 100%.
+; web.config viene copiato alla prima installazione o con "Sovrascrivi web.config".
 ; ----------------------------------------------------------------------------
 [Files]
-Source: "..\publish\*";        DestDir: "{app}"; Flags: recursesubdirs createallsubdirs; Excludes: "appsettings.json,web.config"
-Source: "..\publish\appsettings.json"; DestDir: "{app}"; Check: ShouldCopyConfig('appsettings.json')
+Source: "..\publish\*";        DestDir: "{app}"; Flags: recursesubdirs createallsubdirs; Excludes: "appsettings*.json,web.config"
+Source: "..\publish\appsettings.example.json"; DestDir: "{app}"
 Source: "..\publish\web.config";       DestDir: "{app}"; Check: ShouldCopyConfig('web.config')
 
 ; Script di installazione/disinstallazione originali (conservati nella

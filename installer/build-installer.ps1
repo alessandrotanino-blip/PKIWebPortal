@@ -1,4 +1,4 @@
-# build-installer.ps1 - Compila l'installer PkiPortal con Inno Setup 6 (ISCC)
+﻿# build-installer.ps1 - Compila l'installer PkiPortal con Inno Setup 6 (ISCC)
 # Uso:  .\build-installer.ps1
 #
 # Cerca ISCC.exe nei percorsi standard (winget per-user, MSI per-machine, PATH).
@@ -48,6 +48,16 @@ $publish = Join-Path (Split-Path $PSScriptRoot -Parent) 'publish'
 if (-not (Test-Path (Join-Path $publish 'PkiPortal.dll'))) {
     Write-Warning "PkiPortal.dll non trovato in ${publish} - il bundle embeddato sarà incompleto."
     Write-Warning "Rigenerare prima con: dotnet publish -c Release -o publish"
+}
+
+# Assicura che file di configurazione locali non vengano inclusi nell'installer
+$localConfigs = @('appsettings.json', 'appsettings.Development.json')
+foreach ($cfg in $localConfigs) {
+    $cfgPath = Join-Path $publish $cfg
+    if (Test-Path $cfgPath) {
+        Write-Host "Rimozione di $cfg da publish per escluderlo dall'installer..." -ForegroundColor Yellow
+        Remove-Item $cfgPath -Force
+    }
 }
 
 & $iscc $iss

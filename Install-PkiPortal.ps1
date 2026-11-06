@@ -1142,7 +1142,7 @@ try {
     $appSettingsPath = Join-Path $InstallPath "appsettings.json"
     $appSettingsExamplePath = Join-Path $InstallPath "appsettings.example.json"
     if (-not (Test-Path $appSettingsPath) -and (Test-Path $appSettingsExamplePath)) {
-        Rename-Item -Path $appSettingsExamplePath -NewName "appsettings.json" -Force
+        Copy-Item -Path $appSettingsExamplePath -Destination $appSettingsPath -Force
         Write-OK "File appsettings.example.json rinominato in appsettings.json (prima installazione)." "File appsettings.example.json renamed to appsettings.json (initial installation)."
     }
     elseif (Test-Path $appSettingsPath) {
