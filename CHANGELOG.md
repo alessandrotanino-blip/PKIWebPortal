@@ -1,10 +1,24 @@
-﻿# Changelog
+# Changelog
 
 [🇮🇹 Italiano](CHANGELOG.md) | [🇬🇧 English](CHANGELOG.en.md)
 
 Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in questo file.
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
+
+## [2.5.0] - 2026-11-07
+
+### Novità & Funzionalità
+
+- **Rilevamento Automatico del Nome CA nella Configurazione (eliminati i campi ridondanti)**:
+  - La scheda CA del pannello di amministrazione non richiede più di digitare manualmente la **Config String**: i campi **Server CA** e **Nome CA** la costruiscono automaticamente in forma `server\Nome-CA`.
+  - Nuovo pulsante **🔍 Rileva CA**: identifica i nomi delle CA ospitati sul server specificato e li propone in una **tendina** da cui selezionare il Nome CA (selezione automatica se ne viene rilevata una sola).
+  - **Credential Target** non è più un campo libero: viene dedotto automaticamente dal Server CA (corrisponde sempre al target della credenziale nel Windows Credential Manager, come già faceva il fallback lato server).
+  - Nuovo endpoint `POST /api/admin/ca/discover` (solo admin, con token anti-CSRF) che interroga:
+    1. il partizionamento **Configuration** del dominio AD (attributi `caDnsName`/SPN `Certsrv/<host>` degli oggetti CA), con confronto tollerante FQDN/hostname e, in modalità **CredentialManager**, la credenziale del target (LDAPS obbligatorio, nessun fallback in chiaro);
+    2. in fallback, la **pagina CAPL** del server CA (`https://<server>/CertSrv/CertSrv.dll`, poi `http://`), estraendo i link `Machine$<NomeCA>` (con gestione dei nomi con spazi, percent-encoded).
+  - La Config String esistente viene scomposta automaticamente in Server CA + Nome CA al caricamento (nessuna migrazione: i file `appsettings.json` pregressi restano validi e vengono risalvati nella stessa forma).
+  - Traduzioni complete (IT, EN, FR, DE, ES, PT, ZH) in `i18n.js`.
 
 ## [2.4.0] - 2026-11-06
 

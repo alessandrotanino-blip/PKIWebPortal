@@ -1497,7 +1497,13 @@ public class AdcsService : IAdcsService
                 // 2. Lettura della VALIDITÀ direttamente dalla DEFINIZIONE del template
                 //    AD CS (attributo pKIDefaultLifetime in AD, fallback certutil):
                 //    la validità è definita dal template, non dall'admin del portale.
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && discovered.Count > 0)
+                //    Viene eseguita anche su piattaforme non Windows: in quegli
+                //    ambienti la fonte AD potrebbe non essere supportata (client
+                //    LDAP gestito System.DirectoryServices.Protocols non disponibile)
+                //    e il fallback certutil — già usato per la scoperta dei template —
+                //    è l'unica fonte residua. Se certutil non è eseguibile in
+                //    quell'ambiente, il fallback si esaurisce con un solo log.
+                if (discovered.Count > 0)
                 {
                     await EnrichTemplatesWithValidityAsync(forestOrDomain, configString, discovered, credential);
                 }
@@ -1533,6 +1539,380 @@ public class AdcsService : IAdcsService
                 Success = false,
                 ErrorMessage = $"Eccezione durante la scoperta template: {ex.Message}"
             };
+        }
+    }
+
+    // SECURITY: la CAPL del server CA espone i nomi delle CA ospitate come link
+    // "CertSrv/Machine$<NomeCA>" (o parametri "CertSrv.dll?CA=<NomeCA>").
+    // I nomi possono contenere spazi: nel CAPL sono percent-encoded (%20); la
+    // classe di caratteri esclude solo i delimitatori URL (non lo spazio), e il
+    // nome viene decodificato con Uri.UnescapeDataString dopo l'estrazione.
+    private static readonly Regex CaplMachineRegex =
+        new(@"certsrv/machine\$(?<name>[^/""'<>&?#]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex CaplCaParamRegex =
+        new(@"certsrv\.dll\?ca=(?<name>[^""'&\s]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    // SECURITY: host DNS valido per il rilevamento (etichette 1-63, alfanumerici
+    // e '-') con eventuale porta esplicita (es. "subca01.forest.lan:8081").
+    private static readonly Regex DnsHostNameRegex =
+        new(@"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*(:[1-9]\d{0,4})?\z", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Rileva i nomi delle CA ospitati sul server indicato. Strategia:
+    /// 1) AD/LDAP: interroga il partizionamento Configuration della foresta e
+    ///    confronta l'attributo caDnsName (e lo SPN Certsrv/&lt;host&gt;) degli
+    ///    oggetti CA con il server richiesto. In modalità CredentialManager usa
+    ///    la credenziale del target (default: il server) — LDAPS obbligatorio
+    ///    quando sono presenti credenziali esplicite (stessa policy delle
+    ///    query di validità template).
+    /// 2) Fallback CAPL HTTP: interroga https://&lt;server&gt;/CertSrv/CertSrv.dll
+    ///    (poi http://) e ne estrae i link Machine$&lt;NomeCA&gt;.
+    /// Il risultato è la lista di nomi CA da proporre al pannello admin.
+    /// </summary>
+    public async Task<CaDiscoveryResponse> DiscoverCaNamesAsync(CaDiscoveryRequest request)
+    {
+        var response = new CaDiscoveryResponse();
+
+        string server = (request.CaServer ?? string.Empty).Trim().TrimEnd('.').ToLowerInvariant();
+        if (string.IsNullOrEmpty(server) || server.Length > 253 || !DnsHostNameRegex.IsMatch(server))
+        {
+            response.ErrorMessage = "Server CA non valido: è atteso un hostname DNS (es. subca01.foresta1.lan).";
+            return response;
+        }
+
+        _logger.LogInformation("Rilevamento nomi CA richiesto per il server '{Server}' (dominio: '{Domain}', authMode: '{AuthMode}').",
+            server, SanitizeForLog(request.ForestOrDomain), SanitizeForLog(request.AuthMode));
+
+        var adNames = new List<string>();
+        string? adError = null;
+        var caplNames = new List<string>();
+        string? caplError = null;
+
+        // Server host senza eventuale porta esplicita: usato per il dominio e
+        // per il confronto AD; la CAPL usa invece il valore completo con porta.
+        int portIdx = server.LastIndexOf(':');
+        string serverHost = portIdx > 0 ? server[..portIdx] : server;
+
+        // --- 1) Interrogazione AD (solo se è determinabile un dominio) ---
+        // Candidati: il campo Foresta/Dominio esplicito, poi il dominio dedotto
+        // dalle etichette DNS del server CA (stessa policy di DetermineAdDomain).
+        string? domain = null;
+        var domainCandidates = new List<string>();
+        if (!string.IsNullOrWhiteSpace(request.ForestOrDomain)) domainCandidates.Add(request.ForestOrDomain.Trim());
+        var serverLabels = serverHost.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (serverLabels.Length >= 2) domainCandidates.Add(string.Join('.', serverLabels.Skip(1)));
+        foreach (var cand in domainCandidates)
+        {
+            if (cand.Length is >= 1 and <= 63 &&
+                Regex.IsMatch(cand, @"^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*$"))
+            {
+                domain = cand;
+                break;
+            }
+        }
+        if (string.IsNullOrEmpty(domain))
+        {
+            adError = "Foresta/Dominio non specificato o non determinabile dal server: interrogazione AD non eseguita.";
+        }
+        else
+        {
+            NetworkCredential? explicitCred = null;
+            bool useCredManager = string.Equals(request.AuthMode, "CredentialManager", StringComparison.OrdinalIgnoreCase);
+            if (useCredManager && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                string credTarget = string.IsNullOrWhiteSpace(request.CredentialTarget) ? server : request.CredentialTarget.Trim();
+                CredentialInfo? credInfo = ReadCredentialFromManager(credTarget);
+                if (credInfo != null)
+                {
+                    explicitCred = new NetworkCredential(credInfo.Username, credInfo.Password, credInfo.Domain);
+                }
+                else
+                {
+                    adError = $"Nessuna credenziale per il target '{SanitizeForLog(credTarget)}' nel Credential Manager: query AD con identità di processo.";
+                }
+            }
+            (adNames, adError) = await QueryCaNamesFromAdAsync(domain, serverHost, explicitCred);
+            if (adNames.Count > 0 && adError != null) adError = null; // risultato valido: degrada il warning
+        }
+
+        // --- 2) Fallback CAPL HTTP se AD non ha prodotto nomi ---
+        if (adNames.Count == 0)
+        {
+            (caplNames, caplError) = await QueryCaNamesViaCaplAsync(server);
+        }
+
+        // ---Unione + deduplicazione (case-insensitive), ordinamento alfabetico ---
+        var merged = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void AddUnique(string name)
+        {
+            name = name.Trim();
+            if (name.Length > 0 && seen.Add(name)) merged.Add(name);
+        }
+        foreach (var n in adNames) AddUnique(n);
+        foreach (var n in caplNames) AddUnique(n);
+        merged.Sort(StringComparer.OrdinalIgnoreCase);
+
+        response.CaNames = merged;
+        if (merged.Count > 0)
+        {
+            response.Success = true;
+            response.Source = adNames.Count > 0 && caplNames.Count > 0 ? "ad+capl" : (adNames.Count > 0 ? "ad" : "capl");
+            _logger.LogInformation("Rilevamento nomi CA per '{Server}': trovati {Count} nomi (fonte: {Source}).",
+                server, merged.Count, response.Source);
+        }
+        else
+        {
+            var parts = new List<string>();
+            if (adError != null) parts.Add($"AD: {adError}");
+            if (caplError != null) parts.Add($"CAPL: {caplError}");
+            response.ErrorMessage = string.Join(" | ", parts.Count > 0 ? parts : new[] { "Nessuna fonte disponibile." });
+            _logger.LogWarning("Rilevamento nomi CA per '{Server}': nessun nome trovato. {Errors}",
+                server, response.ErrorMessage.Replace("\r", string.Empty).Replace("\n", string.Empty));
+        }
+
+        return response;
+    }
+
+    /// <summary>
+    /// Query LDAP del partizionamento Configuration: gli oggetti CA espongono
+    /// l'attributo caDnsName (DNS name del server CA) e, in genere, lo SPN
+    /// Certsrv/&lt;host&gt;. Il confronto con il server richiesto è lato client
+    /// (uguaglianza completa, etichetta di host o suffisso qualificato) per
+    /// tollerare FQDN vs hostname corto.
+    /// </summary>
+    private async Task<(List<string> Names, string? Error)> QueryCaNamesFromAdAsync(string domain, string server, NetworkCredential? explicitCred)
+    {
+        var names = new List<string>();
+        var dcPath = string.Join(",", domain.Split('.').Select(l => $"DC={l}"));
+        string baseDn = $"CN=Configuration,{dcPath}";
+        string filter = "(&(|(caDnsName=*)(servicePrincipalName=Certsrv/*)))";
+
+        DirectoryResponse SendLdapQuery(int port, bool useSsl)
+        {
+            using var conn = new LdapConnection(new LdapDirectoryIdentifier(domain, port, useSsl, false));
+            conn.Timeout = TimeSpan.FromSeconds(15);
+            // In modalità Hub (CredentialManager) usa le credenziali della
+            // foresta remota; altrimenti l'identità del processo (App Pool).
+            conn.Credential = explicitCred ?? new NetworkCredential();
+
+            var req = new SearchRequest(baseDn, filter, SearchScope.Subtree,
+                new[] { "cn", "caDnsName", "servicePrincipalName" });
+            req.SizeLimit = 200;
+            return conn.SendRequest(req, TimeSpan.FromSeconds(15));
+        }
+
+        try
+        {
+            DirectoryResponse? rep = null;
+            LdapException? sslError = null;
+
+            try
+            {
+                rep = await Task.Run(() => SendLdapQuery(636, useSsl: true)).ConfigureAwait(false);
+            }
+            catch (LdapException ex)
+            {
+                sslError = ex;
+            }
+
+            if (rep == null)
+            {
+                if (explicitCred == null)
+                {
+                    // Fallback accettabile: identità di processo, nessuna
+                    // password esposta anche su LDAP non cifrato.
+                    _logger.LogWarning(
+                        "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}): fallback su LDAP (389) con identità di processo per il rilevamento nomi CA.",
+                        SanitizeForLog(domain), sslError?.Message?.Replace("\r", string.Empty).Replace("\n", string.Empty));
+                    try
+                    {
+                        rep = await Task.Run(() => SendLdapQuery(389, useSsl: false)).ConfigureAwait(false);
+                    }
+                    catch (LdapException ex)
+                    {
+                        _logger.LogWarning("Query LDAP verso il dominio '{Domain}' (fallback 389) non riuscita: {Error}", SanitizeForLog(domain), ex.Message.Replace("\r", string.Empty).Replace("\n", string.Empty));
+                        return (names, $"Query LDAP verso il dominio '{domain}' non riuscita.");
+                    }
+                }
+                else
+                {
+                    // CREDENZIALI ESPLICITE: nessun fallback in chiaro.
+                    _logger.LogWarning(
+                        "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}) e fallback LDAP non cifrato negato per la presenza di credenziali esplicite: rilevamento nomi CA via AD non possibile.",
+                        SanitizeForLog(domain), sslError?.Message?.Replace("\r", string.Empty).Replace("\n", string.Empty));
+                    return (names, $"LDAPS verso il dominio '{domain}' non riuscito (credenziali esplicite: nessun fallback in chiaro).");
+                }
+            }
+
+            var searchResp = rep as SearchResponse;
+            if (searchResp == null || searchResp.ResultCode != ResultCode.Success)
+            {
+                string detail = searchResp != null
+                    ? $"ResultCode {searchResp.ResultCode}: {searchResp.ErrorMessage}"
+                    : "risposta LDAP inattesa";
+                _logger.LogWarning("Query LDAP per il rilevamento nomi CA non riuscita: {Detail}", SanitizeForLog(detail));
+                return (names, $"Query LDAP non riuscita ({SanitizeForLog(detail)}).");
+            }
+
+            foreach (var obj in searchResp.Entries)
+            {
+                try
+                {
+                    var entry = (SearchResultEntry)obj;
+
+                    string? cn = entry.Attributes["cn"]?.GetValues(typeof(string)).Cast<string>().FirstOrDefault();
+                    if (string.IsNullOrWhiteSpace(cn)) continue;
+
+                    // Raccoglie gli host confrontabili: caDnsName + SPN Certsrv/<host>
+                    var hostCandidates = new List<string>();
+                    if (entry.Attributes["caDnsName"] != null)
+                    {
+                        foreach (var v in entry.Attributes["caDnsName"].GetValues(typeof(string)).Cast<string>())
+                        {
+                            if (!string.IsNullOrWhiteSpace(v)) hostCandidates.Add(v);
+                        }
+                    }
+                    if (entry.Attributes["servicePrincipalName"] != null)
+                    {
+                        foreach (var v in entry.Attributes["servicePrincipalName"].GetValues(typeof(string)).Cast<string>())
+                        {
+                            if (!string.IsNullOrWhiteSpace(v) &&
+                                v.StartsWith("Certsrv/", StringComparison.OrdinalIgnoreCase))
+                            {
+                                hostCandidates.Add(v["Certsrv/".Length..]);
+                            }
+                        }
+                    }
+
+                    bool matched = hostCandidates.Any(h => MatchesCaServer(h, server));
+                    if (matched)
+                    {
+                        names.Add(cn!);
+                        _logger.LogDebug("Oggetto CA '{Cn}' corrisponde al server '{Server}' (host: {Hosts}).",
+                            SanitizeForLog(cn), server, string.Join(", ", hostCandidates.Select(SanitizeForLog)));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Errore nel parsing dell'entry CA da AD.");
+                }
+            }
+
+            if (names.Count == 0)
+            {
+                return (names, $"Nessun oggetto CA con host corrispondente a '{server}' nel dominio '{domain}'.");
+            }
+            return (names, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Query LDAP verso il dominio '{Domain}' per il rilevamento nomi CA non riuscita.", SanitizeForLog(domain));
+            return (names, $"Errore query LDAP: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Confronto tollerante tra l'host del server richiesto e l'host registrato
+    /// sul CA object: uguaglianza completa (case-insensitive), hostname corto
+    /// (prima etichetta) o suffisso qualificato (es. server "ca.vd.ld" vs
+    /// caDnsName "subca01.ca.vd.ld").
+    /// </summary>
+    private static bool MatchesCaServer(string registeredHost, string requestedServer)
+    {
+        string host = registeredHost.Trim().TrimEnd('.').ToLowerInvariant();
+        if (host.Length == 0 || host.Length > 253) return false;
+        if (host == requestedServer) return true;
+
+        string firstLabel = host.Split('.')[0];
+        if (firstLabel == requestedServer) return true;
+
+        if (requestedServer.Contains('.') && host.EndsWith("." + requestedServer, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Fallback CAPL: interroga https://&lt;server&gt;/CertSrv/CertSrv.dll (poi
+    /// http://) ed estrae i nomi CA dai link Machine$&lt;NomeCA&gt; / ?CA=&lt;NomeCA&gt;.
+    /// Richiede che il server esponga la CAPL (accesso anonimo o con redirect
+    /// verso la singola CA); i nomi estratti non includono i caratteri di
+    /// escaping del CAPL (si usano i nomi "Machine$" canonicali).
+    /// </summary>
+    private async Task<(List<string> Names, string? Error)> QueryCaNamesViaCaplAsync(string server)
+    {
+        var names = new List<string>();
+        string? lastError = null;
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("PkiPortal-Admin/2.5");
+
+        // Estrae e decodifica i nomi CA dai link CAPL (i nomi con spazi sono
+        // percent-encoded, es. "Machine$CloudLD%20Sub%20CA").
+        void Extract(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            foreach (Match m in CaplMachineRegex.Matches(text)) names.Add(DecodeCaplName(m.Groups["name"].Value));
+            foreach (Match m in CaplCaParamRegex.Matches(text)) names.Add(DecodeCaplName(m.Groups["name"].Value));
+        }
+
+        foreach (var scheme in new[] { "https", "http" })
+        {
+            string url = $"{scheme}://{server}/CertSrv/CertSrv.dll";
+            try
+            {
+                using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                int code = (int)resp.StatusCode;
+
+                if (code == 301 || code == 302 || code == 307 || code == 308)
+                {
+                    // Single-CA host: IIS reindirizza alla pagina della CA.
+                    string? location = resp.Headers.Location?.ToString();
+                    Extract(location);
+                    lastError = $"CAPL {scheme} ha reindirizzato a '{SanitizeForLog(location)}' senza elenco CA.";
+                    if (names.Count > 0) break;
+                    continue;
+                }
+
+                if (code == 200)
+                {
+                    string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    Extract(body);
+                    if (names.Count > 0)
+                    {
+                        lastError = null;
+                        break;
+                    }
+                    lastError = $"CAPL {scheme} ha risposto 200 ma non espone alcun nome CA (accesso anonimo disabilitato?).";
+                    continue;
+                }
+
+                lastError = $"CAPL {scheme} ha risposto HTTP {code}.";
+            }
+            catch (Exception ex)
+            {
+                lastError = $"CAPL {scheme} non raggiungibile: {ex.Message}";
+                _logger.LogDebug(ex, "CAPL {Scheme} verso '{Server}' non riuscita.", scheme, server);
+            }
+        }
+
+        return (names, names.Count > 0 ? null : lastError);
+    }
+
+    /// <summary>
+    /// Decodifica un nome CA estratto dalla CAPL: i nomi con spazi (es.
+    /// "CloudLD Sub CA") appaiono percent-encoded nel path/link (es.
+    /// "Machine$CloudLD%20Sub%20CA"). Senza '%' restituisce il nome invariato.
+    /// </summary>
+    private static string DecodeCaplName(string raw)
+    {
+        raw = raw.Trim();
+        if (!raw.Contains('%')) return raw;
+        try
+        {
+            return Uri.UnescapeDataString(raw);
+        }
+        catch (InvalidOperationException)
+        {
+            return raw;
         }
     }
 
@@ -1763,9 +2143,16 @@ public class AdcsService : IAdcsService
     /// Fonte primaria: l'oggetto del template in Active Directory
     /// (CN=Certificate Templates,CN=Public Key Services,CN=Services,CN=Configuration),
     /// attributo pKIExpirationPeriod — la definizione canonica del template,
-    /// indipendente dalla localizzazione. Fallback: certutil -template (KeyUsagePeriod).
+    /// indipendente dalla localizzazione. Fallback: certutil -template (KeyUsagePeriod),
+    /// eseguito per ogni template con validità ancora sconosciuta QUALORA la fonte
+    /// AD non sia disponibile (dominio non determinabile, query LDAP non riuscita,
+    /// permessi insufficienti, oppure piattaforma in cui il client LDAP gestito
+    /// System.DirectoryServices.Protocols non è supportato e lancia
+    /// PlatformNotSupportedException). La CA è per definizione raggiungibile:
+    /// è la stessa che ha fornito la lista dei template pubblicati.
     /// La validità è quindi presa direttamente dalla definizione del template,
-    /// non è un valore inserito manualmente dall'amministratore.
+    /// non è un valore inserito manualmente dall'amministratore; se nessuna
+    /// fonte risponde, resta null (mostrata come "n.d." in UI).
     /// </summary>
     private async Task EnrichTemplatesWithValidityAsync(string? forestOrDomain, string configString, List<PublishedTemplate> templates, CredentialInfo? credential)
     {
@@ -1783,7 +2170,6 @@ public class AdcsService : IAdcsService
 
         // 1. Fonte primaria: definizione del template in AD (pKIDefaultLifetime)
         string? domain = DetermineAdDomain(forestOrDomain, configString);
-        bool adAvailable = false;
         if (domain != null)
         {
             NetworkCredential? ldapCred = credential == null
@@ -1791,8 +2177,7 @@ public class AdcsService : IAdcsService
                 : new NetworkCredential(string.IsNullOrWhiteSpace(credential.Domain)
                     ? credential.Username
                     : $"{credential.Domain}\\{credential.Username}", credential.Password);
-            var (map, adSucceeded) = await GetTemplateValidityFromAdAsync(domain, toQuery.Select(t => t.Name).ToList(), ldapCred);
-            adAvailable = adSucceeded;
+            var (map, _) = await GetTemplateValidityFromAdAsync(domain, toQuery.Select(t => t.Name).ToList(), ldapCred);
             foreach (var t in toQuery)
             {
                 if (map.TryGetValue(t.Name, out int days))
@@ -1804,33 +2189,42 @@ public class AdcsService : IAdcsService
         }
         else
         {
-            _logger.LogWarning("Impossibile determinare il dominio AD per la CA '{Config}': validità non disponibile.", configString.Replace("\r", string.Empty).Replace("\n", string.Empty));
+            _logger.LogWarning("Impossibile determinare il dominio AD per la CA '{Config}': si passa direttamente al fallback certutil.", configString.Replace("\r", string.Empty).Replace("\n", string.Empty));
         }
 
-        // 2. Fallback: certutil -template SOLO se AD è raggiungibile ma la
-        //    validità di un template non è presente in AD (caso raro). Se AD non
-        //    è raggiungibile il fallback sarebbe lento e inutile: si salta.
-        if (adAvailable)
+        // 2. Fallback: certutil -template (KeyUsagePeriod) per ogni template la
+        //    cui validità è ancora sconosciuta, indipendentemente dall'esito
+        //    della fonte AD: la CA è raggiungibile (è la stessa interrogata
+        //    per i nomi dei template), mentre AD/LDAP può non esserlo o non
+        //    essere supportato dalla piattaforma di runtime.
+        bool certutilUnavailable = false;
+        foreach (var t in toQuery.Where(t => t.ValidityDays == null))
         {
-            foreach (var t in toQuery.Where(t => t.ValidityDays == null))
+            if (certutilUnavailable) break;
+
+            try
             {
-                try
+                var days = await GetTemplateValidityDaysAsync(configString, t.Name);
+                if (days.HasValue)
                 {
-                    var days = await GetTemplateValidityDaysAsync(configString, t.Name);
-                    if (days.HasValue)
-                    {
-                        t.ValidityDays = days.Value;
-                        _logger.LogInformation("Template '{Template}': validità di {Days} giorni letta via certutil (KeyUsagePeriod).", t.Name, days.Value);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Impossibile leggere la validità del template '{Template}' dalla CA '{Config}' (nessuna fonte disponibile).", t.Name.Replace("\r", string.Empty).Replace("\n", string.Empty), configString.Replace("\r", string.Empty).Replace("\n", string.Empty));
-                    }
+                    t.ValidityDays = days.Value;
+                    _logger.LogInformation("Template '{Template}': validità di {Days} giorni letta via certutil (KeyUsagePeriod).", t.Name, days.Value);
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogWarning(ex, "Errore nel fallback certutil per il template '{Template}' (Config '{Config}').", t.Name.Replace("\r", string.Empty).Replace("\n", string.Empty), configString.Replace("\r", string.Empty).Replace("\n", string.Empty));
+                    _logger.LogWarning("Impossibile leggere la validità del template '{Template}' dalla CA '{Config}' (nessuna fonte disponibile).", t.Name.Replace("\r", string.Empty).Replace("\n", string.Empty), configString.Replace("\r", string.Empty).Replace("\n", string.Empty));
                 }
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // certutil.exe non eseguibile in questo ambiente (es. runtime
+                // non Windows senza interop): inutile riprovare per ogni template.
+                certutilUnavailable = true;
+                _logger.LogWarning("certutil.exe non è eseguibile in questo ambiente: la validità dei template non è rilevabile (Config '{Config}').", configString.Replace("\r", string.Empty).Replace("\n", string.Empty));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Errore nel fallback certutil per il template '{Template}' (Config '{Config}').", t.Name.Replace("\r", string.Empty).Replace("\n", string.Empty), configString.Replace("\r", string.Empty).Replace("\n", string.Empty));
             }
         }
     }
@@ -2014,6 +2408,16 @@ public class AdcsService : IAdcsService
             _logger.LogInformation("Lette {Count} definizioni template da AD ({Domain}).", result.Count, domain?.Replace("\r", string.Empty).Replace("\n", string.Empty));
             return (result, true);
         }
+        catch (PlatformNotSupportedException ex)
+        {
+            // Il client LDAP gestito System.DirectoryServices.Protocols non è
+            // disponibile su questo runtime/piattaforma (es. ambiente non
+            // Windows o runtime senza supporto LDAP): non è un errore di rete
+            // né di permessi. Il fallback certutil (se eseguibile) rileverà le
+            // validità dei template direttamente dalla CA.
+            _logger.LogWarning(ex, "Client LDAP gestito (System.DirectoryServices.Protocols) non supportato su questa piattaforma/runtime: definizioni template in AD non leggibili (dominio '{Domain}'). Si prosegue con il fallback certutil.", domain?.Replace("\r", string.Empty).Replace("\n", string.Empty));
+            return (result, false);
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Query LDAP verso il dominio '{Domain}' per le definizioni dei template non riuscita.", domain?.Replace("\r", string.Empty).Replace("\n", string.Empty));
@@ -2128,7 +2532,10 @@ public class AdcsService : IAdcsService
                 rootCa.SubjectName,
                 X509SignatureGenerator.CreateForRSA(rootCa.GetRSAPrivateKey()!, RSASignaturePadding.Pkcs1),
                 DateTimeOffset.UtcNow.AddMinutes(-5),
-                DateTimeOffset.UtcNow.AddDays(template.ValidityDays),
+                // Validità non rilevata (null): si usa 365 gg solo per la
+                // simulazione; in emissione reale la validità è quella del
+                // template AD CS presso la CA.
+                DateTimeOffset.UtcNow.AddDays(template.ValidityDays ?? 365),
                 serial);
 
             string certPem = PemEncoding.WriteString("CERTIFICATE", issuedCert.RawData);

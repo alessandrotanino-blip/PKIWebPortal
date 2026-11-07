@@ -321,8 +321,9 @@ Then open a browser at:
 * **ESC8 Hardening**: This portal does not expose the traditional `certsrv` endpoint.
 * **Separation from certsrv**: The portal uses a completely separate IIS website and Application Pool, ensuring that an issue with the portal does not affect certsrv, and vice versa.
 
-### Hardening & Features (v2.1.0 - v2.4.0)
+### Hardening & Features (v2.1.0 - v2.5.0)
 
+* **Automatic CA Name Detection in Configuration (v2.5.0)**: Streamlined CA configuration in the administration panel by eliminating redundant manual fields. New *🔍 Detect CAs* button to discover CA names hosted on the specified server via Active Directory queries (Configuration partition `caDnsName`/SPN) with fallback to the CAPL Web Enrollment page (`CertSrv.dll`). `Config String` and `Credential Target` are now computed and maintained automatically.
 * **ACME Requester Tracking & Request Filtering (v2.4.0)**: Automatic requester identification for certificates issued via ACME RFC 8555 with client IP tracking (ACME (<ip>) or ACME) and distinct visual badge indicators. New dynamic filter toolbar (by requester, template, status, and full-text search) in both the portal and admin panel, plus RESTful API query parameter support.
 
 * **Native ACME RFC 8555 Server (v2.3.0)**: Built-in native ACME server in ASP.NET Core for automated certificate enrollment with `win-acme`, `certbot`, `acme.sh`, or Traefik directly against Microsoft AD CS. Includes `http-01` challenge validation, `AutoApprove` mode for internal air-gapped environments, asymmetric JWS verification (RSA/ECDSA), atomic persistence, and `Test-AcmeProtocol.ps1` test suite.

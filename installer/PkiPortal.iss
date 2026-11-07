@@ -12,11 +12,11 @@
 ; require .NET SDK or NuGet access.
 ;
 ; Build:   powershell .\build-installer.ps1
-; Output:  ..\build\PkiPortal-Setup-2.4.0.exe
+; Output:  ..\build\PkiPortal-Setup-2.5.0.exe
 ; ============================================================================
 
 #define MyAppName        "PkiPortal"
-#define MyAppVersion     "2.4.0"
+#define MyAppVersion     "2.5.0"
 #define MyAppPublisher   "Enterprise PKI Team"
 #define MyAppExeName     "PkiPortal.exe"
 
@@ -351,7 +351,7 @@ brazilianportuguese.ErrScriptFailed=Instalação NÃO concluída: Install-PkiPor
 brazilianportuguese.MsgSuccess=Instalação concluída com sucesso.%n%nPortal:    %1%nAdmin:     %2%nACME:      %3%n%nPróximos passos: configure as Sub-CAs em %4\appsettings.json.%n%nAbrir o painel de administração no navegador agora?
 
 ; ----------------------------------------------------------------------------
-; File applicativi pre-pubblicati (output di dotnet publish, v2.4.0)
+; File applicativi pre-pubblicati (output di dotnet publish, v2.5.0)
 ; NOTA: appsettings.json NON viene inserito nell'installer poiché contiene la
 ; configurazione specifica d'ambiente. Alla prima installazione lo script
 ; genera appsettings.json partendo dal modello pulito appsettings.example.json;

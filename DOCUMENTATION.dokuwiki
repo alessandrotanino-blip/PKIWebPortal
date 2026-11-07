@@ -1,7 +1,7 @@
 ====== Portale PKI Web Enrollment per Microsoft AD CS ======
 ^ Autore | Alessandro Tanino - a.tanino@liguriadigitale.it |
-^ Versione | 2.4.0 |
-^ Data | 6 Novembre 2026 |
+^ Versione | 2.5.0 |
+^ Data | 7 Novembre 2026 |
 ^ Compatibilità | Windows Server 2016, 2019, 2022, 2025 | IIS 10.0+ | .NET 8.0 LTS |
 ^ Requisiti Browser | Chrome, Microsoft Edge, Mozilla Firefox, Safari, Mobile (Zero ActiveX) |
 
@@ -787,7 +787,12 @@ La pagina è divisa in due sezioni tramite tab:
 
 === Scheda 2: Configurazione Portale & CA ===
   * **Impostazioni Generali**: Titolo del portale, modalità operativa (Standalone o Hub Multi-CA) e CA predefinita.
-  * **Gestione Sub-CA**: Aggiunta, rimozione o modifica delle connessioni CA, config string, modalità di autenticazione e credential target.
+  * **Gestione Sub-CA** (v2.5.0): Aggiunta, rimozione o modifica delle connessioni CA. I campi ridondanti non vanno più compilati a mano:
+    * **Server CA**: hostname/DNS della CA (es. ''subca01.foresta1.lan'').
+    * **Nome CA**: tendina popolata dal pulsante **🔍 Rileva CA**, che interroga il dominio AD (partizionamento Configuration, attributo ''caDnsName''/SPN ''Certsrv/&lt;host&gt;'') e, in fallback, la pagina CAPL del server CA (''https://&lt;server&gt;/CertSrv/CertSrv.dll''). Con un solo nome rilevato la selezione è automatica.
+    * **Config String** (tag //auto//): costruita automaticamente come ''server\Nome-CA'' (sola lettura); la stringa esistente viene scomposta in Server CA + Nome CA al caricamento.
+    * **Credential Target** (tag //auto//): dedotto dal Server CA (corrisponde al target della credenziale nel Windows Credential Manager; il backend applicava già lo stesso fallback).
+    * Modalità di autenticazione (LocalIdentity/CredentialManager) e simulatore invariati.
   * **Scoperta Automatica Template (Discovery)**: Pulsante "🔍 Scopri dalla CA" per interrogare via DCOM/certutil i template pubblicati sulla Sub-CA e aggiungerli con un clic.
   * **Configurazione Template**: Impostazione dei parametri di validità (giorni), algoritmi ammessi, Key Usages e toggle per **Approvazione Manuale** (''RequiresApproval'').
   * **Salvataggio Istantaneo**: Il salvataggio aggiorna contemporaneamente i file di configurazione (''ContentRootPath'' e ''BaseDirectory'') e invoca il ricaricamento a caldo del provider di configurazione in memoria, senza necessità di riavviare l'Application Pool IIS.
@@ -801,6 +806,7 @@ La pagina è divisa in due sezioni tramite tab:
 | GET | ''/api/admin/config'' | Restituisce la configurazione completa del portale | Admin |
 | PUT | ''/api/admin/config'' | Aggiorna e salva la configurazione su disco ricaricandola in memoria | Admin |
 | POST | ''/api/admin/templates/discover'' | Interroga una CA per elencare i template pubblicati | Admin |
+| POST | ''/api/admin/ca/discover'' | (v2.5.0) Rileva i nomi CA ospitati su un server (dominio AD + fallback CAPL) per la tendina Nome CA | Admin |
 | GET | ''/api/admin/held-requests?status={filter}'' | Elenca le richieste trattenute/storico con filtri opzionali: ''requester'', ''template'', ''search'' | Admin |
 | GET | ''/api/admin/held-requests/{holdId}'' | Dettaglio singola richiesta e certificato archiviato | Admin |
 | POST | ''/api/admin/held-requests/{holdId}/approve'' | Approva la richiesta e autorizza il rilascio del certificato | Admin |

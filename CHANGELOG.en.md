@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 [🇬🇧 English](CHANGELOG.en.md) | [🇮🇹 Italiano](CHANGELOG.md)
 
@@ -6,6 +6,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-11-07
+
+### New Features & Improvements
+
+- **Automatic CA Name Detection in Configuration (redundant fields removed)**:
+  - The CA card in the admin panel no longer requires typing the **Config String** by hand: the **CA Server** and **CA Name** fields build it automatically in `server\CA-Name` form.
+  - New **🔍 Detect CAs** button: identifies the CA names hosted on the specified server and offers them in a **dropdown** to select the CA Name (auto-selection when a single CA is detected).
+  - **Credential Target** is no longer a free-form field: it is derived automatically from the CA Server (it always matches the credential target in Windows Credential Manager, as the server-side fallback already did).
+  - New endpoint `POST /api/admin/ca/discover` (admin-only, CSRF-protected) that queries:
+    1. the AD **Configuration** partition of the domain (CA objects' `caDnsName` attribute / `Certsrv/<host>` SPN), with tolerant FQDN/hostname matching and, in **CredentialManager** mode, the credential for the target (LDAPS enforced, no cleartext fallback);
+    2. as a fallback, the CA server's **CAPL page** (`https://<server>/CertSrv/CertSrv.dll`, then `http://`), extracting the `Machine$<CA-Name>` links (including names with spaces, percent-encoded).
+  - Existing Config Strings are automatically split into CA Server + CA Name on load (no migration: legacy `appsettings.json` files remain valid and are re-saved in the same form).
+  - Full translations (IT, EN, FR, DE, ES, PT, ZH) in `i18n.js`.
 
 ## [2.4.0] - 2026-11-06
 

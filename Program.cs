@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using PkiPortal.Models;
 using PkiPortal.Services;
@@ -620,6 +620,24 @@ admin.MapPost("/templates/discover", async ([FromBody] TemplateDiscoveryRequest 
 
     var templates = await adcsService.DiscoverTemplatesAsync(request);
     return Results.Ok(templates);
+});
+
+// POST /api/admin/ca/discover - Rileva i nomi CA ospitati su un server (AD + fallback CAPL)
+// Consente al pannello admin di proporre il Nome CA in una tendina e di
+// costruire automaticamente la ConfigString "server\Nome-CA".
+admin.MapPost("/ca/discover", async ([FromBody] CaDiscoveryRequest request, HttpContext ctx, IAdcsService adcsService) =>
+{
+    if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
+        return Results.Challenge();
+
+    if (!IsServerAdmin(ctx))
+        return Results.Forbid();
+
+    if (!HasValidCsrf(ctx))
+        return CsrfDenied();
+
+    var result = await adcsService.DiscoverCaNamesAsync(request);
+    return Results.Ok(result);
 });
 
 // Lock di sincronizzazione per evitare corruzioni da scritture concorrenti su appsettings.json

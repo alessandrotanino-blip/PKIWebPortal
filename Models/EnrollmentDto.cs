@@ -95,3 +95,38 @@ public class TemplateDiscoveryResponse
     public string? RawOutput { get; set; }
     public List<PublishedTemplate> Templates { get; set; } = new();
 }
+
+/// <summary>
+/// Richiesta di rilevamento dei nomi CA ospitati su un server AD CS.
+/// Il nome della CA (e quindi la ConfigString "server\Nome-CA") può essere
+/// dedotto automaticamente una volta identificato il dominio e il server:
+/// 1) interrogazione del partizionamento AD Configuration (attributo caDnsName
+///    degli oggetti CA), con credenziali esplicite in modalità CredentialManager;
+/// 2) fallback sulla pagina CAPL del server CA (http/https://server/CertSrv/CertSrv.dll).
+/// </summary>
+public class CaDiscoveryRequest
+{
+    /// <summary>Foresta o dominio AD da interrogare (opzionale ma consigliato).</summary>
+    public string? ForestOrDomain { get; set; }
+
+    /// <summary>Hostname/DNS del server CA (es. "vdpki.vd.ld"). Obbligatorio.</summary>
+    public string? CaServer { get; set; }
+
+    /// <summary>"LocalIdentity" o "CredentialManager" (come in TemplateDiscoveryRequest).</summary>
+    public string? AuthMode { get; set; }
+
+    /// <summary>Target della credenziale in Windows Credential Manager (default: CaServer).</summary>
+    public string? CredentialTarget { get; set; }
+}
+
+public class CaDiscoveryResponse
+{
+    public bool Success { get; set; }
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>Nomi CA rilevati (es. "Foresta1-IssuingCA"), deduplicati e ordinati.</summary>
+    public List<string> CaNames { get; set; } = new();
+
+    /// <summary>Fonte del rilevamento: "ad", "capl" o "ad+capl". Null se nessun nome trovato.</summary>
+    public string? Source { get; set; }
+}

@@ -61,8 +61,12 @@ public class TemplateConfig
     /// letta automaticamente dalla definizione AD CS del template (proprietà
     /// KeyUsagePeriod) quando il template viene scoperto dalla CA. Per le CA in
     /// modalità simulatore il valore è puramente informativo.
+    /// null = validità non rilevata (nessuna fonte disponibile: AD non
+    /// raggiungibile o non supportato dalla piattaforma e fallback certutil
+    /// non eseguito): il portale mostra "n.d." e la validità effettiva resta
+    /// quella definita dal template AD CS presso la CA.
     /// </summary>
-    public int ValidityDays { get; set; } = 365;
+    public int? ValidityDays { get; set; }
     public List<string> AllowedKeyTypes { get; set; } = new() { "RSA-2048", "RSA-4096", "ECDSA-P256" };
     public List<string> KeyUsages { get; set; } = new() { "DigitalSignature", "KeyEncipherment" };
     public List<string> ExtendedKeyUsages { get; set; } = new() { "ServerAuthentication" };

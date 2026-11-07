@@ -17,4 +17,12 @@ public interface IAdcsService
     Task<CertificateRevocationResponse> RevokeCertificateAsync(string? caId, string serialNumber, string reason);
     Task<List<PublishedTemplate>> GetPublishedTemplatesAsync(string caId);
     Task<TemplateDiscoveryResponse> DiscoverTemplatesAsync(TemplateDiscoveryRequest request);
+
+    /// <summary>
+    /// Rileva i nomi delle CA ospitati su un server AD CS, partendo da
+    /// dominio/foresta e server: consente al pannello admin di proporre il
+    /// Nome CA in una tendina e di costruire la ConfigString (server\Nome-CA)
+    /// senza input manuale ridondante.
+    /// </summary>
+    Task<CaDiscoveryResponse> DiscoverCaNamesAsync(CaDiscoveryRequest request);
 }

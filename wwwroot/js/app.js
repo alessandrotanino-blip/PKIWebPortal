@@ -179,8 +179,13 @@
       const displayName = tmpl.displayName || tmpl.DisplayName || tmpl.name || tmpl.Name || '';
       const name = tmpl.name || tmpl.Name || '';
       const desc = tmpl.description || tmpl.Description || '';
-      const validityDays = tmpl.validityDays || tmpl.ValidityDays || 365;
+      // null = validità non rilevata dalla CA: mostrata come "n.d." (n.d. =
+      // non disponibile), non come un valore di default fittizio.
+      const validityDays = tmpl.validityDays || tmpl.ValidityDays || null;
       const daysText = window.I18N ? window.I18N.t('days_unit', 'giorni') : 'giorni';
+      const validityLabel = validityDays != null
+        ? `${validityDays} ${daysText}`
+        : (window.I18N ? window.I18N.t('validity_undetected', 'n.d. (non rilevata)') : 'n.d. (non rilevata)');
 
       card.innerHTML = `
         <div class="template-name">${escapeHtml(displayName)}</div>
@@ -188,7 +193,7 @@
         <div class="template-tags">
           ${approvalBadge}
           ${lockBadge}
-          <span class="tag">${validityDays} ${daysText}</span>
+          <span class="tag">${escapeHtml(validityLabel)}</span>
           <span class="tag">${escapeHtml(name)}</span>
         </div>
       `;

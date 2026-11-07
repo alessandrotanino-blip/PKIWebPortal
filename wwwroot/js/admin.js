@@ -151,6 +151,21 @@
       cas.forEach((ca, index) => renderCaCard(container, ca, index));
     }
 
+    // Scompone la ConfigString "server\Nome-CA" (o "server/Nome-CA") nei due
+    // campi Server CA e Nome CA. Il nome CA non contiene mai barre (validato
+    // a livello server): si usa la prima barra incontrata.
+    function splitConfigString(cfg) {
+      if (!cfg) return ['', ''];
+      const s = String(cfg).trim();
+      let cut = -1;
+      for (const sep of ['\\', '/']) {
+        const p = s.indexOf(sep);
+        if (p !== -1 && (cut === -1 || p < cut)) cut = p;
+      }
+      if (cut === -1) return [s, ''];
+      return [s.slice(0, cut).trim(), s.slice(cut + 1).trim()];
+    }
+
     function renderCaCard(container, ca, caIndex) {
       const card = document.createElement('div');
       card.className = 'ca-card';
@@ -161,9 +176,18 @@
       const id = ca.id || ca.Id || '';
       const forestOrDomain = ca.forestOrDomain || ca.ForestOrDomain || '';
       const configString = ca.configString || ca.ConfigString || '';
+      // Server CA e Nome CA: derivati dalla ConfigString esistente (il server
+      // li ricostruisce automaticamente al salvataggio). I valori sono
+      // mantenuti sull'oggetto CA così che le re-render (es. cambio lingua)
+      // e il salvataggio li trovino coerenti.
+      const [caServer, caName] = splitConfigString(configString);
+      ca.caServer = caServer;
+      ca.caName = caName;
       const description = ca.description || ca.Description || '';
       const authMode = ca.authMode || ca.AuthMode || 'LocalIdentity';
-      const credentialTarget = ca.credentialTarget || ca.CredentialTarget || '';
+      // Credential Target: dedotto automaticamente dal Server CA (è il target
+      // della credenziale nel Windows Credential Manager).
+      const credentialTarget = caServer || (ca.credentialTarget || ca.CredentialTarget || '');
 
       const defaultTagText = window.I18N ? window.I18N.t('admin_default_tag', 'Predefinita') : 'Predefinita';
       const simulatorTagText = window.I18N ? window.I18N.t('admin_simulator_tag', 'Simulatore') : 'Simulatore';
@@ -181,6 +205,14 @@
       const btnDiscoverText = window.I18N ? window.I18N.t('btn_discover', '🔍 Scopri dalla CA') : '🔍 Scopri dalla CA';
       const clickDiscoverText = window.I18N ? window.I18N.t('admin_click_discover', 'Clicca "Scopri dalla CA"') : 'Clicca "Scopri dalla CA"';
       const btnAddText = window.I18N ? window.I18N.t('admin_btn_add', '+ Aggiungi') : '+ Aggiungi';
+      const lblCaServer = window.I18N ? window.I18N.t('admin_lbl_ca_server', 'Server CA') : 'Server CA';
+      const lblCaName = window.I18N ? window.I18N.t('admin_lbl_ca_name', 'Nome CA') : 'Nome CA';
+      const btnDiscoverCa = window.I18N ? window.I18N.t('admin_btn_discover_ca', '🔍 Rileva CA') : '🔍 Rileva CA';
+      const hintCaName = window.I18N ? window.I18N.t('admin_hint_ca_name', 'Clicca «Rileva CA» per enumerare le CA ospitate sul server: il portale interroga il dominio AD (attributo caDnsName) e, in fallback, la pagina CAPL del server CA.') : 'Clicca «Rileva CA» per enumerare le CA ospitate sul server: il portale interroga il dominio AD (attributo caDnsName) e, in fallback, la pagina CAPL del server CA.';
+      const hintConfigString = window.I18N ? window.I18N.t('admin_hint_config_string', 'Costruita automaticamente in forma server\\nome-CA: non richiede input manuale.') : 'Costruita automaticamente in forma server\\nome-CA: non richiede input manuale.';
+      const hintCredTarget = window.I18N ? window.I18N.t('admin_hint_credential_target', 'Dedotto automaticamente dal Server CA (target della credenziale nel Windows Credential Manager).') : 'Dedotto automaticamente dal Server CA (target della credenziale nel Windows Credential Manager).';
+      const caNamePlaceholder = window.I18N ? window.I18N.t('admin_ca_select_placeholder', '— seleziona un nome CA —') : '— seleziona un nome CA —';
+      const autoTag = window.I18N ? window.I18N.t('admin_auto_tag', 'auto') : 'auto';
 
       card.innerHTML = `
         <div class="ca-card-header">
@@ -209,8 +241,23 @@
             <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="forestOrDomain" value="${esc(forestOrDomain)}">
           </div>
           <div class="field-row">
-            <label>Config String</label>
-            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="configString" value="${esc(configString)}" placeholder="server\\CA-Name">
+            <label>${escapeHtml(lblCaServer)}</label>
+            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="caServer" value="${esc(caServer)}" placeholder="es. vdpki.vd.ld">
+          </div>
+          <div class="field-row">
+            <label>${escapeHtml(lblCaName)}</label>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <select class="form-control ca-field" data-ca="${caIndex}" data-field="caName" style="flex:1;">
+                <option value="">${escapeHtml(caNamePlaceholder)}</option>
+              </select>
+              <button type="button" class="btn btn-secondary btn-sm btn-discover-ca" data-ca="${caIndex}">${escapeHtml(btnDiscoverCa)}</button>
+            </div>
+            <small style="display:block; margin-top:0.25rem; opacity:0.7;">${escapeHtml(hintCaName)}</small>
+          </div>
+          <div class="field-row">
+            <label>Config String <span class="tag tag-success">${escapeHtml(autoTag)}</span></label>
+            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="configString" value="${esc(configString)}" disabled>
+            <small style="display:block; margin-top:0.25rem; opacity:0.7;">${escapeHtml(hintConfigString)}</small>
           </div>
           <div class="field-row">
             <label>${escapeHtml(lblDesc)}</label>
@@ -224,8 +271,9 @@
             </select>
           </div>
           <div class="field-row">
-            <label>Credential Target</label>
-            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="credentialTarget" value="${esc(credentialTarget)}" placeholder="es. subca01.foresta1.lan">
+            <label>Credential Target <span class="tag tag-success">${escapeHtml(autoTag)}</span></label>
+            <input type="text" class="form-control ca-field" data-ca="${caIndex}" data-field="credentialTarget" value="${esc(credentialTarget)}" disabled>
+            <small style="display:block; margin-top:0.25rem; opacity:0.7;">${escapeHtml(hintCredTarget)}</small>
           </div>
           <div class="field-row">
             <label>${escapeHtml(lblDefCa)}</label>
@@ -289,7 +337,73 @@
           const field = e.target.dataset.field;
           const cas = portalConfig.cas || portalConfig.CAs || [];
           cas[ci][field] = e.target.value;
+          // Server CA / Nome CA: ricostruisce i campi derivati
+          // (Config String e Credential Target).
+          if (field === 'caServer' || field === 'caName') {
+            syncDerivedCaFields(e.target.closest('.ca-card'), ci);
+          }
         });
+      });
+
+      // Rilevamento automatico del Nome CA dal server (endpoint /api/admin/ca/discover)
+      card.querySelector('.btn-discover-ca').addEventListener('click', async (e) => {
+        const btn = e.target.closest('.btn-discover-ca');
+        const ci = parseInt(btn.dataset.ca);
+        const cardEl = btn.closest('.ca-card');
+        const cas = portalConfig.cas || portalConfig.CAs || [];
+        const caObj = cas[ci];
+
+        const forestVal = (cardEl.querySelector('.ca-field[data-field="forestOrDomain"]')?.value || '').trim();
+        const serverVal = (cardEl.querySelector('.ca-field[data-field="caServer"]')?.value || '').trim();
+        const authModeVal = cardEl.querySelector('.ca-field[data-field="authMode"]')?.value || 'LocalIdentity';
+        caObj.forestOrDomain = forestVal;
+        caObj.caServer = serverVal;
+
+        if (!serverVal) {
+          const msg = window.I18N ? window.I18N.t('admin_ca_server_required', 'Inserisci il Server CA da interrogare.') : 'Inserisci il Server CA da interrogare.';
+          showToast(msg, 'error');
+          return;
+        }
+
+        const spinnerHtml = '<span class="spinner-sm"></span> Rilevamento...';
+        btn.disabled = true;
+        btn.innerHTML = spinnerHtml;
+
+        try {
+          const resp = await fetch('/api/admin/ca/discover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': await ensureCsrfToken() },
+            body: JSON.stringify({
+              forestOrDomain: forestVal,
+              caServer: serverVal,
+              authMode: authModeVal,
+              credentialTarget: serverVal
+            })
+          });
+          if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
+          const result = await resp.json();
+          const rawNames = result.caNames || result.CaNames || [];
+          const names = Array.isArray(rawNames) ? rawNames.filter(n => n && String(n).trim()) : [];
+          const resultError = result.errorMessage || result.ErrorMessage || '';
+          const resultSource = result.source || result.Source || 'AD/CAPL';
+
+          if (names.length === 0) {
+            const msg = window.I18N ? window.I18N.t('admin_ca_discover_none', 'Nessuna CA rilevata su «#{server}»: verifica dominio, credenziali o accesso CAPL anonimo.', { server: serverVal }) : `Nessuna CA rilevata su «${serverVal}»: verifica dominio, credenziali o accesso CAPL anonimo.`;
+            const detail = resultError ? ` (${resultError})` : '';
+            showToast(msg + detail, 'error');
+          } else {
+            caObj.discoveredCaNames = names;
+            populateDiscoveredCaDropdown(cardEl, caObj, ci);
+            const okMsg = window.I18N ? window.I18N.t('admin_ca_discover_found', '#{count} nome CA rilevati su «#{server}» (fonte: #{source}).', { count: names.length, server: serverVal, source: resultSource }) : `${names.length} nome CA rilevati su «${serverVal}» (fonte: ${resultSource}).`;
+            showToast(okMsg, 'success');
+          }
+        } catch (err) {
+          const msg = window.I18N ? window.I18N.t('admin_ca_discover_error', 'Errore durante il rilevamento: #{error}', { error: err.message }) : `Errore durante il rilevamento: ${err.message}`;
+          showToast(msg, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = window.I18N ? window.I18N.t('admin_btn_discover_ca', '🔍 Rileva CA') : '🔍 Rileva CA';
+        }
       });
 
       // CA toggle change handlers
@@ -301,6 +415,9 @@
           cas[ci][field] = e.target.checked;
         });
       });
+
+      // Popola la tendina con i nomi CA rilevati precedentemente per questa CA (se presenti)
+      populateDiscoveredCaDropdown(card, ca, caIndex);
 
       // Popola la tendina con i template scoperti precedentemente per questa CA (se presenti)
       populateDiscoveredDropdown(card, ca, caIndex);
@@ -384,7 +501,9 @@
         const templates = cas[ci].templates || cas[ci].Templates || [];
         // La validità NON viene scelta dall'admin: è letta dalla definizione
         // AD CS del template (KeyUsagePeriod) durante la scoperta "Scopri dalla CA".
-        const validityDays = parseInt(selectedOpt.dataset.validityDays, 10) || 365;
+        // Se non è stata rilevata resta null (mostrata come "n.d."), senza
+        // inventare un valore di default.
+        const validityDays = parseInt(selectedOpt.dataset.validityDays, 10) || null;
         templates.push({
           name: select.value,
           displayName: selectedOpt.dataset.displayName || select.value,
@@ -398,7 +517,10 @@
           allowedGroups: []
         });
         if (!cas[ci].templates) cas[ci].templates = templates;
-        showToast(`Template "${selectedOpt.dataset.displayName || select.value}" aggiunto (validità ${validityDays} giorni, dalla definizione del template).`, 'success');
+        const validityInfo = validityDays != null
+          ? `validità ${validityDays} giorni, dalla definizione del template`
+          : 'validità non rilevata: riprovare con "Scopri dalla CA"';
+        showToast(`Template "${selectedOpt.dataset.displayName || select.value}" aggiunto (${validityInfo}).`, 'success');
         renderCaList();
       });
 
@@ -408,7 +530,7 @@
         const templates = cas[caIndex].templates || cas[caIndex].Templates || [];
         templates.push({
           name: '', displayName: 'Nuovo Template', description: '',
-          requiresApproval: false, storePrivateKeyForRetrieval: true, validityDays: 365,
+          requiresApproval: false, storePrivateKeyForRetrieval: true, validityDays: null,
           allowedKeyTypes: ['RSA-2048', 'RSA-4096'],
           keyUsages: ['DigitalSignature', 'KeyEncipherment'],
           extendedKeyUsages: ['ServerAuthentication'],
@@ -431,7 +553,10 @@
       const name = tmpl.name || tmpl.Name || '';
       const displayName = tmpl.displayName || tmpl.DisplayName || '';
       const description = tmpl.description || tmpl.Description || '';
-      const validityDays = tmpl.validityDays || tmpl.ValidityDays || 365;
+      // null = validità non rilevata dalla CA: mostrata come "n.d.", non
+      // come un valore di default fittizio.
+      const validityDays = tmpl.validityDays || tmpl.ValidityDays || null;
+      const validityUndetected = window.I18N ? window.I18N.t('validity_undetected', 'n.d. (non rilevata)') : 'n.d. (non rilevata)';
       const requiresApproval = tmpl.requiresApproval || tmpl.RequiresApproval || false;
       const storePrivateKeyForRetrieval = tmpl.storePrivateKeyForRetrieval !== undefined ? tmpl.storePrivateKeyForRetrieval : (tmpl.StorePrivateKeyForRetrieval !== undefined ? tmpl.StorePrivateKeyForRetrieval : true);
       const allowedKeyTypes = (tmpl.allowedKeyTypes || tmpl.AllowedKeyTypes || []).join(', ');
@@ -472,7 +597,7 @@
         </div>
         <div class="field-row">
           <label>${escapeHtml(lblValidity)}</label>
-          <input type="text" class="form-control" value="${validityDays}" disabled>
+          <input type="text" class="form-control" value="${validityDays != null ? validityDays : escapeHtml(validityUndetected)}" disabled>
           <small style="display:block; margin-top:0.25rem; opacity:0.7;">${escapeHtml(validityNote)}</small>
         </div>
         <div class="field-row">
@@ -611,12 +736,83 @@
       }
     }
 
+    // Ricostruisce i campi derivati della scheda CA:
+    //  - Config String = "server\Nome-CA"
+    //  - Credential Target = server CA (target nel Windows Credential Manager)
+    function syncDerivedCaFields(cardEl, ci) {
+      if (!cardEl) return;
+      const cas = portalConfig.cas || portalConfig.CAs || [];
+      const caObj = cas[ci];
+      const server = (cardEl.querySelector('.ca-field[data-field="caServer"]')?.value || '').trim();
+      const name = (cardEl.querySelector('.ca-field[data-field="caName"]')?.value || '').trim();
+
+      const cfgEl = cardEl.querySelector('.ca-field[data-field="configString"]');
+      const cfgVal = (server && name) ? `${server}\\${name}` : (server || name || '');
+      if (cfgEl) cfgEl.value = cfgVal;
+      caObj.configString = cfgVal;
+
+      const credEl = cardEl.querySelector('.ca-field[data-field="credentialTarget"]');
+      if (credEl) credEl.value = server;
+      caObj.credentialTarget = server || null;
+    }
+
+    // Popola la tendina del Nome CA con i nomi rilevati (e il valore corrente,
+    // se non presente nella lista). Se il rilevamento trova un solo nome, lo
+    // seleziona automaticamente.
+    function populateDiscoveredCaDropdown(cardEl, caObj, ci) {
+      const select = cardEl.querySelector('.ca-field[data-field="caName"]');
+      if (!select) return;
+
+      const current = (caObj.caName || '').trim();
+      const placeholder = window.I18N ? window.I18N.t('admin_ca_select_placeholder', '— seleziona un nome CA —') : '— seleziona un nome CA —';
+
+      // Deduplica case-insensitive preservando la forma originale del nome
+      const seen = new Set();
+      const opts = [];
+      for (const raw of [...(caObj.discoveredCaNames || []), current]) {
+        const n = String(raw || '').trim();
+        if (!n) continue;
+        const key = n.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        opts.push(n);
+      }
+
+      select.innerHTML = '';
+      const phOpt = document.createElement('option');
+      phOpt.value = '';
+      phOpt.textContent = placeholder;
+      select.appendChild(phOpt);
+      opts.forEach(n => {
+        const o = document.createElement('option');
+        o.value = n;
+        o.textContent = n;
+        select.appendChild(o);
+      });
+
+      const currentIdx = opts.findIndex(n => n.toLowerCase() === current.toLowerCase());
+      if (currentIdx !== -1) {
+        select.value = current;
+      } else if (opts.length === 1) {
+        // Un solo nome rilevato: selezione automatica
+        select.value = opts[0];
+      } else {
+        select.value = '';
+      }
+
+      caObj.caName = select.value;
+      syncDerivedCaFields(cardEl, ci);
+    }
+
     function addNewCa() {
       const cas = portalConfig.cas || portalConfig.CAs || [];
       cas.push({
         id: 'ca-nuova-' + (cas.length + 1),
         displayName: 'Nuova Certificate Authority',
         forestOrDomain: '',
+        caServer: '',
+        caName: '',
+        discoveredCaNames: [],
         configString: '',
         isDefault: false,
         useSimulator: true,
@@ -637,29 +833,40 @@
         PortalTitle: document.getElementById('cfg-title').value,
         PortalMode: document.getElementById('cfg-mode').value,
         DefaultCaId: document.getElementById('cfg-default-ca').value,
-        CAs: cas.map(ca => ({
-          Id: ca.id || ca.Id || '',
-          DisplayName: ca.displayName || ca.DisplayName || '',
-          ForestOrDomain: ca.forestOrDomain || ca.ForestOrDomain || '',
-          ConfigString: ca.configString || ca.ConfigString || '',
-          IsDefault: ca.isDefault || ca.IsDefault || false,
-          UseSimulator: ca.useSimulator || ca.UseSimulator || false,
-          Description: ca.description || ca.Description || '',
-          AuthMode: ca.authMode || ca.AuthMode || 'LocalIdentity',
-          CredentialTarget: ca.credentialTarget || ca.CredentialTarget || null,
-          Templates: (ca.templates || ca.Templates || []).map(t => ({
-            Name: t.name || t.Name || '',
-            DisplayName: t.displayName || t.DisplayName || '',
-            Description: t.description || t.Description || '',
-            RequiresApproval: t.requiresApproval || t.RequiresApproval || false,
-            StorePrivateKeyForRetrieval: t.storePrivateKeyForRetrieval !== undefined ? t.storePrivateKeyForRetrieval : (t.StorePrivateKeyForRetrieval !== undefined ? t.StorePrivateKeyForRetrieval : true),
-            ValidityDays: t.validityDays || t.ValidityDays || 365,
-            AllowedKeyTypes: t.allowedKeyTypes || t.AllowedKeyTypes || [],
-            KeyUsages: t.keyUsages || t.KeyUsages || [],
-            ExtendedKeyUsages: t.extendedKeyUsages || t.ExtendedKeyUsages || [],
-            AllowedGroups: t.allowedGroups || t.AllowedGroups || []
-          }))
-        }))
+        CAs: cas.map(ca => {
+          // Config String e Credential Target sono campi derivati:
+          //  - ConfigString = "ServerCA\NomeCA" (costruita dai due campi)
+          //  - CredentialTarget = ServerCA (target nel Windows Credential Manager)
+          const server = String(ca.caServer || '').trim();
+          const name = String(ca.caName || '').trim();
+          let configString = ca.configString || ca.ConfigString || '';
+          if (server && name) configString = `${server}\\${name}`;
+          else if (server) configString = server;
+          return {
+            Id: ca.id || ca.Id || '',
+            DisplayName: ca.displayName || ca.DisplayName || '',
+            ForestOrDomain: ca.forestOrDomain || ca.ForestOrDomain || '',
+            ConfigString: configString,
+            IsDefault: ca.isDefault || ca.IsDefault || false,
+            UseSimulator: ca.useSimulator || ca.UseSimulator || false,
+            Description: ca.description || ca.Description || '',
+            AuthMode: ca.authMode || ca.AuthMode || 'LocalIdentity',
+            CredentialTarget: server || null,
+            Templates: (ca.templates || ca.Templates || []).map(t => ({
+              Name: t.name || t.Name || '',
+              DisplayName: t.displayName || t.DisplayName || '',
+              Description: t.description || t.Description || '',
+              RequiresApproval: t.requiresApproval || t.RequiresApproval || false,
+              StorePrivateKeyForRetrieval: t.storePrivateKeyForRetrieval !== undefined ? t.storePrivateKeyForRetrieval : (t.StorePrivateKeyForRetrieval !== undefined ? t.StorePrivateKeyForRetrieval : true),
+              // null se non rilevata: non persistere mai un default fittizio
+              ValidityDays: t.validityDays || t.ValidityDays || null,
+              AllowedKeyTypes: t.allowedKeyTypes || t.AllowedKeyTypes || [],
+              KeyUsages: t.keyUsages || t.KeyUsages || [],
+              ExtendedKeyUsages: t.extendedKeyUsages || t.ExtendedKeyUsages || [],
+              AllowedGroups: t.allowedGroups || t.AllowedGroups || []
+            }))
+          };
+        })
       };
 
       try {
