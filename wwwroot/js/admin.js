@@ -368,7 +368,11 @@
             cas[ci].caName = e.target.value;
             // Se l'opzione selezionata ha un attributo data-server associato, aggiorna anche caServer
             const opt = e.target.selectedOptions ? e.target.selectedOptions[0] : null;
-            const srv = opt ? opt.dataset.server : null;
+            let srv = opt ? opt.dataset.server : null;
+            if (!srv && Array.isArray(cas[ci].discoveredCas)) {
+              const match = cas[ci].discoveredCas.find(c => (c.caName || '').toLowerCase() === (e.target.value || '').toLowerCase());
+              if (match && match.caServer) srv = match.caServer;
+            }
             if (srv) {
               cas[ci].caServer = srv;
               const srvInput = e.target.closest('.ca-card')?.querySelector('.ca-field[data-field="caServer"]');
@@ -424,7 +428,7 @@
           });
           if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
           const result = await resp.json();
-          const rawCas = result.cas || result.CAs || [];
+          const rawCas = result.cas || result.cAs || result.CAs || [];
           const rawNames = result.caNames || result.CaNames || [];
 
           let discovered = [];
@@ -453,6 +457,22 @@
             caObj.discoveredCas = discovered;
             caObj.discoveredCaNames = discovered.map(c => c.caName);
             populateDiscoveredCaDropdown(cardEl, caObj, ci);
+
+            // Se è presente una sola CA, garantiamo la selezione e compilazione immediata
+            // di Server CA, Config String e Credential Target
+            if (discovered.length === 1) {
+              const single = discovered[0];
+              if (single.caServer) {
+                caObj.caServer = single.caServer;
+                const srvInput = cardEl.querySelector('.ca-field[data-field="caServer"]');
+                if (srvInput) srvInput.value = single.caServer;
+              }
+              caObj.caName = single.caName;
+              const nameSelect = cardEl.querySelector('.ca-field[data-field="caName"]');
+              if (nameSelect) nameSelect.value = single.caName;
+              syncDerivedCaFields(cardEl, ci);
+            }
+
             const okMsg = window.I18N ? window.I18N.t('admin_ca_discover_found', '#{count} CA rilevata/e su «#{server}» (fonte: #{source}).', { count: discovered.length, server: targetLabel, source: resultSource }) : `${discovered.length} CA rilevata/e su «${targetLabel}» (fonte: ${resultSource}).`;
             showToast(okMsg, 'success');
           }
@@ -489,23 +509,43 @@
         const caObj = cas[ci];
         const cardEl = btn.closest('.ca-card');
 
-        // Sincronizza i valori correnti presenti nei campi della scheda
+        // Sincronizza i valori derivati prima di leggere i campi della scheda
+        syncDerivedCaFields(cardEl, ci);
+
         const idVal = cardEl.querySelector('.ca-field[data-field="id"]')?.value?.trim() || caObj.id || caObj.Id || '';
-        const cfgStrVal = cardEl.querySelector('.ca-field[data-field="configString"]')?.value?.trim() || caObj.configString || caObj.ConfigString || '';
+        let cfgStrVal = cardEl.querySelector('.ca-field[data-field="configString"]')?.value?.trim() || caObj.configString || caObj.ConfigString || '';
         const authModeVal = cardEl.querySelector('.ca-field[data-field="authMode"]')?.value || caObj.authMode || caObj.AuthMode || 'LocalIdentity';
-        const credTargetVal = cardEl.querySelector('.ca-field[data-field="credentialTarget"]')?.value?.trim() || caObj.credentialTarget || caObj.CredentialTarget || '';
+        let credTargetVal = cardEl.querySelector('.ca-field[data-field="credentialTarget"]')?.value?.trim() || caObj.credentialTarget || caObj.CredentialTarget || '';
         const useSimVal = cardEl.querySelector('.ca-toggle[data-field="useSimulator"]')?.checked ?? (caObj.useSimulator || caObj.UseSimulator || false);
+        const serverVal = (cardEl.querySelector('.ca-field[data-field="caServer"]')?.value || caObj.caServer || '').trim();
+        const nameVal = (cardEl.querySelector('.ca-field[data-field="caName"]')?.value || caObj.caName || '').trim();
+
+        if (!useSimVal) {
+          // Ricomponi configString in formato 'server\Nome-CA' se incompleta
+          if (!cfgStrVal.includes('\\') && serverVal && nameVal) {
+            cfgStrVal = `${serverVal}\\${nameVal}`;
+            const cfgEl = cardEl.querySelector('.ca-field[data-field="configString"]');
+            if (cfgEl) cfgEl.value = cfgStrVal;
+            caObj.configString = cfgStrVal;
+          }
+          if (!credTargetVal && serverVal) {
+            credTargetVal = serverVal;
+            const credEl = cardEl.querySelector('.ca-field[data-field="credentialTarget"]');
+            if (credEl) credEl.value = credTargetVal;
+            caObj.credentialTarget = credTargetVal;
+          }
+
+          if (!cfgStrVal || !cfgStrVal.includes('\\')) {
+            showToast('Config String non valida o incompleta. Assicurati che siano compilati sia il Server CA che il Nome CA (formato: server\\Nome-CA).', 'error');
+            return;
+          }
+        }
 
         caObj.id = idVal;
         caObj.configString = cfgStrVal;
         caObj.authMode = authModeVal;
         caObj.credentialTarget = credTargetVal;
         caObj.useSimulator = useSimVal;
-
-        if (!useSimVal && !cfgStrVal) {
-          showToast('Config String non impostata. Inserisci la stringa di connessione (es. server\\Nome-CA).', 'error');
-          return;
-        }
 
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-sm"></span> Interrogazione...';
@@ -802,8 +842,29 @@
       if (!cardEl) return;
       const cas = portalConfig.cas || portalConfig.CAs || [];
       const caObj = cas[ci];
-      const server = (cardEl.querySelector('.ca-field[data-field="caServer"]')?.value || '').trim();
-      const name = (cardEl.querySelector('.ca-field[data-field="caName"]')?.value || '').trim();
+      if (!caObj) return;
+
+      const srvInput = cardEl.querySelector('.ca-field[data-field="caServer"]');
+      const nameSelect = cardEl.querySelector('.ca-field[data-field="caName"]');
+
+      let server = (srvInput?.value || caObj.caServer || '').trim();
+      let name = (nameSelect?.value || caObj.caName || '').trim();
+
+      // Se il Server CA è vuoto ma il Nome CA corrisponde a una CA scoperta con server noto, usalo!
+      if (!server && name && Array.isArray(caObj.discoveredCas)) {
+        const match = caObj.discoveredCas.find(c => (c.caName || '').toLowerCase() === name.toLowerCase());
+        if (match && match.caServer) {
+          server = match.caServer.trim();
+          if (srvInput) srvInput.value = server;
+          caObj.caServer = server;
+        }
+      }
+
+      if (srvInput && server && !srvInput.value) {
+        srvInput.value = server;
+      }
+      caObj.caServer = server;
+      caObj.caName = name;
 
       const cfgEl = cardEl.querySelector('.ca-field[data-field="configString"]');
       const cfgVal = (server && name) ? `${server}\\${name}` : (server || name || '');
@@ -874,11 +935,13 @@
       const currentItem = items.find(i => i.caName.toLowerCase() === current.toLowerCase());
       if (currentItem) {
         select.value = currentItem.caName;
-        // Se il Server CA non era impostato ma l'item lo possiede, auto-compilalo
-        if (!caObj.caServer && currentItem.caServer) {
-          caObj.caServer = currentItem.caServer;
+        // Se l'item possiede il server e il campo input è vuoto, auto-compilalo
+        if (currentItem.caServer) {
           const srvInput = cardEl.querySelector('.ca-field[data-field="caServer"]');
-          if (srvInput) srvInput.value = currentItem.caServer;
+          if (srvInput && (!srvInput.value || !srvInput.value.trim())) {
+            srvInput.value = currentItem.caServer;
+            caObj.caServer = currentItem.caServer;
+          }
         }
       } else if (items.length === 1) {
         // Una sola CA rilevata: selezione automatica + auto-compilazione del Server CA

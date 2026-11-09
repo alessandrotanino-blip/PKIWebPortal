@@ -7,9 +7,8 @@
     <Version>2.5.0</Version>
     <AssemblyVersion>2.5.0.0</AssemblyVersion>
     <FileVersion>2.5.0.0</FileVersion>
-
-
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <DefaultItemExcludes>$(DefaultItemExcludes);publish\**;build\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

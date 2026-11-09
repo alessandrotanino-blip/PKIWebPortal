@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.DirectoryServices.Protocols;
 using System.Net;
@@ -1665,7 +1665,7 @@ public class AdcsService : IAdcsService
     {
         var discovered = new List<DiscoveredCaInfo>();
         const string filter = "(|(objectCategory=pKIEnrollmentService)(objectClass=pKIEnrollmentService))";
-        var requestAttrs = new[] { "cn", "dNSHostName", "displayName" };
+        var requestAttrs = new[] { "cn", "dNSHostName", "displayName", "servicePrincipalName", "caDnsName", "server", "msPKI-Enrollment-Servers" };
         string derivedBaseDn = $"CN=Configuration,{string.Join(",", domain.Split('.').Select(l => $"DC={l}"))}";
 
         LdapConnection OpenConnection(int port, bool useSsl)
@@ -1678,7 +1678,7 @@ public class AdcsService : IAdcsService
 
         // Risolve il DN reale del partizionamento Configuration dal rootDSE
         // (configurationNamingContext, fallback CN=Configuration + defaultNamingContext).
-        (string? BaseDn, string? Error) ResolveBaseDn(int port, bool useSsl)
+        (string? ConfigBaseDn, string? DefaultNamingContext, string? Error) ResolveBaseDn(int port, bool useSsl)
         {
             try
             {
@@ -1687,28 +1687,30 @@ public class AdcsService : IAdcsService
                     new[] { "defaultNamingContext", "configurationNamingContext", "rootDomainNamingContext" });
                 var resp = conn.SendRequest(rootReq, TimeSpan.FromSeconds(15)) as SearchResponse;
                 var entry = resp?.Entries?.OfType<SearchResultEntry>().FirstOrDefault();
-                if (entry == null) return (null, "Nessuna voce rootDSE restituita dal DC");
-                string? cfgCtx = entry.Attributes["configurationNamingContext"]?.GetValues(typeof(string)).Cast<string>().FirstOrDefault();
-                if (!string.IsNullOrWhiteSpace(cfgCtx)) return (cfgCtx, null);
+                if (entry == null) return (null, null, "Nessuna voce rootDSE restituita dal DC");
                 string? defCtx = entry.Attributes["defaultNamingContext"]?.GetValues(typeof(string)).Cast<string>().FirstOrDefault();
-                if (!string.IsNullOrWhiteSpace(defCtx)) return ($"CN=Configuration,{defCtx}", null);
-                return (null, "configurationNamingContext non presente in rootDSE");
+                string? cfgCtx = entry.Attributes["configurationNamingContext"]?.GetValues(typeof(string)).Cast<string>().FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(cfgCtx)) return (cfgCtx, defCtx, null);
+                if (!string.IsNullOrWhiteSpace(defCtx)) return ($"CN=Configuration,{defCtx}", defCtx, null);
+                return (null, defCtx, "configurationNamingContext non presente in rootDSE");
             }
             catch (LdapException ex)
             {
-                return (null, ex.Message);
+                return (null, null, ex.Message);
             }
         }
 
         // 1) Connessione al DC: LDAPS (636); fallback su LDAP (389) solo se SENZA credenziali esplicite.
         string configBaseDn = derivedBaseDn;
+        string? domainNamingContext = null;
         bool useSslMode = true;
         string? modeError = null;
 
-        var (base636, err636) = await Task.Run(() => ResolveBaseDn(636, useSsl: true)).ConfigureAwait(false);
+        var (base636, def636, err636) = await Task.Run(() => ResolveBaseDn(636, useSsl: true)).ConfigureAwait(false);
         if (base636 != null)
         {
             configBaseDn = base636;
+            domainNamingContext = def636;
         }
         else
         {
@@ -1718,10 +1720,11 @@ public class AdcsService : IAdcsService
                 _logger.LogWarning(
                     "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}): fallback su LDAP (389) con identità di processo per la rilevazione CA.",
                     SanitizeForLog(domain), SanitizeForLog(err636));
-                var (base389, err389) = await Task.Run(() => ResolveBaseDn(389, useSsl: false)).ConfigureAwait(false);
+                var (base389, def389, err389) = await Task.Run(() => ResolveBaseDn(389, useSsl: false)).ConfigureAwait(false);
                 if (base389 != null)
                 {
                     configBaseDn = base389;
+                    domainNamingContext = def389;
                     useSslMode = false;
                     modeError = null;
                 }
@@ -1808,6 +1811,48 @@ public class AdcsService : IAdcsService
                             {
                                 caHost = entry.Attributes["dNSHostName"].GetValues(typeof(string)).Cast<string>().FirstOrDefault()?.Trim() ?? string.Empty;
                             }
+                            if (string.IsNullOrEmpty(caHost) && entry.Attributes["caDnsName"] != null)
+                            {
+                                caHost = entry.Attributes["caDnsName"].GetValues(typeof(string)).Cast<string>().FirstOrDefault()?.Trim() ?? string.Empty;
+                            }
+                            if (string.IsNullOrEmpty(caHost) && entry.Attributes["servicePrincipalName"] != null)
+                            {
+                                foreach (var spn in entry.Attributes["servicePrincipalName"].GetValues(typeof(string)).Cast<string>())
+                                {
+                                    if (string.IsNullOrWhiteSpace(spn)) continue;
+                                    int slashIdx = spn.IndexOf('/');
+                                    if (slashIdx >= 0 && slashIdx < spn.Length - 1)
+                                    {
+                                        string hostPart = spn[(slashIdx + 1)..].Split(':')[0].Trim();
+                                        if (!string.IsNullOrEmpty(hostPart))
+                                        {
+                                            caHost = hostPart;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if (string.IsNullOrEmpty(caHost) && entry.Attributes["msPKI-Enrollment-Servers"] != null)
+                            {
+                                foreach (var rawUrl in entry.Attributes["msPKI-Enrollment-Servers"].GetValues(typeof(string)).Cast<string>())
+                                {
+                                    if (string.IsNullOrWhiteSpace(rawUrl)) continue;
+                                    var m = System.Text.RegularExpressions.Regex.Match(rawUrl, @"https?://(?<host>[A-Za-z0-9.-]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                                    if (m.Success)
+                                    {
+                                        caHost = m.Groups["host"].Value.Trim();
+                                        break;
+                                    }
+                                }
+                            }
+                            if (string.IsNullOrEmpty(caHost) && entry.Attributes["server"] != null)
+                            {
+                                caHost = entry.Attributes["server"].GetValues(typeof(string)).Cast<string>().FirstOrDefault()?.Trim() ?? string.Empty;
+                            }
+                            if (string.IsNullOrEmpty(caHost) && !string.IsNullOrWhiteSpace(serverFilter))
+                            {
+                                caHost = serverFilter.Trim();
+                            }
 
                             string? disp = entry.Attributes["displayName"]?.GetValues(typeof(string)).Cast<string>().FirstOrDefault()?.Trim();
 
@@ -1822,6 +1867,44 @@ public class AdcsService : IAdcsService
                         {
                             _logger.LogDebug(ex, "Errore nel parsing dell'entry CA da AD.");
                         }
+                    }
+
+                    // Se per alcune CA il server host è ancora vuoto, tenta la risoluzione tramite l'oggetto computer in AD (SPN Certsrv/*)
+                    if (discovered.Any(c => string.IsNullOrEmpty(c.CaServer)) && !string.IsNullOrWhiteSpace(domainNamingContext))
+                    {
+                        try
+                        {
+                            LdapConnection conn = referralConn ?? OpenConnection(useSslMode ? 636 : 389, useSslMode);
+                            var compReq = new SearchRequest(
+                                domainNamingContext,
+                                "(&(objectCategory=computer)(servicePrincipalName=Certsrv/*))",
+                                SearchScope.Subtree,
+                                new[] { "dNSHostName", "cn" });
+                            compReq.SizeLimit = 10;
+                            var compResp = await Task.Run(() => conn.SendRequest(compReq, TimeSpan.FromSeconds(10)) as SearchResponse).ConfigureAwait(false);
+                            if (compResp != null && compResp.ResultCode == ResultCode.Success && compResp.Entries.Count > 0)
+                            {
+                                var compEntry = compResp.Entries[0] as SearchResultEntry;
+                                string? compDns = compEntry?.Attributes["dNSHostName"]?.GetValues(typeof(string)).Cast<string>().FirstOrDefault()?.Trim();
+                                if (!string.IsNullOrEmpty(compDns))
+                                {
+                                    foreach (var c in discovered.Where(c => string.IsNullOrEmpty(c.CaServer)))
+                                    {
+                                        c.CaServer = compDns;
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Ricerca computer CA con SPN Certsrv non riuscita: fallback su valori pKIEnrollmentService.");
+                        }
+                    }
+
+                    foreach (var c in discovered)
+                    {
+                        _logger.LogInformation("CA rilevata in AD: CN='{Cn}', Server='{Server}', DisplayName='{DisplayName}'.",
+                            SanitizeForLog(c.CaName), SanitizeForLog(c.CaServer), SanitizeForLog(c.DisplayName ?? string.Empty));
                     }
 
                     // Se è stato specificato un serverFilter, filtra se ci sono corrispondenze

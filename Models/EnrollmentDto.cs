@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PkiPortal.Models;
 
 public class CertificateSubmissionRequest
@@ -102,12 +104,15 @@ public class TemplateDiscoveryResponse
 public class DiscoveredCaInfo
 {
     /// <summary>Nome canonico della CA (attributo cn in pKIEnrollmentService).</summary>
+    [JsonPropertyName("caName")]
     public string CaName { get; set; } = string.Empty;
 
     /// <summary>Hostname o FQDN del server che ospita la CA (attributo dNSHostName).</summary>
+    [JsonPropertyName("caServer")]
     public string CaServer { get; set; } = string.Empty;
 
     /// <summary>Nome descrittivo (attributo displayName), opzionale.</summary>
+    [JsonPropertyName("displayName")]
     public string? DisplayName { get; set; }
 }
 
@@ -133,18 +138,25 @@ public class CaDiscoveryRequest
 
 public class CaDiscoveryResponse
 {
+    [JsonPropertyName("success")]
     public bool Success { get; set; }
+
+    [JsonPropertyName("errorMessage")]
     public string? ErrorMessage { get; set; }
 
     /// <summary>Elenco delle CA rilevate con nome e relativo server host.</summary>
+    [JsonPropertyName("cas")]
     public List<DiscoveredCaInfo> CAs { get; set; } = new();
 
     /// <summary>Nomi CA rilevati (es. "Regione Liguria Sub CA"), deduplicati e ordinati.</summary>
+    [JsonPropertyName("caNames")]
     public List<string> CaNames { get; set; } = new();
 
     /// <summary>Fonte del rilevamento: "ad". Null se nessuna CA trovata.</summary>
+    [JsonPropertyName("source")]
     public string? Source { get; set; }
 
     /// <summary>Avvertenza non bloccante.</summary>
+    [JsonPropertyName("warning")]
     public string? Warning { get; set; }
 }
