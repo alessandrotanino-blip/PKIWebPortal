@@ -457,7 +457,7 @@ brazilianportuguese.ReadyMemoPreserveNote=A configuração existente (appsetting
 ; web.config viene copiato alla prima installazione o con "Sovrascrivi web.config".
 ; ----------------------------------------------------------------------------
 [Files]
-Source: "..\publish\*";        DestDir: "{app}"; Flags: recursesubdirs createallsubdirs; Excludes: "appsettings*.json,web.config"
+Source: "..\publish\*";        DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "appsettings*.json,web.config"
 Source: "..\publish\appsettings.example.json"; DestDir: "{app}"
 Source: "..\publish\web.config";       DestDir: "{app}"; Check: ShouldCopyConfig('web.config')
 
@@ -1233,7 +1233,7 @@ end;
 // ----------------------------------------------------------------------------
 procedure PreInstallStopIIS;
 var
-  SiteName, Pool, AppCmd: String;
+  SiteName, Pool, AppCmd, AppDir, StopScript: String;
   EC: Integer;
 begin
   SiteName := TrimS(SiteNameEdit.Text);
@@ -1242,14 +1242,39 @@ begin
   if SiteName = '' then
     SiteName := 'PkiWebEnrollment';
   Pool := SiteName + '_Pool';
+  AppDir := ExpandConstant('{app}');
+
   AppCmd := ExpandConstant('{sys}\inetsrv\appcmd.exe');
-  if not FileExists(AppCmd) then
-    Exit;  // IIS non presente: lo script installerà i prerequisiti
-  Exec(AppCmd, 'stop site /site.name:"' + SiteName + '"', '', SW_HIDE, ewWaitUntilTerminated, EC);
-  Exec(AppCmd, 'stop apppool /apppool.name:"' + Pool + '"', '', SW_HIDE, ewWaitUntilTerminated, EC);
-  Sleep(3000);
-  // Eventuali w3wp "appesi" di questo pool
-  Exec(GetPS, '-NoProfile -NonInteractive -Command "Get-CimInstance Win32_Process | Where-Object { (Name -eq ''w3wp.exe'') -and (CommandLine -match ''*' + Pool + ''') } | ForEach-Object { Stop-Process -Id ProcessId -Force -ErrorAction SilentlyContinue }"', '', SW_HIDE, ewWaitUntilTerminated, EC);
+  if FileExists(AppCmd) then
+  begin
+    Exec(AppCmd, 'stop site /site.name:"' + SiteName + '"', '', SW_HIDE, ewWaitUntilTerminated, EC);
+    Exec(AppCmd, 'stop apppool /apppool.name:"' + Pool + '"', '', SW_HIDE, ewWaitUntilTerminated, EC);
+  end;
+
+  // Crea app_offline.htm per forzare ANCM a rilasciare immediatamente i binari
+  if DirExists(AppDir) then
+  begin
+    SaveStringToFile(AppDir + '\app_offline.htm', '<html><body>Upgrade in progress</body></html>', False);
+  end;
+
+  Sleep(1500);
+
+  // Termina con certezza qualsiasi processo che tiene aperto PkiPortal (w3wp, PkiPortal.exe, dotnet)
+  StopScript := ExpandConstant('{tmp}\pki_stop.ps1');
+  SaveStringToFile(StopScript,
+    '$pool = "' + Pool + '"' + #13#10 +
+    '$appDir = "' + AppDir + '"' + #13#10 +
+    'Get-Process -Name "PkiPortal" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue' + #13#10 +
+    'Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {' + #13#10 +
+    '  ($_.Name -eq "w3wp.exe" -and ($_.CommandLine -like ("*" + $pool + "*") -or ($appDir -and $_.CommandLine -like ("*" + $appDir + "*")))) -or' + #13#10 +
+    '  ($_.Name -eq "dotnet.exe" -and $_.CommandLine -like "*PkiPortal*") -or' + #13#10 +
+    '  ($_.Name -eq "PkiPortal.exe")' + #13#10 +
+    '} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }' + #13#10 +
+    'Start-Sleep -Milliseconds 500' + #13#10, False);
+
+  Exec(GetPS, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + StopScript + '"', '', SW_HIDE, ewWaitUntilTerminated, EC);
+  DeleteFile(StopScript);
+  Sleep(1000);
 end;
 
 // ----------------------------------------------------------------------------
