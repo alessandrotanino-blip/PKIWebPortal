@@ -622,8 +622,8 @@ admin.MapPost("/templates/discover", async ([FromBody] TemplateDiscoveryRequest 
     return Results.Ok(templates);
 });
 
-// POST /api/admin/ca/discover - Rileva i nomi CA ospitati su un server (AD + fallback CAPL)
-// Consente al pannello admin di proporre il Nome CA in una tendina e di
+// POST /api/admin/ca/discover - Rileva le CA di Active Directory (query LDAP su DC, oggetti pKIEnrollmentService)
+// Consente al pannello admin di proporre il Nome CA e Server CA in una tendina e di
 // costruire automaticamente la ConfigString "server\Nome-CA".
 admin.MapPost("/ca/discover", async ([FromBody] CaDiscoveryRequest request, HttpContext ctx, IAdcsService adcsService) =>
 {

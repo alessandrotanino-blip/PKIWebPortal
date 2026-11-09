@@ -97,25 +97,37 @@ public class TemplateDiscoveryResponse
 }
 
 /// <summary>
-/// Richiesta di rilevamento dei nomi CA ospitati su un server AD CS.
-/// Il nome della CA (e quindi la ConfigString "server\Nome-CA") può essere
-/// dedotto automaticamente una volta identificato il dominio e il server:
-/// 1) interrogazione del partizionamento AD Configuration (attributo caDnsName
-///    degli oggetti CA), con credenziali esplicite in modalità CredentialManager;
-/// 2) fallback sulla pagina CAPL del server CA (http/https://server/CertSrv/CertSrv.dll).
+/// Informazioni su una Certification Authority rilevata in Active Directory.
+/// </summary>
+public class DiscoveredCaInfo
+{
+    /// <summary>Nome canonico della CA (attributo cn in pKIEnrollmentService).</summary>
+    public string CaName { get; set; } = string.Empty;
+
+    /// <summary>Hostname o FQDN del server che ospita la CA (attributo dNSHostName).</summary>
+    public string CaServer { get; set; } = string.Empty;
+
+    /// <summary>Nome descrittivo (attributo displayName), opzionale.</summary>
+    public string? DisplayName { get; set; }
+}
+
+/// <summary>
+/// Richiesta di rilevamento delle Certification Authority in Active Directory.
+/// Può essere eseguita specificando la sola Foresta/Dominio AD, oppure
+/// il Server CA (da cui viene dedotto il dominio), oppure entrambi.
 /// </summary>
 public class CaDiscoveryRequest
 {
-    /// <summary>Foresta o dominio AD da interrogare (opzionale ma consigliato).</summary>
+    /// <summary>Foresta o dominio AD da interrogare.</summary>
     public string? ForestOrDomain { get; set; }
 
-    /// <summary>Hostname/DNS del server CA (es. "vdpki.vd.ld"). Obbligatorio.</summary>
+    /// <summary>Hostname/DNS del server CA (opzionale se è specificata la foresta/dominio).</summary>
     public string? CaServer { get; set; }
 
     /// <summary>"LocalIdentity" o "CredentialManager" (come in TemplateDiscoveryRequest).</summary>
     public string? AuthMode { get; set; }
 
-    /// <summary>Target della credenziale in Windows Credential Manager (default: CaServer).</summary>
+    /// <summary>Target della credenziale in Windows Credential Manager (default: CaServer o ForestOrDomain).</summary>
     public string? CredentialTarget { get; set; }
 }
 
@@ -124,15 +136,15 @@ public class CaDiscoveryResponse
     public bool Success { get; set; }
     public string? ErrorMessage { get; set; }
 
-    /// <summary>Nomi CA rilevati (es. "Foresta1-IssuingCA"), deduplicati e ordinati.</summary>
+    /// <summary>Elenco delle CA rilevate con nome e relativo server host.</summary>
+    public List<DiscoveredCaInfo> CAs { get; set; } = new();
+
+    /// <summary>Nomi CA rilevati (es. "Regione Liguria Sub CA"), deduplicati e ordinati.</summary>
     public List<string> CaNames { get; set; } = new();
 
-    /// <summary>Fonte del rilevamento: "ad", "capl" o "ad+capl". Null se nessun nome trovato.</summary>
+    /// <summary>Fonte del rilevamento: "ad". Null se nessuna CA trovata.</summary>
     public string? Source { get; set; }
 
-    /// <summary>
-    /// Avvertenza non bloccante (es. CAPL letta con validazione TLS
-    /// disattivata perché il certificato della CA non è fidato dal processo).
-    /// </summary>
+    /// <summary>Avvertenza non bloccante.</summary>
     public string? Warning { get; set; }
 }

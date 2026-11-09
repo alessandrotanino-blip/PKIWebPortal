@@ -10,13 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### New Features & Improvements
 
-- **Automatic CA Name Detection in Configuration (redundant fields removed)**:
+- **Automatic Certification Authority Detection in Configuration (redundant fields removed)**:
   - The CA card in the admin panel no longer requires typing the **Config String** by hand: the **CA Server** and **CA Name** fields build it automatically in `server\CA-Name` form.
-  - New **🔍 Detect CAs** button: identifies the CA names hosted on the specified server and offers them in a **dropdown** to select the CA Name (auto-selection when a single CA is detected).
-  - **Credential Target** is no longer a free-form field: it is derived automatically from the CA Server (it always matches the credential target in Windows Credential Manager, as the server-side fallback already did).
-  - New endpoint `POST /api/admin/ca/discover` (admin-only, CSRF-protected) that queries:
-    1. the AD **Configuration** partition of the forest (standard `dNSHostName` attribute and `pKIEnrollmentService` class, along with `caDnsName`/`Certsrv/<host>` SPN), with tolerant FQDN/hostname matching and, in **CredentialManager** mode, the credential for the target (LDAPS enforced, no cleartext fallback). The partition base DN is now resolved dynamically via the **rootDSE** (`configurationNamingContext`) instead of being built from the domain name: the Forest / Domain field also accepts the CA server's DNS name or a NetBIOS name, and in multi-domain forests the partition DN uses the root domain. **LDAP referrals** returned by a DC are followed automatically (up to 2 hops), and errors report the queried domain and, on referral, how to fix the Forest / Domain field;
-    2. as a fallback, the CA server's **CAPL page** (`https://<server>/CertSrv/CertSrv.dll`, then `http://`), extracting the `Machine$<CA-Name>` links (including names with spaces, percent-encoded). The CA Server field also accepts `host:port` for a CAPL on a non-standard port. Error messages report **all** attempted sources (https and http, not just the last attempt), and when the CA server's TLS certificate is not trusted by the portal process the CAPL read is retried with TLS validation disabled (this read-only discovery only), flagged with a non-blocking **warning**.
+  - New **🔍 Detect CAs** button: discovers CAs registered in Active Directory starting from either the **Forest / Domain** alone or the CA Server, offering them in a **dropdown** (auto-selection when a single CA is detected).
+  - Selecting a CA automatically fills both **CA Name** and **CA Server** (retrieved from the standard `dNSHostName` attribute in AD).
+  - **Credential Target** is no longer a free-form field: it is derived automatically from the CA Server (it always matches the credential target in Windows Credential Manager).
+  - New endpoint `POST /api/admin/ca/discover` (admin-only, CSRF-protected) that queries exclusively the AD **Configuration** partition (standard `dNSHostName` attribute and `pKIEnrollmentService` class) via LDAP/LDAPS on the Domain Controller. No HTTP/HTTPS connections (ports 80/443) are made to the CA server. The partition base DN is resolved dynamically via the **rootDSE** (`configurationNamingContext`) and **LDAP referrals** returned by a DC are followed automatically (up to 2 hops).
+  - Manual entry option (`✏️ Enter manually...`) for standalone or non-AD-integrated Certification Authorities.
   - Existing Config Strings are automatically split into CA Server + CA Name on load (no migration: legacy `appsettings.json` files remain valid and are re-saved in the same form).
   - Full translations (IT, EN, FR, DE, ES, PT, ZH) in `i18n.js`.
 

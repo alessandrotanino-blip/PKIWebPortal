@@ -208,7 +208,7 @@
       const lblCaServer = window.I18N ? window.I18N.t('admin_lbl_ca_server', 'Server CA') : 'Server CA';
       const lblCaName = window.I18N ? window.I18N.t('admin_lbl_ca_name', 'Nome CA') : 'Nome CA';
       const btnDiscoverCa = window.I18N ? window.I18N.t('admin_btn_discover_ca', '🔍 Rileva CA') : '🔍 Rileva CA';
-      const hintCaName = window.I18N ? window.I18N.t('admin_hint_ca_name', 'Clicca «Rileva CA» per enumerare le CA ospitate sul server: il portale interroga il dominio AD (attributo caDnsName) e, in fallback, la pagina CAPL del server CA.') : 'Clicca «Rileva CA» per enumerare le CA ospitate sul server: il portale interroga il dominio AD (attributo caDnsName) e, in fallback, la pagina CAPL del server CA.';
+      const hintCaName = window.I18N ? window.I18N.t('admin_hint_ca_name', 'Clicca «Rileva CA» per enumerare le CA di Active Directory: il portale interroga il partizionamento Configuration della foresta (oggetti pKIEnrollmentService).') : 'Clicca «Rileva CA» per enumerare le CA di Active Directory: il portale interroga il partizionamento Configuration della foresta (oggetti pKIEnrollmentService).';
       const hintConfigString = window.I18N ? window.I18N.t('admin_hint_config_string', 'Costruita automaticamente in forma server\\nome-CA: non richiede input manuale.') : 'Costruita automaticamente in forma server\\nome-CA: non richiede input manuale.';
       const hintCredTarget = window.I18N ? window.I18N.t('admin_hint_credential_target', 'Dedotto automaticamente dal Server CA (target della credenziale nel Windows Credential Manager).') : 'Dedotto automaticamente dal Server CA (target della credenziale nel Windows Credential Manager).';
       const caNamePlaceholder = window.I18N ? window.I18N.t('admin_ca_select_placeholder', '— seleziona un nome CA —') : '— seleziona un nome CA —';
@@ -353,12 +353,26 @@
             if (manualName && manualName.trim()) {
               const trimmed = manualName.trim();
               cas[ci].caName = trimmed;
+              if (!cas[ci].discoveredCas) cas[ci].discoveredCas = [];
+              if (!cas[ci].discoveredCas.some(c => (c.caName || '').toLowerCase() === trimmed.toLowerCase())) {
+                cas[ci].discoveredCas.push({ caName: trimmed, caServer: cas[ci].caServer || '' });
+              }
               if (!cas[ci].discoveredCaNames) cas[ci].discoveredCaNames = [];
               if (!cas[ci].discoveredCaNames.includes(trimmed)) cas[ci].discoveredCaNames.push(trimmed);
               populateDiscoveredCaDropdown(e.target.closest('.ca-card'), cas[ci], ci);
               e.target.value = trimmed;
             } else {
               e.target.value = cas[ci].caName || '';
+            }
+          } else if (field === 'caName') {
+            cas[ci].caName = e.target.value;
+            // Se l'opzione selezionata ha un attributo data-server associato, aggiorna anche caServer
+            const opt = e.target.selectedOptions ? e.target.selectedOptions[0] : null;
+            const srv = opt ? opt.dataset.server : null;
+            if (srv) {
+              cas[ci].caServer = srv;
+              const srvInput = e.target.closest('.ca-card')?.querySelector('.ca-field[data-field="caServer"]');
+              if (srvInput) srvInput.value = srv;
             }
           } else {
             cas[ci][field] = e.target.value;
@@ -372,7 +386,7 @@
         });
       });
 
-      // Rilevamento automatico del Nome CA dal server (endpoint /api/admin/ca/discover)
+      // Rilevamento automatico delle CA in Active Directory (endpoint /api/admin/ca/discover)
       card.querySelector('.btn-discover-ca').addEventListener('click', async (e) => {
         const btn = e.target.closest('.btn-discover-ca');
         const ci = parseInt(btn.dataset.ca);
@@ -386,8 +400,9 @@
         caObj.forestOrDomain = forestVal;
         caObj.caServer = serverVal;
 
-        if (!serverVal) {
-          const msg = window.I18N ? window.I18N.t('admin_ca_server_required', 'Inserisci il Server CA da interrogare.') : 'Inserisci il Server CA da interrogare.';
+        const targetLabel = forestVal || serverVal;
+        if (!targetLabel) {
+          const msg = window.I18N ? window.I18N.t('admin_ca_server_required', 'Inserisci la Foresta / Dominio o il Server CA da interrogare.') : 'Inserisci la Foresta / Dominio o il Server CA da interrogare.';
           showToast(msg, 'error');
           return;
         }
@@ -404,24 +419,41 @@
               forestOrDomain: forestVal,
               caServer: serverVal,
               authMode: authModeVal,
-              credentialTarget: serverVal
+              credentialTarget: serverVal || forestVal
             })
           });
           if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
           const result = await resp.json();
+          const rawCas = result.cas || result.CAs || [];
           const rawNames = result.caNames || result.CaNames || [];
-          const names = Array.isArray(rawNames) ? rawNames.filter(n => n && String(n).trim()) : [];
-          const resultError = result.errorMessage || result.ErrorMessage || '';
-          const resultSource = result.source || result.Source || 'AD/CAPL';
 
-          if (names.length === 0) {
-            const msg = window.I18N ? window.I18N.t('admin_ca_discover_none', 'Nessuna CA rilevata su «#{server}»: verifica dominio, credenziali o accesso CAPL anonimo.', { server: serverVal }) : `Nessuna CA rilevata su «${serverVal}»: verifica dominio, credenziali o accesso CAPL anonimo.`;
+          let discovered = [];
+          if (Array.isArray(rawCas) && rawCas.length > 0) {
+            discovered = rawCas.map(c => ({
+              caName: (c.caName || c.CaName || '').trim(),
+              caServer: (c.caServer || c.CaServer || '').trim(),
+              displayName: (c.displayName || c.DisplayName || '').trim()
+            })).filter(c => c.caName);
+          } else if (Array.isArray(rawNames) && rawNames.length > 0) {
+            discovered = rawNames.filter(n => n && String(n).trim()).map(n => ({
+              caName: String(n).trim(),
+              caServer: serverVal,
+              displayName: String(n).trim()
+            }));
+          }
+
+          const resultError = result.errorMessage || result.ErrorMessage || '';
+          const resultSource = result.source || result.Source || 'AD';
+
+          if (discovered.length === 0) {
+            const msg = window.I18N ? window.I18N.t('admin_ca_discover_none', 'Nessuna CA rilevata su «#{server}»: verifica dominio o credenziali.', { server: targetLabel }) : `Nessuna CA rilevata su «${targetLabel}»: verifica dominio o credenziali.`;
             const detail = resultError ? ` (${resultError})` : '';
             showToast(msg + detail, 'error');
           } else {
-            caObj.discoveredCaNames = names;
+            caObj.discoveredCas = discovered;
+            caObj.discoveredCaNames = discovered.map(c => c.caName);
             populateDiscoveredCaDropdown(cardEl, caObj, ci);
-            const okMsg = window.I18N ? window.I18N.t('admin_ca_discover_found', '#{count} nome CA rilevati su «#{server}» (fonte: #{source}).', { count: names.length, server: serverVal, source: resultSource }) : `${names.length} nome CA rilevati su «${serverVal}» (fonte: ${resultSource}).`;
+            const okMsg = window.I18N ? window.I18N.t('admin_ca_discover_found', '#{count} CA rilevata/e su «#{server}» (fonte: #{source}).', { count: discovered.length, server: targetLabel, source: resultSource }) : `${discovered.length} CA rilevata/e su «${targetLabel}» (fonte: ${resultSource}).`;
             showToast(okMsg, 'success');
           }
         } catch (err) {
@@ -783,9 +815,9 @@
       caObj.credentialTarget = server || null;
     }
 
-    // Popola la tendina del Nome CA con i nomi rilevati (e il valore corrente,
-    // se non presente nella lista). Se il rilevamento trova un solo nome, lo
-    // seleziona automaticamente.
+    // Popola la tendina del Nome CA con le CA rilevate (e il valore corrente,
+    // se non presente nella lista). Se il rilevamento trova una sola CA, la
+    // seleziona automaticamente e auto-compila anche il Server CA.
     function populateDiscoveredCaDropdown(cardEl, caObj, ci) {
       const select = cardEl.querySelector('.ca-field[data-field="caName"]');
       if (!select) return;
@@ -793,16 +825,31 @@
       const current = (caObj.caName || '').trim();
       const placeholder = window.I18N ? window.I18N.t('admin_ca_select_placeholder', '— seleziona un nome CA —') : '— seleziona un nome CA —';
 
-      // Deduplica case-insensitive preservando la forma originale del nome
+      // Costruisci elenco normalizzato di { caName, caServer }
+      const items = [];
       const seen = new Set();
-      const opts = [];
-      for (const raw of [...(caObj.discoveredCaNames || []), current]) {
-        const n = String(raw || '').trim();
-        if (!n || n === '__custom__') continue;
+
+      function addItem(name, server) {
+        const n = String(name || '').trim();
+        if (!n || n === '__custom__') return;
         const key = n.toLowerCase();
-        if (seen.has(key)) continue;
+        if (seen.has(key)) return;
         seen.add(key);
-        opts.push(n);
+        items.push({ caName: n, caServer: String(server || '').trim() });
+      }
+
+      if (Array.isArray(caObj.discoveredCas)) {
+        for (const c of caObj.discoveredCas) {
+          addItem(c.caName || c.CaName, c.caServer || c.CaServer);
+        }
+      }
+      if (Array.isArray(caObj.discoveredCaNames)) {
+        for (const n of caObj.discoveredCaNames) {
+          addItem(n, caObj.caServer || '');
+        }
+      }
+      if (current) {
+        addItem(current, caObj.caServer || '');
       }
 
       select.innerHTML = '';
@@ -810,23 +857,39 @@
       phOpt.value = '';
       phOpt.textContent = placeholder;
       select.appendChild(phOpt);
-      opts.forEach(n => {
+
+      items.forEach(item => {
         const o = document.createElement('option');
-        o.value = n;
-        o.textContent = n;
+        o.value = item.caName;
+        o.textContent = item.caServer ? `${item.caName} (${item.caServer})` : item.caName;
+        if (item.caServer) o.dataset.server = item.caServer;
         select.appendChild(o);
       });
+
       const customOpt = document.createElement('option');
       customOpt.value = '__custom__';
       customOpt.textContent = window.I18N ? window.I18N.t('admin_ca_custom_option', '✏️ Inserisci manualmente...') : '✏️ Inserisci manualmente...';
       select.appendChild(customOpt);
 
-      const currentIdx = opts.findIndex(n => n.toLowerCase() === current.toLowerCase());
-      if (currentIdx !== -1) {
-        select.value = current;
-      } else if (opts.length === 1) {
-        // Un solo nome rilevato: selezione automatica
-        select.value = opts[0];
+      const currentItem = items.find(i => i.caName.toLowerCase() === current.toLowerCase());
+      if (currentItem) {
+        select.value = currentItem.caName;
+        // Se il Server CA non era impostato ma l'item lo possiede, auto-compilalo
+        if (!caObj.caServer && currentItem.caServer) {
+          caObj.caServer = currentItem.caServer;
+          const srvInput = cardEl.querySelector('.ca-field[data-field="caServer"]');
+          if (srvInput) srvInput.value = currentItem.caServer;
+        }
+      } else if (items.length === 1) {
+        // Una sola CA rilevata: selezione automatica + auto-compilazione del Server CA
+        const single = items[0];
+        select.value = single.caName;
+        caObj.caName = single.caName;
+        if (single.caServer) {
+          caObj.caServer = single.caServer;
+          const srvInput = cardEl.querySelector('.ca-field[data-field="caServer"]');
+          if (srvInput) srvInput.value = single.caServer;
+        }
       } else {
         select.value = '';
       }
