@@ -26,6 +26,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - **Custom installation** option: allows viewing and modifying all parameters, pre-populated with previously configured values.
   - New `-PreserveAppPoolIdentity` switch in `Install-PkiPortal.ps1`: updates IIS while preserving the configured AppPool identity and encrypted passwords without requiring re-entry.
 
+### Installer Fixes & Improvements (v2.5.0)
+
+- **Live IIS Port Detection**: Site port detection now always queries IIS live via `Get-WebBinding` rather than reading cached registry values, fixing mismatches where a site on port 443 was displayed as port 8443.
+- **`certificateHash` String and Byte[] Compatibility**: Handled type variance returned by IIS/PowerShell 5.1 (`[byte[]]` vs `[string]`) to prevent malformed thumbprints in SSL certificate detection.
+- **`-File` Detection Execution**: Temporary detection script is executed using `-File` instead of `-Command` to prevent interpolation issues with special variables (`$matches`, `$host`).
+- **`New-WebBinding` Syntax Fix**: Removed unsupported parameters in PowerShell 5.1 (`-Ssl`, `-Force`).
+- **File In-Use Lock Resolution**: Worker process `w3wp.exe` is stopped by PID before file extraction, `app_offline.htm` is placed to release binaries from ANCM, and shutdown sequence is executed on the `ssInstall` step.
+
 ## [2.4.0] - 2026-11-06
 
 ### New Features & Improvements

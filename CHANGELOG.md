@@ -26,6 +26,14 @@ Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/)
   - Opzione **Installazione personalizzata**: consente in qualsiasi momento di riattivare le pagine del wizard con tutti i valori pregressi già precompilati per consentire modifiche mirate.
   - Nuovo switch `-PreserveAppPoolIdentity` nello script `Install-PkiPortal.ps1`: aggiorna il sito IIS preservando l'identità configurata nel pool applicativo e le relative password crittografate senza doverle reinserire.
 
+### Correzioni Installer (v2.5.0)
+
+- **Rilevamento porta IIS reale**: il rilevamento della porta del sito esistente interroga ora sempre IIS live tramite `Get-WebBinding` invece di leggere il valore in cache dal registro, eliminando il disallineamento che mostrava `8443` per siti su porta `443`.
+- **`certificateHash` come stringa o byte[]**: gestita la varianza del tipo restituito da IIS/PowerShell 5.1 (`[byte[]]` vs `[string]`) per evitare thumbprint malformati nel rilevamento del certificato SSL.
+- **Script di rilevamento `-File` anziché `-Command`**: il file temporaneo di rilevamento viene ora eseguito con `-File` per evitare l'interpolazione di variabili speciali (`$matches`, `$host`) nella stringa `-Command`.
+- **Sintassi `New-WebBinding`**: rimossi i parametri non supportati in PS 5.1 (`-Ssl`, `-Force`); il binding HTTPS viene configurato tramite `netsh http add sslcert` già eseguito da `Install-PkiPortal.ps1`.
+- **File bloccati da IIS durante l'upgrade**: il worker process `w3wp.exe` viene terminato tramite PID rilevato da `appcmd list wp` prima dell'estrazione dei file; `app_offline.htm` viene creato in anticipo per forzare ANCM a rilasciare i DLL; la sequenza di stop viene invocata all'evento `ssInstall` di Inno Setup.
+
 ## [2.4.0] - 2026-11-06
 
 ### Novità & Funzionalità
