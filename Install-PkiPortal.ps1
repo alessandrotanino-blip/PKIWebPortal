@@ -66,6 +66,10 @@
 .PARAMETER SkipFirewall
     If specified, does not create the firewall rule.
 
+.PARAMETER PreserveAppPoolIdentity
+    If specified (upgrade mode), preserves the existing Application Pool identity and its
+    credentials without modifying them or requiring passwords.
+
 .PARAMETER OverwriteConfig
     If specified, overwrites appsettings.json and web.config in the installation folder
     even if they already exist. Without this parameter, existing configuration files are
@@ -118,6 +122,7 @@ param(
     [string[]]$NuGetSource     = @(),
     [switch]$SkipDotnetPublish,
     [switch]$SkipFirewall,
+    [switch]$PreserveAppPoolIdentity,
     [Alias("OverwriteAppSettings")]
     [switch]$OverwriteConfig,
     [switch]$Force
@@ -498,13 +503,17 @@ else {
 $existingSite = Get-Website -Name $SiteName -ErrorAction SilentlyContinue
 if ($existingSite) {
     Write-Warn "Il sito '$SiteName' esiste già in IIS." "Site '$SiteName' already exists in IIS."
-    $overwrite = if ($Force) { 'S' } else { Read-Host (Msg "  Sovrascrivere la configurazione del sito esistente? (S/N)" "  Overwrite existing site configuration? (Y/N)") }
-    if ($overwrite -notmatch '^[sSyY]$') {
-        Write-Fail "Installazione interrotta dall'utente." "Installation aborted by user."
-        exit 1
+    if ($PreserveAppPoolIdentity) {
+        Write-Info (Msg "Modalità aggiornamento: la configurazione e i binding del sito esistente verranno aggiornati in-place." "Upgrade mode: existing site configuration and bindings will be updated in-place.")
+    } else {
+        $overwrite = if ($Force) { 'S' } else { Read-Host (Msg "  Sovrascrivere la configurazione del sito esistente? (S/N)" "  Overwrite existing site configuration? (Y/N)") }
+        if ($overwrite -notmatch '^[sSyY]$') {
+            Write-Fail "Installazione interrotta dall'utente." "Installation aborted by user."
+            exit 1
+        }
+        Write-Info "Rimozione del sito IIS esistente '$SiteName'..." "Removing existing IIS site '$SiteName'..."
+        Remove-Website -Name $SiteName -ErrorAction SilentlyContinue
     }
-    Write-Info "Rimozione del sito IIS esistente '$SiteName'..." "Removing existing IIS site '$SiteName'..."
-    Remove-Website -Name $SiteName -ErrorAction SilentlyContinue
 }
 
 # Check that the port is not in use by another site (except Default Web Site on 80/443)
@@ -857,7 +866,10 @@ else {
 & $appcmd set apppool /apppool.name:"$appPoolName" /managedRuntimeVersion:"" /enable32BitAppOnWin64:false /startMode:AlwaysRunning /processModel.idleTimeout:00:00:00 | Out-Null
 
 # Identity configuration
-if ($AppPoolIdentity -eq "ApplicationPoolIdentity") {
+if ($PreserveAppPoolIdentity -and $existingPool) {
+    Write-OK (Msg "Identità Application Pool esistente preservata (aggiornamento)." "Existing Application Pool identity preserved (upgrade).")
+}
+elseif ($AppPoolIdentity -eq "ApplicationPoolIdentity") {
     & $appcmd set apppool /apppool.name:"$appPoolName" /processModel.identityType:ApplicationPoolIdentity | Out-Null
     Write-OK "Identita pool: ApplicationPoolIdentity (predefinita)" "Pool identity: ApplicationPoolIdentity (default)"
 }
@@ -915,93 +927,133 @@ Write-Info "Pool configurato: startMode=AlwaysRunning, idleTimeout=0, 64-bit, No
 # STEP 6: Create the IIS Site
 # ============================================================================
 
-Write-Step "STEP 6: Creazione Sito IIS '$SiteName' (porta $SitePort)" "STEP 6: Creating IIS Site '$SiteName' (port $SitePort)"
+Write-Step "STEP 6: Creazione/Aggiornamento Sito IIS '$SiteName' (porta $SitePort)" "STEP 6: Creating/Updating IIS Site '$SiteName' (port $SitePort)"
 
 $protocol = if ($UseHttps) { "https" } else { "http" }
 $bindingInfo = "*:${SitePort}:${SiteHostHeader}"
 
 Write-Info "Binding: $protocol su $bindingInfo" "Binding: $protocol on $bindingInfo"
 
-if ($UseHttps) {
-    if ([string]::IsNullOrWhiteSpace($CertThumbprint)) {
-        Write-Warn "Binding HTTPS richiesto ma nessun -CertThumbprint specificato." "HTTPS binding requested but no -CertThumbprint specified."
-        Write-Info "Ricerca di un certificato valido nello store locale..." "Searching for a valid certificate in local machine store..."
+$targetSite = Get-Website -Name $SiteName -ErrorAction SilentlyContinue
 
-        # Attempt to find a certificate matching the server name
-        $serverCerts = Get-ChildItem Cert:\LocalMachine\My |
-            Where-Object { $_.NotAfter -gt (Get-Date) -and $_.HasPrivateKey } |
-            Sort-Object NotAfter -Descending
+if ($targetSite) {
+    Write-Info (Msg "Aggiornamento percorso fisico e Application Pool del sito '$SiteName'..." "Updating physical path and Application Pool for site '$SiteName'...")
+    Set-ItemProperty "IIS:\Sites\$SiteName" -Name "physicalPath" -Value $InstallPath
+    Set-ItemProperty "IIS:\Sites\$SiteName" -Name "applicationPool" -Value $appPoolName
 
-        if ($serverCerts.Count -gt 0) {
-            $CertThumbprint = $serverCerts[0].Thumbprint
-            Write-Info "Trovato certificato: $($serverCerts[0].Subject) (Thumbprint: $CertThumbprint)" "Found certificate: $($serverCerts[0].Subject) (Thumbprint: $CertThumbprint)"
-            $useCert = if ($Force) { 'S' } else { Read-Host (Msg "  Utilizzare questo certificato? (S/N)" "  Use this certificate? (Y/N)") }
-            if ($useCert -notmatch '^[sSyY]$') {
-                Write-Fail "Specificare un thumbprint con -CertThumbprint oppure usare -UseHttps:`$false" "Specify a thumbprint with -CertThumbprint or use -UseHttps:`$false"
+    if ($UseHttps) {
+        if ([string]::IsNullOrWhiteSpace($CertThumbprint)) {
+            $prevBinding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($prevBinding -and $prevBinding.certificateHash) {
+                $CertThumbprint = [System.BitConverter]::ToString($prevBinding.certificateHash).Replace("-", "")
+                Write-Info (Msg "Rilevato certificato SSL esistente dal binding IIS: $CertThumbprint" "Detected existing SSL certificate from IIS binding: $CertThumbprint")
+            }
+        }
+
+        $binding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -match ":${SitePort}:" } | Select-Object -First 1
+        if (-not $binding) {
+            New-WebBinding -Name $SiteName -Protocol "https" -Port $SitePort -HostHeader $SiteHostHeader -Ssl -Force | Out-Null
+            $binding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -match ":${SitePort}:" } | Select-Object -First 1
+        }
+        if ($binding -and -not [string]::IsNullOrWhiteSpace($CertThumbprint)) {
+            $binding.AddSslCertificate($CertThumbprint, "My")
+            Write-OK (Msg "Certificato SSL associato al binding HTTPS (Thumbprint: $CertThumbprint)" "SSL certificate bound to HTTPS binding (Thumbprint: $CertThumbprint)")
+        }
+    }
+    else {
+        if (-not $AllowInsecureHttp) {
+            Write-Fail (Msg "Installazione interrotta: HTTP in chiaro bloccato by default. Ripetere con -UseHttps -CertThumbprint <thumbprint>." "Installation aborted: unencrypted HTTP is blocked by default. Rerun with -UseHttps -CertThumbprint <thumbprint>.")
+            exit 1
+        }
+        $binding = Get-WebBinding -Name $SiteName -Protocol "http" -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -match ":${SitePort}:" } | Select-Object -First 1
+        if (-not $binding) {
+            New-WebBinding -Name $SiteName -Protocol "http" -Port $SitePort -HostHeader $SiteHostHeader -Force | Out-Null
+        }
+    }
+    Write-OK (Msg "Sito IIS '$SiteName' aggiornato con successo." "IIS site '$SiteName' successfully updated.")
+}
+else {
+    if ($UseHttps) {
+        if ([string]::IsNullOrWhiteSpace($CertThumbprint)) {
+            Write-Warn "Binding HTTPS richiesto ma nessun -CertThumbprint specificato." "HTTPS binding requested but no -CertThumbprint specified."
+            Write-Info "Ricerca di un certificato valido nello store locale..." "Searching for a valid certificate in local machine store..."
+
+            # Attempt to find a certificate matching the server name
+            $serverCerts = Get-ChildItem Cert:\LocalMachine\My |
+                Where-Object { $_.NotAfter -gt (Get-Date) -and $_.HasPrivateKey } |
+                Sort-Object NotAfter -Descending
+
+            if ($serverCerts.Count -gt 0) {
+                $CertThumbprint = $serverCerts[0].Thumbprint
+                Write-Info "Trovato certificato: $($serverCerts[0].Subject) (Thumbprint: $CertThumbprint)" "Found certificate: $($serverCerts[0].Subject) (Thumbprint: $CertThumbprint)"
+                $useCert = if ($Force) { 'S' } else { Read-Host (Msg "  Utilizzare questo certificato? (S/N)" "  Use this certificate? (Y/N)") }
+                if ($useCert -notmatch '^[sSyY]$') {
+                    Write-Fail "Specificare un thumbprint con -CertThumbprint oppure usare -UseHttps:`$false" "Specify a thumbprint with -CertThumbprint or use -UseHttps:`$false"
+                    exit 1
+                }
+            }
+            else {
+                Write-Fail "Nessun certificato SSL trovato nello store LocalMachine\My." "No SSL certificates found in LocalMachine\My store."
+                Write-Fail "Installare un certificato SSL e specificare il thumbprint con -CertThumbprint." "Install an SSL certificate and specify its thumbprint using -CertThumbprint."
                 exit 1
             }
         }
-        else {
-            Write-Fail "Nessun certificato SSL trovato nello store LocalMachine\My." "No SSL certificates found in LocalMachine\My store."
-            Write-Fail "Installare un certificato SSL e specificare il thumbprint con -CertThumbprint." "Install an SSL certificate and specify its thumbprint using -CertThumbprint."
-            exit 1
+
+        # Create the site with HTTPS binding
+        New-Website -Name $SiteName `
+            -PhysicalPath $InstallPath `
+            -ApplicationPool $appPoolName `
+            -Port $SitePort `
+            -HostHeader $SiteHostHeader `
+            -Ssl `
+            -Force | Out-Null
+
+        # Bind the SSL certificate to the binding
+        $binding = Get-WebBinding -Name $SiteName -Protocol "https"
+        if ($binding) {
+            $binding.AddSslCertificate($CertThumbprint, "My")
+            Write-OK "Certificato SSL associato al binding HTTPS (Thumbprint: $CertThumbprint)" "SSL certificate bound to HTTPS binding (Thumbprint: $CertThumbprint)"
         }
     }
+    else {
+        # SECURITY (2.1.0): cleartext HTTP + Windows Authentication is BLOCKED by default.
+        # NTLM travels in cleartext across the network (hash capture / relay) and the portal flows
+        # transmit sensitive payloads (CSRs and, in templates with approval, private keys).
+        # The previous interactive confirmation is not sufficient: the explicit
+        # -AllowInsecureHttp switch is now required, documented and traceable in procedures.
+        Write-Host "" -ForegroundColor Red
+        if ($script:IsItalian) {
+            Write-Host "  [BLOCCATO] Installazione su HTTP IN CHIARO con Windows Authentication." -ForegroundColor Red
+            Write-Host "  NTLM viaggia in chiaro sulla rete: rischio capture degli hash, NTLM relay" -ForegroundColor Red
+            Write-Host "  e esposizione dei carichi sensibili del portale (CSR/private key)." -ForegroundColor Red
+            Write-Host "  In produzione e in test in rete usare SEMPRE: -UseHttps -CertThumbprint <thumbprint>." -ForegroundColor Red
+        } else {
+            Write-Host "  [BLOCKED] Installation over UNENCRYPTED HTTP with Windows Authentication." -ForegroundColor Red
+            Write-Host "  NTLM travels in cleartext across the network: risk of hash capture, NTLM relay" -ForegroundColor Red
+            Write-Host "  and exposure of sensitive portal payloads (CSR/private keys)." -ForegroundColor Red
+            Write-Host "  In production and in networked test ALWAYS use: -UseHttps -CertThumbprint <thumbprint>." -ForegroundColor Red
+        }
 
-    # Create the site with HTTPS binding
-    New-Website -Name $SiteName `
-        -PhysicalPath $InstallPath `
-        -ApplicationPool $appPoolName `
-        -Port $SitePort `
-        -HostHeader $SiteHostHeader `
-        -Ssl `
-        -Force | Out-Null
+        if (-not $AllowInsecureHttp) {
+            Write-Fail (Msg "Installazione interrotta: HTTP in chiaro bloccato by default. Ripetere con -UseHttps -CertThumbprint <thumbprint>." "Installation aborted: unencrypted HTTP is blocked by default. Rerun with -UseHttps -CertThumbprint <thumbprint>.")
+            Write-Info (Msg "Per override in ambienti di test isolati: aggiungere -AllowInsecureHttp." "To override in isolated test environments: add -AllowInsecureHttp.")
+            exit 1
+        }
 
-    # Bind the SSL certificate to the binding
-    $binding = Get-WebBinding -Name $SiteName -Protocol "https"
-    if ($binding) {
-        $binding.AddSslCertificate($CertThumbprint, "My")
-        Write-OK "Certificato SSL associato al binding HTTPS (Thumbprint: $CertThumbprint)" "SSL certificate bound to HTTPS binding (Thumbprint: $CertThumbprint)"
+        if ($script:IsItalian) {
+            Write-Warn "Override -AllowInsecureHttp rilevato: proseguo con HTTP in chiaro (NON adatto a produzione)."
+        } else {
+            Write-Warn "-AllowInsecureHttp override detected: continuing over unencrypted HTTP (NOT suitable for production)."
+        }
+
+        # Create the site with HTTP binding
+        New-Website -Name $SiteName `
+            -PhysicalPath $InstallPath `
+            -ApplicationPool $appPoolName `
+            -Port $SitePort `
+            -HostHeader $SiteHostHeader `
+            -Force | Out-Null
     }
-}
-else {
-    # SECURITY (2.1.0): cleartext HTTP + Windows Authentication is BLOCKED by default.
-    # NTLM travels in cleartext across the network (hash capture / relay) and the portal flows
-    # transmit sensitive payloads (CSRs and, in templates with approval, private keys).
-    # The previous interactive confirmation is not sufficient: the explicit
-    # -AllowInsecureHttp switch is now required, documented and traceable in procedures.
-    Write-Host "" -ForegroundColor Red
-    if ($script:IsItalian) {
-        Write-Host "  [BLOCCATO] Installazione su HTTP IN CHIARO con Windows Authentication." -ForegroundColor Red
-        Write-Host "  NTLM viaggia in chiaro sulla rete: rischio capture degli hash, NTLM relay" -ForegroundColor Red
-        Write-Host "  e esposizione dei carichi sensibili del portale (CSR/private key)." -ForegroundColor Red
-        Write-Host "  In produzione e in test in rete usare SEMPRE: -UseHttps -CertThumbprint <thumbprint>." -ForegroundColor Red
-    } else {
-        Write-Host "  [BLOCKED] Installation over UNENCRYPTED HTTP with Windows Authentication." -ForegroundColor Red
-        Write-Host "  NTLM travels in cleartext across the network: risk of hash capture, NTLM relay" -ForegroundColor Red
-        Write-Host "  and exposure of sensitive portal payloads (CSR/private keys)." -ForegroundColor Red
-        Write-Host "  In production and in networked test ALWAYS use: -UseHttps -CertThumbprint <thumbprint>." -ForegroundColor Red
-    }
-
-    if (-not $AllowInsecureHttp) {
-        Write-Fail (Msg "Installazione interrotta: HTTP in chiaro bloccato by default. Ripetere con -UseHttps -CertThumbprint <thumbprint>." "Installation aborted: unencrypted HTTP is blocked by default. Rerun with -UseHttps -CertThumbprint <thumbprint>.")
-        Write-Info (Msg "Per override in ambienti di test isolati: aggiungere -AllowInsecureHttp." "To override in isolated test environments: add -AllowInsecureHttp.")
-        exit 1
-    }
-
-    if ($script:IsItalian) {
-        Write-Warn "Override -AllowInsecureHttp rilevato: proseguo con HTTP in chiaro (NON adatto a produzione)."
-    } else {
-        Write-Warn "-AllowInsecureHttp override detected: continuing over unencrypted HTTP (NOT suitable for production)."
-    }
-
-    # Create the site with HTTP binding
-    New-Website -Name $SiteName `
-        -PhysicalPath $InstallPath `
-        -ApplicationPool $appPoolName `
-        -Port $SitePort `
-        -HostHeader $SiteHostHeader `
-        -Force | Out-Null
 }
 
 # Authentication configuration at IIS site level

@@ -20,6 +20,12 @@ Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/)
   - La Config String esistente viene scomposta automaticamente in Server CA + Nome CA al caricamento (nessuna migrazione: i file `appsettings.json` pregressi restano validi e vengono risalvati nella stessa forma).
   - Traduzioni complete (IT, EN, FR, DE, ES, PT, ZH) in `i18n.js`.
 
+- **Aggiornamento Rapido Intelligente nell'Installer (Inno Setup & PowerShell)**:
+  - L'installer rileva automaticamente le installazioni precedenti di PkiPortal (tramite registro `HKLM\SOFTWARE\PkiPortal`, disinstallatore Windows o rilevamento runtime IIS/filesystem).
+  - Nuova schermata dedicata di **Aggiornamento Rilevato** con modalità **Aggiornamento rapido (consigliato)** attiva per impostazione predefinita: aggiorna i file applicativi preservando istantaneamente cartella di installazione, sito IIS, porte, certificati SSL, credenziali dell'Application Pool e `appsettings.json`, saltando automaticamente tutte le schermate intermedie di configurazione.
+  - Opzione **Installazione personalizzata**: consente in qualsiasi momento di riattivare le pagine del wizard con tutti i valori pregressi già precompilati per consentire modifiche mirate.
+  - Nuovo switch `-PreserveAppPoolIdentity` nello script `Install-PkiPortal.ps1`: aggiorna il sito IIS preservando l'identità configurata nel pool applicativo e le relative password crittografate senza doverle reinserire.
+
 ## [2.4.0] - 2026-11-06
 
 ### Novità & Funzionalità

@@ -179,6 +179,14 @@ The `Install-PkiPortal.ps1` script installs the portal as a **separate IIS websi
 |`-SourcePath`|*(current directory)*|Source project path|
 |`-SkipDotnetPublish`|*(no)*|Skips compilation and uses already-published files|
 |`-SkipFirewall`|*(no)*|Does not create the firewall rule|
+|`-PreserveAppPoolIdentity`|*(no)*|Upgrade mode: preserves existing Application Pool identity and credentials without prompting|
+
+### 📦 Graphical Setup Installer (Inno Setup)
+
+A compiled graphical setup wizard is also available (`build\PkiPortal-Setup-2.5.0.exe`) with multi-language support:
+- Bundles precompiled binaries (no .NET SDK required on the target server).
+- **Automatic upgrade detection**: if a previous installation is detected, offers **Quick Upgrade (recommended)** which preserves site, port, SSL certificate bindings, AppPool identity & credentials, and `appsettings.json` without asking for any parameter.
+- Includes a custom installation option if you need to alter paths or parameters.
 
 ### Uninstallation
 

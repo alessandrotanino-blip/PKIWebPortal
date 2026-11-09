@@ -180,6 +180,14 @@ dove è attivo Microsoft Web Enrollment (certsrv), **senza modificare né interr
 |`-SourcePath`|*(directory corrente)*|Percorso del progetto sorgente|
 |`-SkipDotnetPublish`|*(no)*|Salta la compilazione (usa file già pubblicati)|
 |`-SkipFirewall`|*(no)*|Non crea la regola firewall|
+|`-PreserveAppPoolIdentity`|*(no)*|Modalità aggiornamento: preserva l'identità dell'Application Pool esistente e le credenziali senza richiederle|
+
+### 📦 Setup Installer grafico (Inno Setup)
+
+È disponibile anche l'installer grafico compilato (`build\PkiPortal-Setup-2.5.0.exe`) con supporto multilingua:
+- Include i binari precompilati (non richiede .NET SDK sul server).
+- **Rilevamento automatico upgrade**: se rileva una versione precedente, propone l'**Aggiornamento rapido (consigliato)** che preserva sito, porte, certificati SSL, credenziali dell'AppPool e `appsettings.json` senza richiedere alcun parametro.
+- Include l'opzione di installazione personalizzata per modificare parametri o percorsi.
 
 ### Disinstallazione
 

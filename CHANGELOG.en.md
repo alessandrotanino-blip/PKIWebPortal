@@ -20,6 +20,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - Existing Config Strings are automatically split into CA Server + CA Name on load (no migration: legacy `appsettings.json` files remain valid and are re-saved in the same form).
   - Full translations (IT, EN, FR, DE, ES, PT, ZH) in `i18n.js`.
 
+- **Intelligent Fast Upgrade in Setup Installer (Inno Setup & PowerShell)**:
+  - The installer automatically detects previous installations of PkiPortal (via `HKLM\SOFTWARE\PkiPortal` registry, Windows Uninstaller, or IIS/filesystem runtime inspection).
+  - New dedicated **Previous Version Detected** wizard page with **Fast upgrade (recommended)** enabled by default: instantly updates application files while preserving the installation directory, IIS site, ports, SSL certificates, Application Pool credentials, and `appsettings.json`, automatically skipping intermediate parameter prompts.
+  - **Custom installation** option: allows viewing and modifying all parameters, pre-populated with previously configured values.
+  - New `-PreserveAppPoolIdentity` switch in `Install-PkiPortal.ps1`: updates IIS while preserving the configured AppPool identity and encrypted passwords without requiring re-entry.
+
 ## [2.4.0] - 2026-11-06
 
 ### New Features & Improvements
