@@ -332,11 +332,38 @@
 
       // CA field change handlers
       card.querySelectorAll('.ca-field').forEach(input => {
+        input.addEventListener('input', (e) => {
+          const ci = parseInt(e.target.dataset.ca);
+          const field = e.target.dataset.field;
+          if (field === 'caServer') {
+            const cas = portalConfig.cas || portalConfig.CAs || [];
+            cas[ci].caServer = e.target.value;
+            syncDerivedCaFields(e.target.closest('.ca-card'), ci);
+          }
+        });
+
         input.addEventListener('change', (e) => {
           const ci = parseInt(e.target.dataset.ca);
           const field = e.target.dataset.field;
           const cas = portalConfig.cas || portalConfig.CAs || [];
-          cas[ci][field] = e.target.value;
+
+          if (field === 'caName' && e.target.value === '__custom__') {
+            const promptMsg = window.I18N ? window.I18N.t('admin_ca_prompt_custom', 'Inserisci il Nome esatto della Certification Authority:') : 'Inserisci il Nome esatto della Certification Authority:';
+            const manualName = prompt(promptMsg, cas[ci].caName || '');
+            if (manualName && manualName.trim()) {
+              const trimmed = manualName.trim();
+              cas[ci].caName = trimmed;
+              if (!cas[ci].discoveredCaNames) cas[ci].discoveredCaNames = [];
+              if (!cas[ci].discoveredCaNames.includes(trimmed)) cas[ci].discoveredCaNames.push(trimmed);
+              populateDiscoveredCaDropdown(e.target.closest('.ca-card'), cas[ci], ci);
+              e.target.value = trimmed;
+            } else {
+              e.target.value = cas[ci].caName || '';
+            }
+          } else {
+            cas[ci][field] = e.target.value;
+          }
+
           // Server CA / Nome CA: ricostruisce i campi derivati
           // (Config String e Credential Target).
           if (field === 'caServer' || field === 'caName') {
@@ -771,7 +798,7 @@
       const opts = [];
       for (const raw of [...(caObj.discoveredCaNames || []), current]) {
         const n = String(raw || '').trim();
-        if (!n) continue;
+        if (!n || n === '__custom__') continue;
         const key = n.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
@@ -789,6 +816,10 @@
         o.textContent = n;
         select.appendChild(o);
       });
+      const customOpt = document.createElement('option');
+      customOpt.value = '__custom__';
+      customOpt.textContent = window.I18N ? window.I18N.t('admin_ca_custom_option', '✏️ Inserisci manualmente...') : '✏️ Inserisci manualmente...';
+      select.appendChild(customOpt);
 
       const currentIdx = opts.findIndex(n => n.toLowerCase() === current.toLowerCase());
       if (currentIdx !== -1) {

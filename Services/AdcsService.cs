@@ -1635,9 +1635,10 @@ public class AdcsService : IAdcsService
         }
 
         // --- 2) Fallback CAPL HTTP se AD non ha prodotto nomi ---
+        string? caplWarning = null;
         if (adNames.Count == 0)
         {
-            (caplNames, caplError) = await QueryCaNamesViaCaplAsync(server);
+            (caplNames, caplError, caplWarning) = await QueryCaNamesViaCaplAsync(server);
         }
 
         // ---Unione + deduplicazione (case-insensitive), ordinamento alfabetico ---
@@ -1657,6 +1658,7 @@ public class AdcsService : IAdcsService
         {
             response.Success = true;
             response.Source = adNames.Count > 0 && caplNames.Count > 0 ? "ad+capl" : (adNames.Count > 0 ? "ad" : "capl");
+            if (caplWarning != null) response.Warning = caplWarning;
             _logger.LogInformation("Rilevamento nomi CA per '{Server}': trovati {Count} nomi (fonte: {Source}).",
                 server, merged.Count, response.Source);
         }
@@ -1679,130 +1681,275 @@ public class AdcsService : IAdcsService
     /// Certsrv/&lt;host&gt;. Il confronto con il server richiesto è lato client
     /// (uguaglianza completa, etichetta di host o suffisso qualificato) per
     /// tollerare FQDN vs hostname corto.
+    ///
+    /// Il base DN del partizionamento viene risolto via rootDSE
+    /// (configurationNamingContext): il parametro "domain" può essere il DNS
+    /// del server CA, un nome NetBIOS o il FQDN di un DC, e nelle foreste
+    /// multi-domain il DN del partizionamento Configuration usa il dominio
+    /// radice della foresta — costruendolo a mano dalle etichette del nome
+    /// si otterrebbe un errore "Referral". I referral restituiti vengono
+    /// seguiti (fino a 2 hop).
     /// </summary>
     private async Task<(List<string> Names, string? Error)> QueryCaNamesFromAdAsync(string domain, string server, NetworkCredential? explicitCred)
     {
         var names = new List<string>();
-        var dcPath = string.Join(",", domain.Split('.').Select(l => $"DC={l}"));
-        string baseDn = $"CN=Configuration,{dcPath}";
-        string filter = "(&(|(caDnsName=*)(servicePrincipalName=Certsrv/*)))";
+        const string filter = "(|(objectCategory=pKIEnrollmentService)(objectClass=pKIEnrollmentService)(dNSHostName=*)(caDnsName=*)(servicePrincipalName=Certsrv/*))";
+        var requestAttrs = new[] { "cn", "dNSHostName", "caDnsName", "servicePrincipalName", "displayName" };
+        string derivedBaseDn = $"CN=Configuration,{string.Join(",", domain.Split('.').Select(l => $"DC={l}"))}";
 
-        DirectoryResponse SendLdapQuery(int port, bool useSsl)
+        LdapConnection OpenConnection(int port, bool useSsl)
         {
-            using var conn = new LdapConnection(new LdapDirectoryIdentifier(domain, port, useSsl, false));
+            var conn = new LdapConnection(new LdapDirectoryIdentifier(domain, port, useSsl, false));
             conn.Timeout = TimeSpan.FromSeconds(15);
             // In modalità Hub (CredentialManager) usa le credenziali della
             // foresta remota; altrimenti l'identità del processo (App Pool).
             conn.Credential = explicitCred ?? new NetworkCredential();
+            return conn;
+        }
 
-            var req = new SearchRequest(baseDn, filter, SearchScope.Subtree,
-                new[] { "cn", "caDnsName", "servicePrincipalName" });
-            req.SizeLimit = 200;
-            return conn.SendRequest(req, TimeSpan.FromSeconds(15));
+        // Risolve il DN reale del partizionamento Configuration dal rootDSE
+        // (configurationNamingContext, fallback CN=Configuration + defaultNamingContext).
+        // In .NET (System.DirectoryServices.Protocols) il rootDSE si interroga
+        // con una SearchRequest di scope Base su base DN vuota.
+        (string? BaseDn, string? Error) ResolveBaseDn(int port, bool useSsl)
+        {
+            try
+            {
+                using var conn = OpenConnection(port, useSsl);
+                var rootReq = new SearchRequest("", "(objectClass=*)", SearchScope.Base,
+                    new[] { "defaultNamingContext", "configurationNamingContext", "schemaNamingContext" });
+                var resp = conn.SendRequest(rootReq, TimeSpan.FromSeconds(15)) as SearchResponse;
+                var entry = resp?.Entries?.OfType<SearchResultEntry>().FirstOrDefault();
+                if (entry == null) return (null, null);
+                string? cfgCtx = entry.Attributes["configurationNamingContext"]?.GetValues(typeof(string)).Cast<string>().FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(cfgCtx)) return (cfgCtx, null);
+                string? defCtx = entry.Attributes["defaultNamingContext"]?.GetValues(typeof(string)).Cast<string>().FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(defCtx)) return ($"CN=Configuration,{defCtx}", null);
+                return (null, null);
+            }
+            catch (LdapException ex)
+            {
+                return (null, ex.Message);
+            }
+        }
+
+        // 1) Determina la modalità di lavoro (LDAPS 636; fallback 389 solo
+        //    senza credenziali esplicite) e il base DN reale via rootDSE.
+        string searchBaseDn = derivedBaseDn;
+        bool useSslMode = true;
+        string? modeError = null;
+
+        var (base636, err636) = await Task.Run(() => ResolveBaseDn(636, useSsl: true)).ConfigureAwait(false);
+        if (base636 != null)
+        {
+            searchBaseDn = base636;
+        }
+        else
+        {
+            modeError = err636;
+            if (explicitCred == null)
+            {
+                // Fallback accettabile: identità di processo, nessuna
+                // password esposta anche su LDAP non cifrato.
+                _logger.LogWarning(
+                    "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}): fallback su LDAP (389) con identità di processo per il rilevamento nomi CA.",
+                    SanitizeForLog(domain), SanitizeForLog(err636));
+                var (base389, err389) = await Task.Run(() => ResolveBaseDn(389, useSsl: false)).ConfigureAwait(false);
+                if (base389 != null)
+                {
+                    searchBaseDn = base389;
+                    useSslMode = false;
+                    modeError = null;
+                }
+                else
+                {
+                    modeError = err389 ?? err636;
+                    _logger.LogWarning("Query LDAP verso il dominio '{Domain}' (fallback 389) non riuscita: {Error}", SanitizeForLog(domain), SanitizeForLog(err389));
+                }
+            }
+            else
+            {
+                // CREDENZIALI ESPLICITE: nessun fallback in chiaro.
+                _logger.LogWarning(
+                    "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}) e fallback LDAP non cifrato negato per la presenza di credenziali esplicite: il rilevamento nomi CA via AD potrebbe non essere possibile.",
+                    SanitizeForLog(domain), SanitizeForLog(err636));
+            }
         }
 
         try
         {
-            DirectoryResponse? rep = null;
-            LdapException? sslError = null;
+            // 2) Ricerca con follow dei referral (fino a 2 hop): in caso di
+            //    referral (es. base DN non ospitato dal DC contattato) la
+            //    risposta include i target cui riconnettersi.
+            SearchResponse? searchResp = null;
+            string? searchError = null;
+            LdapConnection? referralConn = null;
+            string currentBaseDn = searchBaseDn;
 
-            try
+            for (int hop = 0; hop < 3; hop++)
             {
-                rep = await Task.Run(() => SendLdapQuery(636, useSsl: true)).ConfigureAwait(false);
-            }
-            catch (LdapException ex)
-            {
-                sslError = ex;
-            }
-
-            if (rep == null)
-            {
-                if (explicitCred == null)
-                {
-                    // Fallback accettabile: identità di processo, nessuna
-                    // password esposta anche su LDAP non cifrato.
-                    _logger.LogWarning(
-                        "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}): fallback su LDAP (389) con identità di processo per il rilevamento nomi CA.",
-                        SanitizeForLog(domain), sslError?.Message?.Replace("\r", string.Empty).Replace("\n", string.Empty));
-                    try
-                    {
-                        rep = await Task.Run(() => SendLdapQuery(389, useSsl: false)).ConfigureAwait(false);
-                    }
-                    catch (LdapException ex)
-                    {
-                        _logger.LogWarning("Query LDAP verso il dominio '{Domain}' (fallback 389) non riuscita: {Error}", SanitizeForLog(domain), ex.Message.Replace("\r", string.Empty).Replace("\n", string.Empty));
-                        return (names, $"Query LDAP verso il dominio '{domain}' non riuscita.");
-                    }
-                }
-                else
-                {
-                    // CREDENZIALI ESPLICITE: nessun fallback in chiaro.
-                    _logger.LogWarning(
-                        "Connessione LDAPS (636) al dominio '{Domain}' non riuscita ({Error}) e fallback LDAP non cifrato negato per la presenza di credenziali esplicite: rilevamento nomi CA via AD non possibile.",
-                        SanitizeForLog(domain), sslError?.Message?.Replace("\r", string.Empty).Replace("\n", string.Empty));
-                    return (names, $"LDAPS verso il dominio '{domain}' non riuscito (credenziali esplicite: nessun fallback in chiaro).");
-                }
-            }
-
-            var searchResp = rep as SearchResponse;
-            if (searchResp == null || searchResp.ResultCode != ResultCode.Success)
-            {
-                string detail = searchResp != null
-                    ? $"ResultCode {searchResp.ResultCode}: {searchResp.ErrorMessage}"
-                    : "risposta LDAP inattesa";
-                _logger.LogWarning("Query LDAP per il rilevamento nomi CA non riuscita: {Detail}", SanitizeForLog(detail));
-                return (names, $"Query LDAP non riuscita ({SanitizeForLog(detail)}).");
-            }
-
-            foreach (var obj in searchResp.Entries)
-            {
+                LdapConnection? ownedConn = null;
+                LdapConnection? prevReferral = null;
                 try
                 {
-                    var entry = (SearchResultEntry)obj;
+                    LdapConnection conn = referralConn ?? (ownedConn = OpenConnection(useSslMode ? 636 : 389, useSslMode));
+                    prevReferral = referralConn;
+                    referralConn = null;
+                    var req = new SearchRequest(currentBaseDn, filter, SearchScope.Subtree, requestAttrs);
+                    req.SizeLimit = 200;
+                    searchResp = await Task.Run(() => conn.SendRequest(req, TimeSpan.FromSeconds(15)) as SearchResponse).ConfigureAwait(false);
+                }
+                catch (LdapException ex)
+                {
+                    searchError = ex.Message;
+                    break;
+                }
+                finally
+                {
+                    ownedConn?.Dispose();
+                    prevReferral?.Dispose();
+                }
 
-                    string? cn = entry.Attributes["cn"]?.GetValues(typeof(string)).Cast<string>().FirstOrDefault();
-                    if (string.IsNullOrWhiteSpace(cn)) continue;
+                if (searchResp == null)
+                {
+                    searchError = "risposta LDAP inattesa";
+                    break;
+                }
 
-                    // Raccoglie gli host confrontabili: caDnsName + SPN Certsrv/<host>
-                    var hostCandidates = new List<string>();
-                    if (entry.Attributes["caDnsName"] != null)
+                if (searchResp.ResultCode == ResultCode.Success)
+                {
+                    // Elenco gli oggetti CA trovati (per la diagnostica del
+                    // "nessuna corrispondenza": mostra i nomi host registrati,
+                    // così l'amministratore riconosce l'eventuale naming diverso).
+                    var foundSummary = new List<string>();
+
+                    foreach (var obj in searchResp.Entries)
                     {
-                        foreach (var v in entry.Attributes["caDnsName"].GetValues(typeof(string)).Cast<string>())
+                        try
                         {
-                            if (!string.IsNullOrWhiteSpace(v)) hostCandidates.Add(v);
-                        }
-                    }
-                    if (entry.Attributes["servicePrincipalName"] != null)
-                    {
-                        foreach (var v in entry.Attributes["servicePrincipalName"].GetValues(typeof(string)).Cast<string>())
-                        {
-                            if (!string.IsNullOrWhiteSpace(v) &&
-                                v.StartsWith("Certsrv/", StringComparison.OrdinalIgnoreCase))
+                            var entry = (SearchResultEntry)obj;
+
+                            string? cn = entry.Attributes["cn"]?.GetValues(typeof(string)).Cast<string>().FirstOrDefault();
+                            if (string.IsNullOrWhiteSpace(cn)) continue;
+
+                            // Raccoglie gli host confrontabili: dNSHostName (standard AD CS) + caDnsName + SPN Certsrv/<host>
+                            var hostCandidates = new List<string>();
+                            if (entry.Attributes["dNSHostName"] != null)
                             {
-                                hostCandidates.Add(v["Certsrv/".Length..]);
+                                foreach (var v in entry.Attributes["dNSHostName"].GetValues(typeof(string)).Cast<string>())
+                                {
+                                    if (!string.IsNullOrWhiteSpace(v)) hostCandidates.Add(v);
+                                }
+                            }
+                            if (entry.Attributes["caDnsName"] != null)
+                            {
+                                foreach (var v in entry.Attributes["caDnsName"].GetValues(typeof(string)).Cast<string>())
+                                {
+                                    if (!string.IsNullOrWhiteSpace(v)) hostCandidates.Add(v);
+                                }
+                            }
+                            if (entry.Attributes["servicePrincipalName"] != null)
+                            {
+                                foreach (var v in entry.Attributes["servicePrincipalName"].GetValues(typeof(string)).Cast<string>())
+                                {
+                                    if (!string.IsNullOrWhiteSpace(v) &&
+                                        v.StartsWith("Certsrv/", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        hostCandidates.Add(v["Certsrv/".Length..]);
+                                    }
+                                }
+                            }
+
+                            foundSummary.Add(hostCandidates.Count > 0
+                                ? $"{cn} (host: {string.Join(", ", hostCandidates)})"
+                                : $"{cn} (host non dichiarato)");
+
+                            bool matched = hostCandidates.Any(h => MatchesCaServer(h, server));
+                            if (matched)
+                            {
+                                names.Add(cn!);
+                                _logger.LogDebug("Oggetto CA '{Cn}' corrisponde al server '{Server}' (host: {Hosts}).",
+                                    SanitizeForLog(cn), server, string.Join(", ", hostCandidates.Select(SanitizeForLog)));
                             }
                         }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Errore nel parsing dell'entry CA da AD.");
+                        }
                     }
 
-                    bool matched = hostCandidates.Any(h => MatchesCaServer(h, server));
-                    if (matched)
+                    if (names.Count == 0)
                     {
-                        names.Add(cn!);
-                        _logger.LogDebug("Oggetto CA '{Cn}' corrisponde al server '{Server}' (host: {Hosts}).",
-                            SanitizeForLog(cn), server, string.Join(", ", hostCandidates.Select(SanitizeForLog)));
+                        string foundList = foundSummary.Count == 0
+                            ? string.Empty
+                            : " Oggetti CA trovati: " + string.Join("; ", foundSummary.Take(10))
+                              + (foundSummary.Count > 10 ? $" (+{foundSummary.Count - 10} altri)" : string.Empty);
+                        string hint = foundSummary.Count == 0
+                            ? " (nessun oggetto pKIEnrollmentService trovato nella foresta: la CA potrebbe essere standalone, non integrata in AD — in tal caso il nome si trova nel registro del server CA, HKLM\\SYSTEM\\CurrentControlSet\\Services\\CertSvc\\Configuration, e può essere inserito manualmente nel campo «Nome CA»)."
+                            : $" Verifica il campo «Server CA»: la CA potrebbe essere registrata in AD con un hostname diverso (es. hostname corto) da '{server}'.";
+                        return (names, $"Nessun oggetto CA corrisponde a '{server}' nella foresta '{domain}'.{foundList}{hint}");
                     }
+                    return (names, null);
                 }
-                catch (Exception ex)
+
+                if (searchResp.ResultCode == ResultCode.Referral)
                 {
-                    _logger.LogDebug(ex, "Errore nel parsing dell'entry CA da AD.");
+                    // In .NET (System.DirectoryServices.Protocols) l'URI del
+                    // referral è incluso nel messaggio d'errore del DC nel
+                    // formato "ref 1: 'ldap://...'".
+                    string? refUri = ExtractReferralUri(searchResp.ErrorMessage);
+                    if (refUri != null)
+                    {
+                        try
+                        {
+                            var rUri = new Uri(refUri);
+                            bool rSsl = rUri.Scheme.Equals("ldaps", StringComparison.OrdinalIgnoreCase);
+                            int rPort = rUri.Port > 0 ? rUri.Port : (rSsl ? 636 : 389);
+                            string? rBase = null;
+                            string path = rUri.AbsolutePath;
+                            if (!string.IsNullOrEmpty(path) && path.Trim('/').Length > 0)
+                                rBase = path.TrimStart('/');
+                            _logger.LogInformation(
+                                "Query CA sul dominio '{Domain}': referral LDAP seguito verso '{Ref}' (hop {Hop}).",
+                                SanitizeForLog(domain), SanitizeForLog(refUri), hop + 1);
+                            referralConn = new LdapConnection(new LdapDirectoryIdentifier(
+                                rUri.DnsSafeHost, rPort, rSsl, false));
+                            referralConn.Timeout = TimeSpan.FromSeconds(15);
+                            referralConn.Credential = explicitCred ?? new NetworkCredential();
+                            if (rBase != null) currentBaseDn = rBase;
+                            continue;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Referral LDAP non utilizzabile: {Ref}", SanitizeForLog(refUri));
+                        }
+                    }
+                    searchError = $"ResultCode Referral (il DC non ospita il partizionamento richiesto): {searchResp.ErrorMessage}";
+                    break;
                 }
+
+                searchError = $"ResultCode {searchResp.ResultCode}: {searchResp.ErrorMessage}";
+                break;
             }
 
-            if (names.Count == 0)
+            var errors = new List<string>();
+            if (modeError != null && searchError == null)
             {
-                return (names, $"Nessun oggetto CA con host corrispondente a '{server}' nel dominio '{domain}'.");
+                errors.Add($"connessione al dominio '{domain}': {SanitizeForLog(modeError)}");
             }
-            return (names, null);
+            if (searchError != null)
+            {
+                errors.Add(SanitizeForLog(searchError));
+                if (searchError.Contains("Referral", StringComparison.OrdinalIgnoreCase) ||
+                    searchError.Contains("RefErr", StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add("se la foresta della CA usa un dominio AD diverso da quello dedotto, immettilo nel campo «Foresta / Dominio»");
+                }
+            }
+            string combined = errors.Count > 0 ? string.Join(" — ", errors) : "query LDAP non riuscita";
+            _logger.LogWarning("Query LDAP per il rilevamento nomi CA non riuscita su '{Domain}': {Detail}",
+                SanitizeForLog(domain), SanitizeForLog(combined));
+            return (names, combined);
         }
         catch (Exception ex)
         {
@@ -1812,21 +1959,42 @@ public class AdcsService : IAdcsService
     }
 
     /// <summary>
+    /// Estrae il primo URI di referral dal messaggio d'errore LDAP del DC,
+    /// che riporta i target nel formato "ref 1: 'ldap://...'".
+    /// </summary>
+    private static readonly Regex LdapReferralUriRegex =
+        new(@"ref\s+\d+:\s*'(ldap[s]?://[^']+)'", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static string? ExtractReferralUri(string? ldapErrorMessage)
+    {
+        if (string.IsNullOrEmpty(ldapErrorMessage)) return null;
+        var m = LdapReferralUriRegex.Match(ldapErrorMessage);
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
+    /// <summary>
     /// Confronto tollerante tra l'host del server richiesto e l'host registrato
     /// sul CA object: uguaglianza completa (case-insensitive), hostname corto
-    /// (prima etichetta) o suffisso qualificato (es. server "ca.vd.ld" vs
-    /// caDnsName "subca01.ca.vd.ld").
+    /// da una delle due parti (prima etichetta: CA registrata come "rpki" vs
+    /// richiesta "rpki.regione.liguria.it" o viceversa) o suffisso
+    /// qualificato (es. server "ca.vd.ld" vs caDnsName "subca01.ca.vd.ld").
     /// </summary>
     private static bool MatchesCaServer(string registeredHost, string requestedServer)
     {
         string host = registeredHost.Trim().TrimEnd('.').ToLowerInvariant();
         if (host.Length == 0 || host.Length > 253) return false;
-        if (host == requestedServer) return true;
+        string req = requestedServer.Trim().TrimEnd('.').ToLowerInvariant();
+        if (host == req) return true;
 
-        string firstLabel = host.Split('.')[0];
-        if (firstLabel == requestedServer) return true;
+        string hostFirstLabel = host.Split('.')[0];
+        if (hostFirstLabel == req) return true;
 
-        if (requestedServer.Contains('.') && host.EndsWith("." + requestedServer, StringComparison.OrdinalIgnoreCase)) return true;
+        // CA registrata con hostname corto vs server richiesto FQDN
+        // (stesso dominio: es. caDnsName "rpki" vs "rpki.regione.liguria.it").
+        string reqFirstLabel = req.Split('.')[0];
+        if (req.Contains('.') && host == reqFirstLabel) return true;
+
+        if (req.Contains('.') && host.EndsWith("." + req, StringComparison.OrdinalIgnoreCase)) return true;
         return false;
     }
 
@@ -1836,14 +2004,39 @@ public class AdcsService : IAdcsService
     /// Richiede che il server esponga la CAPL (accesso anonimo o con redirect
     /// verso la singola CA); i nomi estratti non includono i caratteri di
     /// escaping del CAPL (si usano i nomi "Machine$" canonicali).
+    ///
+    /// I server CA spesso espongono certificati firmati da radici interne non
+    /// fidate dal processo del portale: se la validazione TLS fallisce per il
+    /// certificato, si ritenta UNA volta con validazione disattivata (solo
+    /// per questa scoperta in sola lettura) e viene restituito un warning.
     /// </summary>
-    private async Task<(List<string> Names, string? Error)> QueryCaNamesViaCaplAsync(string server)
+    private async Task<(List<string> Names, string? Error, string? Warning)> QueryCaNamesViaCaplAsync(string server)
     {
         var names = new List<string>();
-        string? lastError = null;
+        var schemeErrors = new List<string>();
+        string? warning = null;
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("PkiPortal-Admin/2.5");
+
+        // SECURITY: client "rilassato" usato SOLO come ultimo tentativo dopo il
+        // fallimento della validazione TLS (server CA con root interna non
+        // fidata dal processo del portale). La scoperta è in sola lettura: al
+        // peggio un MITM propone nomi CA falsi nella tendina, ma le successive
+        // operazioni di emissione (certutil/COM) verificano comunque la CA.
+        var relaxedHandler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (message, cert, chain, sslPolicyErrors) =>
+            {
+                if (sslPolicyErrors == System.Net.Security.SslPolicyErrors.None) return true;
+                _logger.LogWarning(
+                    "CAPL verso '{Server}': certificato TLS non verificato ({Errors}); lettura con validazione disattivata (solo per il rilevamento nomi CA).",
+                    server, sslPolicyErrors);
+                return true;
+            }
+        };
+        using var httpRelaxed = new HttpClient(relaxedHandler) { Timeout = TimeSpan.FromSeconds(10) };
+        httpRelaxed.DefaultRequestHeaders.UserAgent.ParseAdd("PkiPortal-Admin/2.5");
 
         // Estrae e decodifica i nomi CA dai link CAPL (i nomi con spazi sono
         // percent-encoded, es. "Machine$CloudLD%20Sub%20CA").
@@ -1854,12 +2047,11 @@ public class AdcsService : IAdcsService
             foreach (Match m in CaplCaParamRegex.Matches(text)) names.Add(DecodeCaplName(m.Groups["name"].Value));
         }
 
-        foreach (var scheme in new[] { "https", "http" })
+        async Task<(string? Error, bool CertUntrusted)> FetchAsync(HttpClient client, string url, string scheme)
         {
-            string url = $"{scheme}://{server}/CertSrv/CertSrv.dll";
             try
             {
-                using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                using var resp = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
                 int code = (int)resp.StatusCode;
 
                 if (code == 301 || code == 302 || code == 307 || code == 308)
@@ -1867,34 +2059,74 @@ public class AdcsService : IAdcsService
                     // Single-CA host: IIS reindirizza alla pagina della CA.
                     string? location = resp.Headers.Location?.ToString();
                     Extract(location);
-                    lastError = $"CAPL {scheme} ha reindirizzato a '{SanitizeForLog(location)}' senza elenco CA.";
-                    if (names.Count > 0) break;
-                    continue;
+                    return names.Count > 0
+                        ? (null, false)
+                        : ($"CAPL {scheme} ha reindirizzato a '{SanitizeForLog(location)}' senza elenco CA.", false);
                 }
 
                 if (code == 200)
                 {
                     string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
                     Extract(body);
-                    if (names.Count > 0)
-                    {
-                        lastError = null;
-                        break;
-                    }
-                    lastError = $"CAPL {scheme} ha risposto 200 ma non espone alcun nome CA (accesso anonimo disabilitato?).";
-                    continue;
+                    return names.Count > 0
+                        ? (null, false)
+                        : ($"CAPL {scheme} ha risposto 200 ma non espone alcun nome CA (accesso anonimo disabilitato?).", false);
                 }
 
-                lastError = $"CAPL {scheme} ha risposto HTTP {code}.";
+                return ($"CAPL {scheme} ha risposto HTTP {code}.", false);
             }
             catch (Exception ex)
             {
-                lastError = $"CAPL {scheme} non raggiungibile: {ex.Message}";
+                bool certUntrusted = scheme == "https" && IsCertificateValidationError(ex);
                 _logger.LogDebug(ex, "CAPL {Scheme} verso '{Server}' non riuscita.", scheme, server);
+                return ($"CAPL {scheme} non raggiungibile: {ex.Message}", certUntrusted);
             }
         }
 
-        return (names, names.Count > 0 ? null : lastError);
+        foreach (var scheme in new[] { "https", "http" })
+        {
+            string url = $"{scheme}://{server}/CertSrv/CertSrv.dll";
+            var (err1, certUntrusted) = await FetchAsync(http, url, scheme);
+
+            if (names.Count > 0)
+            {
+                schemeErrors.Clear();
+                break;
+            }
+
+            if (scheme == "https" && certUntrusted)
+            {
+                _logger.LogWarning(
+                    "CAPL verso '{Server}': errore di validazione del certificato TLS; ultimo tentativo con validazione disattivata (solo per il rilevamento nomi CA).",
+                    server);
+                var (err2, _) = await FetchAsync(httpRelaxed, url, scheme);
+                if (names.Count > 0)
+                {
+                    warning = "Certificato TLS del server CA non verificato: i nomi CA sono stati letti con validazione TLS disattivata (riguarda solo il rilevamento, non le operazioni di emissione).";
+                    schemeErrors.Clear();
+                    break;
+                }
+                schemeErrors.Add(err2 ?? err1 ?? $"CAPL {scheme} non riuscita.");
+                continue;
+            }
+
+            if (err1 != null) schemeErrors.Add(err1);
+        }
+
+        return (names, names.Count > 0 ? null : string.Join(" ", schemeErrors), warning);
+    }
+
+    /// <summary>
+    /// Rileva un fallimento della validazione del certificato TLS (catena non
+    /// fidata, nome non corrispondente, scadenza) in un'eccezione HTTP.
+    /// </summary>
+    private static bool IsCertificateValidationError(Exception ex)
+    {
+        for (Exception? e = ex; e != null; e = e.InnerException)
+        {
+            if (e is System.Security.Authentication.AuthenticationException) return true;
+        }
+        return false;
     }
 
     /// <summary>

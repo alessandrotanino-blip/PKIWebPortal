@@ -75,7 +75,7 @@ public class HeldRequestStore : IHeldRequestStore
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Impossibile inizializzare la chiave AES-256-GCM in {Path}.", keyPath);
+            _logger.LogError(ex, "Impossibile inizializzare la chiave AES-256-GCM in {Path}.{Hint}", keyPath, AccessDeniedHint(ex));
         }
 
         // Inizializzazione e self-test DPAPI su Windows
@@ -96,7 +96,7 @@ public class HeldRequestStore : IHeldRequestStore
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Impossibile inizializzare DPAPI: fallback su cifratura AES-256-GCM.");
+                _logger.LogError(ex, "Impossibile inizializzare DPAPI: fallback su cifratura AES-256-GCM.{Hint}", AccessDeniedHint(ex));
             }
         }
         else
@@ -128,6 +128,15 @@ public class HeldRequestStore : IHeldRequestStore
             }
         }
     }
+
+    /// <summary>
+    /// Suggerimento per errori di accesso al file system (permessi NTFS della
+    /// cartella App_Data): aggiunto ai messaggi di log quando rilevato.
+    /// </summary>
+    private static string AccessDeniedHint(Exception ex) =>
+        ex is UnauthorizedAccessException || ex.Message.Contains("denied", StringComparison.OrdinalIgnoreCase)
+            ? " — Accesso negato: verifica che l'identità in esecuzione dell'app abbia permessi di scrittura NTFS sulla cartella App_Data."
+            : string.Empty;
 
     private static byte[] LoadOrCreateKey(string path, int byteCount)
     {

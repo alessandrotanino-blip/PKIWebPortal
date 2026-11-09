@@ -54,7 +54,10 @@ public class CsrfTokenService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Impossibile caricare/creare il segreto CSRF in {Path}: uso segreto volatile (i token verranno invalidati al riavvio del processo).", secretPath);
+            string hint = ex is UnauthorizedAccessException || ex.Message.Contains("denied", StringComparison.OrdinalIgnoreCase)
+                ? " — Accesso negato: verifica che l'identità in esecuzione dell'app abbia permessi di scrittura NTFS sulla cartella App_Data."
+                : string.Empty;
+            _logger.LogError(ex, "Impossibile caricare/creare il segreto CSRF in {Path}: uso segreto volatile (i token verranno invalidati al riavvio del processo).{Hint}", secretPath, hint);
             _secret = RandomNumberGenerator.GetBytes(32);
         }
     }

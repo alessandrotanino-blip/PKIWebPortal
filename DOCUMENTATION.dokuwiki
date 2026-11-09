@@ -789,7 +789,7 @@ La pagina è divisa in due sezioni tramite tab:
   * **Impostazioni Generali**: Titolo del portale, modalità operativa (Standalone o Hub Multi-CA) e CA predefinita.
   * **Gestione Sub-CA** (v2.5.0): Aggiunta, rimozione o modifica delle connessioni CA. I campi ridondanti non vanno più compilati a mano:
     * **Server CA**: hostname/DNS della CA (es. ''subca01.foresta1.lan'').
-    * **Nome CA**: tendina popolata dal pulsante **🔍 Rileva CA**, che interroga il dominio AD (partizionamento Configuration, attributo ''caDnsName''/SPN ''Certsrv/&lt;host&gt;'') e, in fallback, la pagina CAPL del server CA (''https://&lt;server&gt;/CertSrv/CertSrv.dll''). Con un solo nome rilevato la selezione è automatica.
+    * **Nome CA**: tendina popolata dal pulsante **🔍 Rileva CA**, che interroga la foresta AD (partizionamento Configuration, attributo standard ''dNSHostName'' degli oggetti ''pKIEnrollmentService'') e, in fallback, la pagina CAPL del server CA (''https://&lt;server&gt;/CertSrv/CertSrv.dll''). Con un solo nome rilevato la selezione è automatica; include anche l'opzione ''✏️ Inserisci manualmente...''.
     * **Config String** (tag //auto//): costruita automaticamente come ''server\Nome-CA'' (sola lettura); la stringa esistente viene scomposta in Server CA + Nome CA al caricamento.
     * **Credential Target** (tag //auto//): dedotto dal Server CA (corrisponde al target della credenziale nel Windows Credential Manager; il backend applicava già lo stesso fallback).
     * Modalità di autenticazione (LocalIdentity/CredentialManager) e simulatore invariati.

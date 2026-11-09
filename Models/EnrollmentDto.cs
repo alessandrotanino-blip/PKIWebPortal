@@ -129,4 +129,10 @@ public class CaDiscoveryResponse
 
     /// <summary>Fonte del rilevamento: "ad", "capl" o "ad+capl". Null se nessun nome trovato.</summary>
     public string? Source { get; set; }
+
+    /// <summary>
+    /// Avvertenza non bloccante (es. CAPL letta con validazione TLS
+    /// disattivata perché il certificato della CA non è fidato dal processo).
+    /// </summary>
+    public string? Warning { get; set; }
 }
