@@ -1038,6 +1038,8 @@ begin
   Result := (Pos('"', S) > 0) or (Pos('''', S) > 0);
 end;
 
+procedure PreInstallStopIIS; forward;
+
 function NextButtonClicked(CurPageID: Integer): Boolean;
 var
   S: String;
@@ -1165,6 +1167,10 @@ begin
         Exit;
       end;
     end;
+  end
+  else if CurPageID = wpReady then
+  begin
+    PreInstallStopIIS;
   end;
 end;
 
@@ -1243,6 +1249,10 @@ begin
     SiteName := 'PkiWebEnrollment';
   Pool := SiteName + '_Pool';
   AppDir := ExpandConstant('{app}');
+  if (AppDir = '') and (PrevInstallPath <> '') then
+    AppDir := PrevInstallPath;
+  if AppDir = '' then
+    AppDir := 'C:\inetpub\PkiWebEnrollment';
 
   AppCmd := ExpandConstant('{sys}\inetsrv\appcmd.exe');
   if FileExists(AppCmd) then
@@ -1507,7 +1517,7 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if CurStep = ssPreInstall then
+  if CurStep = ssInstall then
     PreInstallStopIIS
   else if CurStep = ssPostInstall then
     RunInstallScript;
