@@ -307,6 +307,35 @@ try {
 
 try {
 
+# In upgrade mode (-PreserveAppPoolIdentity), query the existing IIS site (if present)
+# so the banner, bindings, firewall and connectivity checks use the actual live port and protocol.
+if ($PreserveAppPoolIdentity) {
+    try {
+        Import-Module WebAdministration -ErrorAction SilentlyContinue
+        $existingSiteObj = Get-Website -Name $SiteName -ErrorAction SilentlyContinue
+        if ($existingSiteObj) {
+            $existingBindings = Get-WebBinding -Name $SiteName -ErrorAction SilentlyContinue
+            $activeBinding = $existingBindings | Where-Object { $_.protocol -eq 'https' } | Select-Object -First 1
+            if (-not $activeBinding) {
+                $activeBinding = $existingBindings | Select-Object -First 1
+            }
+            if ($activeBinding -and $activeBinding.bindingInformation) {
+                $detectedPort = ($activeBinding.bindingInformation -split ':')[1]
+                if ($detectedPort -and [int]::TryParse($detectedPort, [ref]$null)) {
+                    $SitePort = [int]$detectedPort
+                }
+                $detectedHost = ($activeBinding.bindingInformation -split ':')[2]
+                if ($detectedHost) {
+                    $SiteHostHeader = $detectedHost
+                }
+                if ($activeBinding.protocol) {
+                    $UseHttps = ($activeBinding.protocol -eq 'https')
+                }
+            }
+        }
+    } catch { }
+}
+
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Cyan
 if ($script:IsItalian) {
@@ -962,7 +991,10 @@ if ($targetSite) {
         $binding = $null
         if ($PreserveAppPoolIdentity -and $existingHttps) {
             $existingPort = ($existingHttps.bindingInformation -split ':')[1]
-            Write-Info (Msg "Preservato binding HTTPS esistente sulla porta $existingPort per il sito '$SiteName'." "Preserved existing HTTPS binding on port $existingPort for site '$SiteName'.")
+            if ($existingPort -and [int]::TryParse($existingPort, [ref]$null)) {
+                $SitePort = [int]$existingPort
+            }
+            Write-Info (Msg "Preservato binding HTTPS esistente sulla porta $SitePort per il sito '$SiteName'." "Preserved existing HTTPS binding on port $SitePort for site '$SiteName'.")
             $binding = $existingHttps
         }
         else {

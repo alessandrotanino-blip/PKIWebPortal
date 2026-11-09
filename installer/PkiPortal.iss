@@ -706,7 +706,7 @@ end;
 // ----------------------------------------------------------------------------
 procedure DetectPreviousInstallation;
 var
-  UninstallKey, DetectScript, TmpIni: String;
+  UninstallKey, DetectScript, TmpIni, IniVal: String;
   EC: Integer;
   DWordVal: Cardinal;
 begin
@@ -785,10 +785,8 @@ begin
   if (PrevInstallPath <> '') and FileExists(PrevInstallPath + '\PkiPortal.dll') then
     IsUpgrade := True;
 
-  // Se un upgrade ma alcuni parametri IIS mancano (ad es. installazioni pregresse 2.4.0/2.5.0),
-  // interroga IIS tramite uno script PowerShell temporaneo (evita problemi di interpolazione
-  // di $matches, $host ecc. che si verificano con -Command "...")
-  if IsUpgrade and ((PrevSiteName = '') or (PrevSitePort = '') or (PrevProtocol = '')) then
+  // Se è un upgrade, interroga SEMPRE la configurazione reale di IIS (ground truth)
+  if IsUpgrade then
   begin
     TmpIni := ExpandConstant('{tmp}\pki_detect.ini');
     DetectScript := ExpandConstant('{tmp}\pki_detect.ps1');
@@ -841,22 +839,30 @@ begin
       DeleteFile(DetectScript);
       if FileExists(TmpIni) then
       begin
-        if (PrevVersion = '') or (PrevVersion = 'precedente') then
-          PrevVersion := GetIniString('Detected', 'Version', PrevVersion, TmpIni);
-        if PrevSiteName = '' then
-          PrevSiteName := GetIniString('Detected', 'SiteName', 'PkiWebEnrollment', TmpIni);
-        if PrevSitePort = '' then
-          PrevSitePort := GetIniString('Detected', 'SitePort', '', TmpIni);
-        if PrevHostHeader = '' then
-          PrevHostHeader := GetIniString('Detected', 'SiteHostHeader', '', TmpIni);
-        if PrevProtocol = '' then
-          PrevProtocol := GetIniString('Detected', 'Protocol', 'https', TmpIni);
-        if PrevCertThumb = '' then
-          PrevCertThumb := GetIniString('Detected', 'CertThumbprint', '', TmpIni);
-        if PrevAppPoolIdentity = '' then
-          PrevAppPoolIdentity := GetIniString('Detected', 'AppPoolIdentity', 'ApplicationPoolIdentity', TmpIni);
+        IniVal := GetIniString('Detected', 'Version', '', TmpIni);
+        if IniVal <> '' then PrevVersion := IniVal;
+
+        IniVal := GetIniString('Detected', 'SiteName', '', TmpIni);
+        if IniVal <> '' then PrevSiteName := IniVal;
+
+        IniVal := GetIniString('Detected', 'SitePort', '', TmpIni);
+        if IniVal <> '' then PrevSitePort := IniVal;
+
+        IniVal := GetIniString('Detected', 'SiteHostHeader', '', TmpIni);
+        if IniVal <> '' then PrevHostHeader := IniVal;
+
+        IniVal := GetIniString('Detected', 'Protocol', '', TmpIni);
+        if IniVal <> '' then PrevProtocol := IniVal;
+
+        IniVal := GetIniString('Detected', 'CertThumbprint', '', TmpIni);
+        if IniVal <> '' then PrevCertThumb := IniVal;
+
+        IniVal := GetIniString('Detected', 'AppPoolIdentity', '', TmpIni);
+        if IniVal <> '' then PrevAppPoolIdentity := IniVal;
+
         if GetIniString('Detected', 'IsGMSA', '0', TmpIni) = '1' then
           PrevIsGMSA := True;
+
         DeleteFile(TmpIni);
       end;
     end;
