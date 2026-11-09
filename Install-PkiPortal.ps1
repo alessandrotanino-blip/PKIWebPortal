@@ -945,7 +945,13 @@ if ($targetSite) {
         if ([string]::IsNullOrWhiteSpace($CertThumbprint)) {
             $prevBinding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($prevBinding -and $prevBinding.certificateHash) {
-                $CertThumbprint = [System.BitConverter]::ToString($prevBinding.certificateHash).Replace("-", "")
+                $rawHash = $prevBinding.certificateHash
+                if ($rawHash -is [byte[]]) {
+                    $CertThumbprint = [System.BitConverter]::ToString($rawHash).Replace("-", "")
+                } else {
+                    # Already a string (some IIS/PS versions return the hex string directly)
+                    $CertThumbprint = ($rawHash -replace '-','').Trim()
+                }
                 Write-Info (Msg "Rilevato certificato SSL esistente dal binding IIS: $CertThumbprint" "Detected existing SSL certificate from IIS binding: $CertThumbprint")
             }
         }

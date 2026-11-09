@@ -802,7 +802,7 @@ begin
       '$port = if ($b -and $b.bindingInformation -match '':(\d+):'') { $matches[1] } else { ''8443'' }; ' +
       '$host = if ($b -and $b.bindingInformation -match '':\d+:(.*)$'') { $matches[1] } else { '''' }; ' +
       '$thumb = ''''; ' +
-      'if ($proto -eq ''https'' -and $b -and $b.certificateHash) { $thumb = [BitConverter]::ToString($b.certificateHash) -replace ''-''''; } ' +
+      'if ($proto -eq ''https'' -and $b -and $b.certificateHash) { $h = $b.certificateHash; if ($h -is [byte[]]) { $thumb = [BitConverter]::ToString($h) -replace ''-'''' } else { $thumb = ($h -replace ''-'''').Trim() }; } ' +
       '$pool = if ($s) { $s.ApplicationPool } else { '''' }; ' +
       '$ident = ''ApplicationPoolIdentity''; $isGmsa = ''0''; ' +
       'if ($pool) { ' +
