@@ -785,51 +785,58 @@ begin
   if (PrevInstallPath <> '') and FileExists(PrevInstallPath + '\PkiPortal.dll') then
     IsUpgrade := True;
 
-  // Se è un upgrade ma alcuni parametri IIS mancano (ad es. installazioni pregresse 2.4.0/2.5.0),
-  // interroga IIS tramite un comando PowerShell veloce
+  // Se un upgrade ma alcuni parametri IIS mancano (ad es. installazioni pregresse 2.4.0/2.5.0),
+  // interroga IIS tramite uno script PowerShell temporaneo (evita problemi di interpolazione
+  // di $matches, $host ecc. che si verificano con -Command "...")
   if IsUpgrade and ((PrevSiteName = '') or (PrevSitePort = '') or (PrevProtocol = '')) then
   begin
     TmpIni := ExpandConstant('{tmp}\pki_detect.ini');
-    DetectScript :=
-      '$p = ''' + PrevInstallPath + '''; ' +
-      'Import-Module WebAdministration -ErrorAction SilentlyContinue; ' +
-      '$s = Get-Website | Where-Object { ($_.PhysicalPath -replace ''\\$'', '''') -eq ($p -replace ''\\$'', '''') -or $_.Name -eq ''PkiWebEnrollment'' } | Select-Object -First 1; ' +
-      '$dll = Join-Path $p ''PkiPortal.dll''; ' +
-      '$ver = if (Test-Path $dll) { [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dll).FileVersion } else { '''' }; ' +
-      '$siteName = if ($s) { $s.Name } else { ''PkiWebEnrollment'' }; ' +
-      '$b = if ($s) { $s.Bindings.Collection | Select-Object -First 1 } else { $null }; ' +
-      '$proto = if ($b -and $b.protocol) { $b.protocol } else { ''https'' }; ' +
-      '$port = if ($b -and $b.bindingInformation -match '':(\d+):'') { $matches[1] } else { ''8443'' }; ' +
-      '$host = if ($b -and $b.bindingInformation -match '':\d+:(.*)$'') { $matches[1] } else { '''' }; ' +
-      '$thumb = ''''; ' +
-      'if ($proto -eq ''https'' -and $b -and $b.certificateHash) { $h = $b.certificateHash; if ($h -is [byte[]]) { $thumb = [BitConverter]::ToString($h) -replace ''-'''' } else { $thumb = ($h -replace ''-'''').Trim() }; } ' +
-      '$pool = if ($s) { $s.ApplicationPool } else { '''' }; ' +
-      '$ident = ''ApplicationPoolIdentity''; $isGmsa = ''0''; ' +
-      'if ($pool) { ' +
-      '  $ap = Get-ItemProperty (''IIS:\AppPools\'' + $pool) -ErrorAction SilentlyContinue; ' +
-      '  if ($ap) { ' +
-      '    if ($ap.processModel.identityType -eq ''SpecificUser'') { ' +
-      '      $ident = $ap.processModel.userName; ' +
-      '      if ($ident -like ''*$'') { $isGmsa = ''1''; } ' +
-      '    } elseif ($ap.processModel.identityType) { ' +
-      '      $ident = [string]$ap.processModel.identityType; ' +
-      '    } ' +
-      '  } ' +
-      '} ' +
-      '[System.IO.File]::WriteAllLines(''' + TmpIni + ''', @(' +
-      '  ''[Detected]'', ' +
-      '  (''Version='' + $ver), ' +
-      '  (''SiteName='' + $siteName), ' +
-      '  (''SitePort='' + $port), ' +
-      '  (''SiteHostHeader='' + $host), ' +
-      '  (''Protocol='' + $proto), ' +
-      '  (''CertThumbprint='' + $thumb), ' +
-      '  (''AppPoolIdentity='' + $ident), ' +
-      '  (''IsGMSA='' + $isGmsa)' +
-      '))';
+    DetectScript := ExpandConstant('{tmp}\pki_detect.ps1');
+    SaveStringToFile(DetectScript,
+      '$p = ''' + PrevInstallPath + '''' + #13#10 +
+      'Import-Module WebAdministration -ErrorAction SilentlyContinue' + #13#10 +
+      '$s = Get-Website | Where-Object { ($_.PhysicalPath -replace "\\$","") -eq ($p -replace "\\$","") -or $_.Name -eq "PkiWebEnrollment" } | Select-Object -First 1' + #13#10 +
+      '$dll = Join-Path $p "PkiPortal.dll"' + #13#10 +
+      '$ver = if (Test-Path $dll) { [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dll).FileVersion } else { "" }' + #13#10 +
+      '$siteName = if ($s) { $s.Name } else { "PkiWebEnrollment" }' + #13#10 +
+      '$b = if ($s) { $s.Bindings.Collection | Select-Object -First 1 } else { $null }' + #13#10 +
+      '$proto = if ($b -and $b.protocol) { $b.protocol } else { "https" }' + #13#10 +
+      '$sitePort = if ($b -and $b.bindingInformation -match ":(\d+):") { $matches[1] } else { "8443" }' + #13#10 +
+      '$hh = if ($b -and $b.bindingInformation -match ":\d+:(.*)$") { $matches[1] } else { "" }' + #13#10 +
+      '$thumb = ""' + #13#10 +
+      'if ($proto -eq "https" -and $b -and $b.certificateHash) {' + #13#10 +
+      '  $rawH = $b.certificateHash' + #13#10 +
+      '  if ($rawH -is [byte[]]) { $thumb = [BitConverter]::ToString($rawH) -replace "-","" }' + #13#10 +
+      '  else { $thumb = ($rawH -replace "-","").Trim() }' + #13#10 +
+      '}' + #13#10 +
+      '$pool = if ($s) { $s.ApplicationPool } else { "" }' + #13#10 +
+      '$ident = "ApplicationPoolIdentity"; $isGmsa = "0"' + #13#10 +
+      'if ($pool) {' + #13#10 +
+      '  $ap = Get-ItemProperty ("IIS:\AppPools\" + $pool) -ErrorAction SilentlyContinue' + #13#10 +
+      '  if ($ap) {' + #13#10 +
+      '    if ($ap.processModel.identityType -eq "SpecificUser") {' + #13#10 +
+      '      $ident = $ap.processModel.userName' + #13#10 +
+      '      if ($ident -like "*$") { $isGmsa = "1" }' + #13#10 +
+      '    } elseif ($ap.processModel.identityType) {' + #13#10 +
+      '      $ident = [string]$ap.processModel.identityType' + #13#10 +
+      '    }' + #13#10 +
+      '  }' + #13#10 +
+      '}' + #13#10 +
+      '[System.IO.File]::WriteAllLines(''' + TmpIni + ''', @(' + #13#10 +
+      '  "[Detected]",' + #13#10 +
+      '  ("Version=" + $ver),' + #13#10 +
+      '  ("SiteName=" + $siteName),' + #13#10 +
+      '  ("SitePort=" + $sitePort),' + #13#10 +
+      '  ("SiteHostHeader=" + $hh),' + #13#10 +
+      '  ("Protocol=" + $proto),' + #13#10 +
+      '  ("CertThumbprint=" + $thumb),' + #13#10 +
+      '  ("AppPoolIdentity=" + $ident),' + #13#10 +
+      '  ("IsGMSA=" + $isGmsa)' + #13#10 +
+      '))', False);
 
-    if Exec(GetPS, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + DetectScript + '"', '', SW_HIDE, ewWaitUntilTerminated, EC) then
+    if Exec(GetPS, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + DetectScript + '"', '', SW_HIDE, ewWaitUntilTerminated, EC) then
     begin
+      DeleteFile(DetectScript);
       if FileExists(TmpIni) then
       begin
         if (PrevVersion = '') or (PrevVersion = 'precedente') then
