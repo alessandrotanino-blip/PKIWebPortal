@@ -1257,24 +1257,67 @@ begin
     SaveStringToFile(AppDir + '\app_offline.htm', '<html><body>Upgrade in progress</body></html>', False);
   end;
 
-  Sleep(1500);
-
-  // Termina con certezza qualsiasi processo che tiene aperto PkiPortal (w3wp, PkiPortal.exe, dotnet)
+  // Termina con certezza qualsiasi processo che tiene aperti i file del portale
   StopScript := ExpandConstant('{tmp}\pki_stop.ps1');
   SaveStringToFile(StopScript,
-    '$pool = "' + Pool + '"' + #13#10 +
     '$appDir = "' + AppDir + '"' + #13#10 +
-    'Get-Process -Name "PkiPortal" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue' + #13#10 +
-    'Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {' + #13#10 +
-    '  ($_.Name -eq "w3wp.exe" -and ($_.CommandLine -like ("*" + $pool + "*") -or ($appDir -and $_.CommandLine -like ("*" + $appDir + "*")))) -or' + #13#10 +
-    '  ($_.Name -eq "dotnet.exe" -and $_.CommandLine -like "*PkiPortal*") -or' + #13#10 +
-    '  ($_.Name -eq "PkiPortal.exe")' + #13#10 +
-    '} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }' + #13#10 +
-    'Start-Sleep -Milliseconds 500' + #13#10, False);
+    '$pool = "' + Pool + '"' + #13#10 +
+    '$siteName = "' + SiteName + '"' + #13#10 +
+    '$appcmd = "$env:SystemRoot\system32\inetsrv\appcmd.exe"' + #13#10 +
+    'if (Test-Path $appcmd) {' + #13#10 +
+    '  & $appcmd stop site /site.name:"$siteName" 2>$null' + #13#10 +
+    '  & $appcmd stop apppool /apppool.name:"$pool" 2>$null' + #13#10 +
+    '  $wpPids = & $appcmd list wp /apppool.name:"$pool" /text:WP.NAME 2>$null' + #13#10 +
+    '  foreach ($p in $wpPids) {' + #13#10 +
+    '    $cleanP = ($p + "").Trim()' + #13#10 +
+    '    if ($cleanP -match "^\d+$") {' + #13#10 +
+    '      taskkill.exe /F /PID $cleanP /T 2>$null' + #13#10 +
+    '      Stop-Process -Id [int]$cleanP -Force -ErrorAction SilentlyContinue' + #13#10 +
+    '    }' + #13#10 +
+    '  }' + #13#10 +
+    '}' + #13#10 +
+    'Get-Process -Name "w3wp", "dotnet", "PkiPortal" -ErrorAction SilentlyContinue | ForEach-Object {' + #13#10 +
+    '  $proc = $_' + #13#10 +
+    '  $isTarget = ($proc.ProcessName -eq "PkiPortal")' + #13#10 +
+    '  if (-not $isTarget) {' + #13#10 +
+    '    try {' + #13#10 +
+    '      foreach ($m in $proc.Modules) {' + #13#10 +
+    '        if ($m.FileName -and $m.FileName -like "$appDir\*") {' + #13#10 +
+    '          $isTarget = $true' + #13#10 +
+    '          break' + #13#10 +
+    '        }' + #13#10 +
+    '      }' + #13#10 +
+    '    } catch { }' + #13#10 +
+    '  }' + #13#10 +
+    '  if ($isTarget) {' + #13#10 +
+    '    taskkill.exe /F /PID $proc.Id /T 2>$null' + #13#10 +
+    '    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue' + #13#10 +
+    '  }' + #13#10 +
+    '}' + #13#10 +
+    '$testFiles = @(' + #13#10 +
+    '  (Join-Path $appDir "Microsoft.AspNetCore.Authentication.Negotiate.dll"),' + #13#10 +
+    '  (Join-Path $appDir "PkiPortal.dll")' + #13#10 +
+    ')' + #13#10 +
+    'foreach ($tf in $testFiles) {' + #13#10 +
+    '  if (Test-Path $tf) {' + #13#10 +
+    '    for ($i = 0; $i -lt 15; $i++) {' + #13#10 +
+    '      $unlocked = $false' + #13#10 +
+    '      try {' + #13#10 +
+    '        $st = [System.IO.File]::Open($tf, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)' + #13#10 +
+    '        $st.Close()' + #13#10 +
+    '        $st.Dispose()' + #13#10 +
+    '        $unlocked = $true' + #13#10 +
+    '      } catch {' + #13#10 +
+    '        Start-Sleep -Milliseconds 400' + #13#10 +
+    '      }' + #13#10 +
+    '      if ($unlocked) { break }' + #13#10 +
+    '    }' + #13#10 +
+    '  }' + #13#10 +
+    '}' + #13#10, False);
 
   Exec(GetPS, '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + StopScript + '"', '', SW_HIDE, ewWaitUntilTerminated, EC);
   DeleteFile(StopScript);
-  Sleep(1000);
+  Sleep(500);
 end;
 
 // ----------------------------------------------------------------------------
