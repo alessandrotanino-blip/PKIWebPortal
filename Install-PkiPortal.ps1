@@ -564,13 +564,16 @@ if ($existingSite -or $existingAppPool -or (Test-Path $InstallPath)) {
         Write-Info "Sito '$SiteName' già in stato '$($existingSite.State)'." "Site '$SiteName' already in '$($existingSite.State)' state."
     }
 
-    # Stop the App Pool
-    try {
-        if (Test-Path $appcmd) {
-            & $appcmd stop apppool /apppool.name:"$appPoolName" 2>$null
-        }
-        Stop-WebAppPool -Name $appPoolName -ErrorAction SilentlyContinue
-    } catch { }
+    # Stop the App Pool if running
+    $poolState = (Get-WebAppPoolState -Name $appPoolName -ErrorAction SilentlyContinue).Value
+    if ($poolState -eq 'Started') {
+        try {
+            if (Test-Path $appcmd) {
+                & $appcmd stop apppool /apppool.name:"$appPoolName" 2>$null
+            }
+            Stop-WebAppPool -Name $appPoolName -ErrorAction SilentlyContinue
+        } catch { }
+    }
 
     # Wait for the worker process to terminate gracefully
     $timeout = 10
@@ -942,28 +945,52 @@ if ($targetSite) {
     Set-ItemProperty "IIS:\Sites\$SiteName" -Name "applicationPool" -Value $appPoolName
 
     if ($UseHttps) {
-        if ([string]::IsNullOrWhiteSpace($CertThumbprint)) {
-            $prevBinding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($prevBinding -and $prevBinding.certificateHash) {
-                $rawHash = $prevBinding.certificateHash
-                if ($rawHash -is [byte[]]) {
-                    $CertThumbprint = [System.BitConverter]::ToString($rawHash).Replace("-", "")
-                } else {
-                    # Already a string (some IIS/PS versions return the hex string directly)
-                    $CertThumbprint = ($rawHash -replace '-','').Trim()
-                }
-                Write-Info (Msg "Rilevato certificato SSL esistente dal binding IIS: $CertThumbprint" "Detected existing SSL certificate from IIS binding: $CertThumbprint")
+        $existingHttps = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Select-Object -First 1
+
+        if ([string]::IsNullOrWhiteSpace($CertThumbprint) -and $existingHttps -and $existingHttps.certificateHash) {
+            $rawHash = $existingHttps.certificateHash
+            if ($rawHash -is [byte[]]) {
+                $CertThumbprint = [System.BitConverter]::ToString($rawHash).Replace("-", "")
+            } else {
+                # Already a string (some IIS/PS versions return the hex string directly)
+                $CertThumbprint = ($rawHash -replace '[\s\-]','').Trim()
+            }
+            Write-Info (Msg "Rilevato certificato SSL esistente dal binding IIS: $CertThumbprint" "Detected existing SSL certificate from IIS binding: $CertThumbprint")
+        }
+
+        # In upgrade mode (-PreserveAppPoolIdentity), preserve the existing HTTPS binding and its port
+        $binding = $null
+        if ($PreserveAppPoolIdentity -and $existingHttps) {
+            $existingPort = ($existingHttps.bindingInformation -split ':')[1]
+            Write-Info (Msg "Preservato binding HTTPS esistente sulla porta $existingPort per il sito '$SiteName'." "Preserved existing HTTPS binding on port $existingPort for site '$SiteName'.")
+            $binding = $existingHttps
+        }
+        else {
+            $binding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Where-Object { ($_.bindingInformation -split ':')[1] -eq [string]$SitePort } | Select-Object -First 1
+            if (-not $binding) {
+                New-WebBinding -Name $SiteName -Protocol "https" -Port $SitePort -HostHeader $SiteHostHeader -IPAddress "*" | Out-Null
+                $binding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Where-Object { ($_.bindingInformation -split ':')[1] -eq [string]$SitePort } | Select-Object -First 1
             }
         }
 
-        $binding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -match ":${SitePort}:" } | Select-Object -First 1
-        if (-not $binding) {
-            New-WebBinding -Name $SiteName -Protocol "https" -Port $SitePort -HostHeader $SiteHostHeader -Ssl -Force | Out-Null
-            $binding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -match ":${SitePort}:" } | Select-Object -First 1
-        }
         if ($binding -and -not [string]::IsNullOrWhiteSpace($CertThumbprint)) {
-            $binding.AddSslCertificate($CertThumbprint, "My")
-            Write-OK (Msg "Certificato SSL associato al binding HTTPS (Thumbprint: $CertThumbprint)" "SSL certificate bound to HTTPS binding (Thumbprint: $CertThumbprint)")
+            try {
+                $currentHash = $binding.certificateHash
+                $currentThumb = if ($currentHash -is [byte[]]) {
+                    [System.BitConverter]::ToString($currentHash).Replace("-", "")
+                } elseif ($currentHash) {
+                    ($currentHash.ToString() -replace '[\s\-]', '').Trim()
+                } else { '' }
+
+                if (-not $currentThumb -or $currentThumb -ne $CertThumbprint) {
+                    $binding.AddSslCertificate($CertThumbprint, "My")
+                    Write-OK (Msg "Certificato SSL associato al binding HTTPS (Thumbprint: $CertThumbprint)" "SSL certificate bound to HTTPS binding (Thumbprint: $CertThumbprint)")
+                } else {
+                    Write-OK (Msg "Certificato SSL già correttamente associato al binding HTTPS (Thumbprint: $CertThumbprint)" "SSL certificate already bound to HTTPS binding (Thumbprint: $CertThumbprint)")
+                }
+            } catch {
+                Write-Warn (Msg "Associazione certificato SSL: $($_.Exception.Message)" "SSL certificate binding notice: $($_.Exception.Message)")
+            }
         }
     }
     else {
@@ -971,9 +998,9 @@ if ($targetSite) {
             Write-Fail (Msg "Installazione interrotta: HTTP in chiaro bloccato by default. Ripetere con -UseHttps -CertThumbprint <thumbprint>." "Installation aborted: unencrypted HTTP is blocked by default. Rerun with -UseHttps -CertThumbprint <thumbprint>.")
             exit 1
         }
-        $binding = Get-WebBinding -Name $SiteName -Protocol "http" -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -match ":${SitePort}:" } | Select-Object -First 1
+        $binding = Get-WebBinding -Name $SiteName -Protocol "http" -ErrorAction SilentlyContinue | Where-Object { ($_.bindingInformation -split ':')[1] -eq [string]$SitePort } | Select-Object -First 1
         if (-not $binding) {
-            New-WebBinding -Name $SiteName -Protocol "http" -Port $SitePort -HostHeader $SiteHostHeader -Force | Out-Null
+            New-WebBinding -Name $SiteName -Protocol "http" -Port $SitePort -HostHeader $SiteHostHeader -IPAddress "*" | Out-Null
         }
     }
     Write-OK (Msg "Sito IIS '$SiteName' aggiornato con successo." "IIS site '$SiteName' successfully updated.")

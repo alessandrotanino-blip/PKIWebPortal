@@ -799,15 +799,17 @@ begin
       '$dll = Join-Path $p "PkiPortal.dll"' + #13#10 +
       '$ver = if (Test-Path $dll) { [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dll).FileVersion } else { "" }' + #13#10 +
       '$siteName = if ($s) { $s.Name } else { "PkiWebEnrollment" }' + #13#10 +
-      '$b = if ($s) { $s.Bindings.Collection | Select-Object -First 1 } else { $null }' + #13#10 +
+      '$wb = Get-WebBinding -Name $siteName -ErrorAction SilentlyContinue' + #13#10 +
+      '$b = $wb | Where-Object { $_.protocol -eq "https" } | Select-Object -First 1' + #13#10 +
+      'if (-not $b) { $b = $wb | Select-Object -First 1 }' + #13#10 +
       '$proto = if ($b -and $b.protocol) { $b.protocol } else { "https" }' + #13#10 +
-      '$sitePort = if ($b -and $b.bindingInformation -match ":(\d+):") { $matches[1] } else { "8443" }' + #13#10 +
-      '$hh = if ($b -and $b.bindingInformation -match ":\d+:(.*)$") { $matches[1] } else { "" }' + #13#10 +
+      '$sitePort = if ($b -and $b.bindingInformation) { ($b.bindingInformation -split ":")[1] } else { "443" }' + #13#10 +
+      '$hh = if ($b -and $b.bindingInformation) { ($b.bindingInformation -split ":")[2] } else { "" }' + #13#10 +
       '$thumb = ""' + #13#10 +
       'if ($proto -eq "https" -and $b -and $b.certificateHash) {' + #13#10 +
       '  $rawH = $b.certificateHash' + #13#10 +
       '  if ($rawH -is [byte[]]) { $thumb = [BitConverter]::ToString($rawH) -replace "-","" }' + #13#10 +
-      '  else { $thumb = ($rawH -replace "-","").Trim() }' + #13#10 +
+      '  else { $thumb = ($rawH -replace "[\s\-]","").Trim() }' + #13#10 +
       '}' + #13#10 +
       '$pool = if ($s) { $s.ApplicationPool } else { "" }' + #13#10 +
       '$ident = "ApplicationPoolIdentity"; $isGmsa = "0"' + #13#10 +
@@ -844,7 +846,7 @@ begin
         if PrevSiteName = '' then
           PrevSiteName := GetIniString('Detected', 'SiteName', 'PkiWebEnrollment', TmpIni);
         if PrevSitePort = '' then
-          PrevSitePort := GetIniString('Detected', 'SitePort', '8443', TmpIni);
+          PrevSitePort := GetIniString('Detected', 'SitePort', '', TmpIni);
         if PrevHostHeader = '' then
           PrevHostHeader := GetIniString('Detected', 'SiteHostHeader', '', TmpIni);
         if PrevProtocol = '' then
@@ -862,8 +864,14 @@ begin
 
   // Normalizza default per campi che fossero ancora vuoti
   if PrevSiteName = '' then PrevSiteName := 'PkiWebEnrollment';
-  if PrevSitePort = '' then PrevSitePort := '8443';
   if PrevProtocol = '' then PrevProtocol := 'https';
+  if PrevSitePort = '' then
+  begin
+    if PrevProtocol = 'https' then
+      PrevSitePort := '443'
+    else
+      PrevSitePort := '8443';
+  end;
   if PrevAppPoolIdentity = '' then PrevAppPoolIdentity := 'ApplicationPoolIdentity';
   if PrevVersion = '' then PrevVersion := '2.x';
 
