@@ -1,9 +1,11 @@
 ====== Portale PKI Web Enrollment per Microsoft AD CS ======
 ^ Autore | Alessandro Tanino - a.tanino@liguriadigitale.it |
-^ Versione | 2.5.0 |
+^ Versione | 2.5.1 |
 ^ Data | 10 Novembre 2026 |
 ^ Compatibilità | Windows Server 2016, 2019, 2022, 2025 | IIS 10.0+ | .NET 8.0 LTS |
 ^ Requisiti Browser | Chrome, Microsoft Edge, Mozilla Firefox, Safari, Mobile (Zero ActiveX) |
+^ URL Deploy | [[https://pkiwebportal.vd.ld]] \\ [[https://pkiwebportal.ld.ge]] \\ [[https://pkiwebportal.regione.liguria.it]] |
+^ Accesso e Deleghe | Oltre agli amministratori, sono state date deleghe al gruppo ''DOMAIN\DelegheNoc'' |
 
 ===== 1. Introduzione e Obiettivi =====
 
@@ -106,16 +108,16 @@ C:\inetpub\PkiWebEnrollment\ (o cartella sorgente)
 
 ===== 5. Guida all'Installazione su IIS =====
 
-A partire dalla **v2.5.0** è disponibile un **installer grafico Windows** (''PkiPortal-Setup-2.5.0.exe'') basato su Inno Setup 6, scaricabile dalla pagina [[https://github.com/alessandrotanino-blip/PKIWebPortal/releases/latest|GitHub Releases]].
+A partire dalla **v2.5.0** (aggiornato in **v2.5.1**) è disponibile un **installer grafico Windows** (''PkiPortal-Setup-2.5.1.exe'') basato su Inno Setup 6, scaricabile dalla pagina [[https://github.com/alessandrotanino-blip/PKIWebPortal/releases/latest|GitHub Releases]].
 
-==== 5.0 Installer Grafico (Novità v2.5.0) ====
+==== 5.0 Installer Grafico (Novità v2.5.0 / v2.5.1) ====
 
-Il file ''PkiPortal-Setup-2.5.0.exe'' offre una procedura guidata con interfaccia grafica per installare o aggiornare il portale **senza richiedere .NET SDK** sul server di destinazione (i binari sono pre-compilati e inclusi nel pacchetto).
+Il file ''PkiPortal-Setup-2.5.1.exe'' offre una procedura guidata con interfaccia grafica per installare o aggiornare il portale **senza richiedere .NET SDK** sul server di destinazione (i binari sono pre-compilati e inclusi nel pacchetto).
 
 **Funzionalità principali:**
-  * **Rilevamento automatico** dell'installazione precedente tramite registro di Windows (''HKLM\SOFTWARE\PkiPortal''), binding IIS live (''Get-WebBinding'') e filesystem.
+  * **Rilevamento automatico e affidabile** dell'installazione precedente tramite registro di Windows (''HKLM\SOFTWARE\PkiPortal'') e binding IIS live (''Get-WebBinding''). Se non sono presenti siti IIS o chiavi di registro, viene avviata direttamente una prima installazione pulita evitando falsi positivi.
   * **Modalità Aggiornamento Rapido (Fast Upgrade)**: se viene rilevata una versione precedente, l'installer propone un upgrade in un solo clic che preserva il sito IIS, la porta, il certificato SSL, le credenziali del pool e il file ''appsettings.json'' senza richiedere parametri aggiuntivi.
-  * **Modalità installazione personalizzata**: tutti i campi vengono pre-compilati con i valori rilevati e possono essere modificati prima di procedere.
+  * **Modalità installazione personalizzata & Nuova installazione pulita**: consente di modificare i parametri del sito/binding o di effettuare una nuova installazione pulita con reimpostazione dei default.
   * **Supporto multilingue**: interfaccia disponibile in IT, EN, FR, DE, ES, PT, PT-BR.
   * **Sicurezza credenziali**: la password dell'account del pool, se necessaria, viene scritta nel registro cifrato (DPAPI) per pochi istanti e rimossa immediatamente prima dell'avvio dello script — mai esposta nella riga di comando.
 
@@ -123,9 +125,9 @@ Il file ''PkiPortal-Setup-2.5.0.exe'' offre una procedura guidata con interfacci
 # Download dell'installer dalla pagina GitHub Releases:
 # https://github.com/alessandrotanino-blip/PKIWebPortal/releases/latest
 #
-# Avviare PkiPortal-Setup-2.5.0.exe come Amministratore.
+# Avviare PkiPortal-Setup-2.5.1.exe come Amministratore.
 # L'installer rileva automaticamente qualsiasi installazione precedente
-# e propone la modalità di aggiornamento rapido.
+# e propone la modalità di aggiornamento rapido o installazione personalizzata.
 </code>
 
 Lo script ''Install-PkiPortal.ps1'' (incluso nella cartella di installazione) rimane disponibile per chi preferisce la gestione da riga di comando, per pipeline CI/CD o per scenari avanzati.

@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.1] - 2026-11-12
+
+### Installer & Setup Script Fixes
+
+- **Fixed Fresh Installation Crash (STEP 3b)**:
+  - In `Install-PkiPortal.ps1`, preventive Application Pool stop checks now only execute if the IIS site or App Pool actually exists.
+  - Resolved fatal `ItemNotFoundException` triggered by `Get-WebAppPoolState` / `Get-WebItemState` when the App Pool has not been created yet on a new server under `$ErrorActionPreference = "Stop"`.
+  - Full compatibility with Windows PowerShell 5.1: rewritten into native procedural blocks, eliminating the syntax error `The term 'try' is not recognized as the name of a cmdlet`.
+- **Fixed False Upgrade Detection in Setup Wizard (Inno Setup)**:
+  - An isolated `PkiPortal.dll` on disk (e.g. extracted release folder or cloned source repository) without registry entries and without an IIS site/pool configured is no longer falsely treated as a prior installation.
+  - The installer now correctly identifies fresh server setups and avoids preloading dummy/default values (port 443, ApplicationPoolIdentity).
+- **New "Clean Installation" Option in Setup Wizard**:
+  - Added a third option on the detection screen allowing users to easily ignore previous configurations, reset all parameters to defaults, and overwrite configuration files.
+- **Accurate Parameter Application in Custom Installation**:
+  - In `Install-PkiPortal.ps1`, when running custom installation (without `-PreserveAppPoolIdentity`), existing IIS site bindings are properly updated with new port (`-SitePort`) and Host Header (`-SiteHostHeader`) values, and obsolete conflicting bindings are removed.
+  - The `-AppPoolIdentity` parameter is now always explicitly passed by the installer to ensure the selected identity is applied.
+
 ## [2.5.0] - 2026-11-09
 
 ### New Features & Improvements

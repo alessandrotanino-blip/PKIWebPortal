@@ -183,7 +183,7 @@ The `Install-PkiPortal.ps1` script installs the portal as a **separate IIS websi
 
 ### 📦 Graphical Setup Installer (Inno Setup)
 
-A compiled graphical setup wizard is also available (`build\PkiPortal-Setup-2.5.0.exe`) with multi-language support:
+A compiled graphical setup wizard is also available (`build\PkiPortal-Setup-2.5.1.exe`) with multi-language support:
 - Bundles precompiled binaries (no .NET SDK required on the target server).
 - **Automatic upgrade detection**: if a previous installation is detected, offers **Quick Upgrade (recommended)** which preserves site, port, SSL certificate bindings, AppPool identity & credentials, and `appsettings.json` without asking for any parameter.
 - Includes a custom installation option if you need to alter paths or parameters.
@@ -329,7 +329,7 @@ Then open a browser at:
 * **ESC8 Hardening**: This portal does not expose the traditional `certsrv` endpoint.
 * **Separation from certsrv**: The portal uses a completely separate IIS website and Application Pool, ensuring that an issue with the portal does not affect certsrv, and vice versa.
 
-### Hardening & Features (v2.1.0 - v2.5.0)
+### Hardening & Features (v2.1.0 - v2.5.1)
 
 * **Automatic CA Detection in Configuration (v2.5.0)**: Streamlined CA configuration in the administration panel by eliminating redundant manual fields. New *🔍 Detect CAs* button to discover available Certification Authorities by specifying only the AD Forest/Domain (or CA Server), querying the Active Directory Configuration partition via LDAP/LDAPS (`pKIEnrollmentService` objects and standard `dNSHostName` attribute) with no need for HTTP/HTTPS ports 80/443. Selecting a CA automatically fills both CA Name and CA Server, computing `Config String` and `Credential Target`.
 * **ACME Requester Tracking & Request Filtering (v2.4.0)**: Automatic requester identification for certificates issued via ACME RFC 8555 with client IP tracking (ACME (<ip>) or ACME) and distinct visual badge indicators. New dynamic filter toolbar (by requester, template, status, and full-text search) in both the portal and admin panel, plus RESTful API query parameter support.

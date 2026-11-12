@@ -6,6 +6,23 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.5.1] - 2026-11-12
+
+### Correzioni Installer & Script di Installazione
+
+- **Risolto crash in prima installazione (STEP 3b)**:
+  - Nello script `Install-PkiPortal.ps1`, la verifica dell'arresto preventivo dell'Application Pool viene ora eseguita solo se il sito IIS o l'App Pool esistono realmente.
+  - Rimossa l'eccezione fatale `ItemNotFoundException` sollevata da `Get-WebAppPoolState` / `Get-WebItemState` quando l'App Pool non esiste ancora su un nuovo server con `$ErrorActionPreference = "Stop"`.
+  - Compatibilità piena con Windows PowerShell 5.1: riscritti i controlli in forma procedurale nativa, eliminando l'errore di sintassi `The term 'try' is not recognized as the name of a cmdlet`.
+- **Risolto falso rilevamento aggiornamento nel Wizard (Inno Setup)**:
+  - La presenza isolata di `PkiPortal.dll` su disco (es. repository o archivio estratto) in assenza di chiavi di registro e di un sito/pool IIS configurato non viene più trattata erroneamente come installazione precedente.
+  - L'installer riconosce ora una prima installazione pulita evitando di pre-caricare valori fittizi (porta 443, ApplicationPoolIdentity).
+- **Nuova opzione "Nuova installazione pulita" nell'Installer**:
+  - Aggiunta una terza opzione nella schermata di rilevamento per consentire in qualsiasi momento di ignorare i parametri pregressi, reimpostare i default e sovrascrivere la configurazione.
+- **Applicazione corretta dei parametri nell'Installazione Personalizzata**:
+  - Nello script `Install-PkiPortal.ps1`, quando si esegue un'installazione personalizzata (senza `-PreserveAppPoolIdentity`), i binding IIS esistenti vengono aggiornati con i nuovi parametri di porta (`-SitePort`) e Host Header (`-SiteHostHeader`), rimuovendo i binding obsoleti non corrispondenti.
+  - Il parametro `-AppPoolIdentity` viene sempre passato esplicitamente dall'installer per garantire l'applicazione dell'identità scelta.
+
 ## [2.5.0] - 2026-11-09
 
 ### Novità & Funzionalità

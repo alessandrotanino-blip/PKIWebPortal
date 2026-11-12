@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Installation script for the PKI Web Enrollment Portal on IIS Windows Server.
     Installs the site alongside Microsoft Web Enrollment (certsrv) without modifying it.
@@ -100,7 +100,7 @@
 
 .NOTES
     Author:  Enterprise PKI Team
-    Version: 2.5.0
+    Version: 2.5.1
     Requires: Windows Server 2016+ with the IIS role, local administrator privileges.
     IMPORTANT: This script does NOT modify the "Default Web Site" site or certsrv in any way.
 #>
@@ -339,10 +339,10 @@ if ($PreserveAppPoolIdentity) {
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Cyan
 if ($script:IsItalian) {
-    Write-Host "  INSTALLAZIONE PORTALE PKI WEB ENROLLMENT (AD CS Modern) v2.5.0 " -ForegroundColor White
+    Write-Host "  INSTALLAZIONE PORTALE PKI WEB ENROLLMENT (AD CS Modern) v2.5.1 " -ForegroundColor White
     Write-Host "  Installazione a fianco di Microsoft certsrv (non intrusiva)     " -ForegroundColor Gray
 } else {
-    Write-Host "  PKI WEB ENROLLMENT PORTAL INSTALLATION (AD CS Modern) v2.5.0   " -ForegroundColor White
+    Write-Host "  PKI WEB ENROLLMENT PORTAL INSTALLATION (AD CS Modern) v2.5.1   " -ForegroundColor White
     Write-Host "  Side-by-side with Microsoft certsrv (non-intrusive)             " -ForegroundColor Gray
 }
 Write-Host "==================================================================" -ForegroundColor Cyan
@@ -571,11 +571,26 @@ if (Test-Path $InstallPath) {
     } catch { }
 }
 
-$existingSite = Get-Website -Name $SiteName -ErrorAction SilentlyContinue
-$appPoolExists = Test-Path "IIS:\AppPools\$appPoolName"
-$existingAppPool = if ($appPoolExists) { Get-WebAppPoolState -Name $appPoolName -ErrorAction SilentlyContinue } else { $null }
+$existingSite = $null
+try {
+    $existingSite = Get-Website -Name $SiteName -ErrorAction SilentlyContinue
+} catch { }
 
-if ($existingSite -or $existingAppPool -or (Test-Path $InstallPath)) {
+$appPoolExists = $false
+try {
+    if (Test-Path "IIS:\AppPools\$appPoolName" -ErrorAction Stop) {
+        $appPoolExists = $true
+    }
+} catch { }
+
+if (-not $appPoolExists -and (Test-Path $appcmd)) {
+    try {
+        $poolList = & $appcmd list apppool /name:"$appPoolName" 2>$null
+        if ($poolList) { $appPoolExists = $true }
+    } catch { }
+}
+
+if ($existingSite -or $appPoolExists) {
     Write-Step "STEP 3b: Arresto sito e App Pool esistenti per aggiornamento" "STEP 3b: Stopping existing site and App Pool for update"
 
     # Stop the site
@@ -594,37 +609,51 @@ if ($existingSite -or $existingAppPool -or (Test-Path $InstallPath)) {
     }
 
     # Stop the App Pool if running
-    $poolState = (Get-WebAppPoolState -Name $appPoolName -ErrorAction SilentlyContinue).Value
-    if ($poolState -eq 'Started') {
+    if ($appPoolExists) {
+        $poolState = $null
         try {
-            if (Test-Path $appcmd) {
-                & $appcmd stop apppool /apppool.name:"$appPoolName" 2>$null
+            $poolState = (Get-WebAppPoolState -Name $appPoolName -ErrorAction Stop).Value
+        } catch { }
+
+        if ($poolState -eq 'Started') {
+            try {
+                if (Test-Path $appcmd) {
+                    & $appcmd stop apppool /apppool.name:"$appPoolName" 2>$null
+                }
+                Stop-WebAppPool -Name $appPoolName -ErrorAction SilentlyContinue
+            } catch { }
+        }
+
+        # Wait for the worker process to terminate gracefully
+        $timeout = 10
+        $elapsed = 0
+        while ($elapsed -lt $timeout) {
+            $pathExists = $false
+            try {
+                $pathExists = Test-Path "IIS:\AppPools\$appPoolName" -ErrorAction Stop
+            } catch { }
+            if (-not $pathExists) { break }
+
+            $state = $null
+            try {
+                $state = (Get-WebAppPoolState -Name $appPoolName -ErrorAction Stop).Value
+            } catch { }
+            if ($state -ne 'Started' -and $state -ne 'Stopping') { break }
+            Start-Sleep -Seconds 1
+            $elapsed++
+        }
+
+        # Check whether any w3wp.exe processes are still active for this AppPool or locking PkiPortal.dll
+        try {
+            $w3wpProcesses = Get-CimInstance Win32_Process -Filter "Name = 'w3wp.exe'" -ErrorAction SilentlyContinue | Where-Object {
+                $_.CommandLine -like "*$appPoolName*"
             }
-            Stop-WebAppPool -Name $appPoolName -ErrorAction SilentlyContinue
+            foreach ($proc in $w3wpProcesses) {
+                Write-Warn "Worker process w3wp.exe (PID $($proc.ProcessId)) ancora attivo. Terminazione forzata..." "Worker process w3wp.exe (PID $($proc.ProcessId)) still active. Forcing termination..."
+                Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+            }
         } catch { }
     }
-
-    # Wait for the worker process to terminate gracefully
-    $timeout = 10
-    $elapsed = 0
-    while ($elapsed -lt $timeout) {
-        if (-not (Test-Path "IIS:\AppPools\$appPoolName")) { break }
-        $state = (Get-WebAppPoolState -Name $appPoolName -ErrorAction SilentlyContinue).Value
-        if ($state -ne 'Started' -and $state -ne 'Stopping') { break }
-        Start-Sleep -Seconds 1
-        $elapsed++
-    }
-
-    # Check whether any w3wp.exe processes are still active for this AppPool or locking PkiPortal.dll
-    try {
-        $w3wpProcesses = Get-CimInstance Win32_Process -Filter "Name = 'w3wp.exe'" -ErrorAction SilentlyContinue | Where-Object {
-            $_.CommandLine -like "*$appPoolName*"
-        }
-        foreach ($proc in $w3wpProcesses) {
-            Write-Warn "Worker process w3wp.exe (PID $($proc.ProcessId)) ancora attivo. Terminazione forzata..." "Worker process w3wp.exe (PID $($proc.ProcessId)) still active. Forcing termination..."
-            Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
-        }
-    } catch { }
 
     Write-OK "Sito e Application Pool pronti per l'aggiornamento dei file." "Site and Application Pool ready for file updates."
 }
@@ -998,10 +1027,24 @@ if ($targetSite) {
             $binding = $existingHttps
         }
         else {
+            $targetBindingInfo = "*:${SitePort}:${SiteHostHeader}"
             $binding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Where-Object { ($_.bindingInformation -split ':')[1] -eq [string]$SitePort } | Select-Object -First 1
             if (-not $binding) {
                 New-WebBinding -Name $SiteName -Protocol "https" -Port $SitePort -HostHeader $SiteHostHeader -IPAddress "*" | Out-Null
                 $binding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Where-Object { ($_.bindingInformation -split ':')[1] -eq [string]$SitePort } | Select-Object -First 1
+            }
+            elseif ($binding.bindingInformation -ne $targetBindingInfo) {
+                Set-WebBinding -Name $SiteName -BindingInformation $binding.bindingInformation -PropertyName "bindingInformation" -Value $targetBindingInfo
+                $binding = Get-WebBinding -Name $SiteName -Protocol "https" -ErrorAction SilentlyContinue | Where-Object { $_.bindingInformation -eq $targetBindingInfo } | Select-Object -First 1
+                Write-Info (Msg "Binding HTTPS aggiornato: $targetBindingInfo" "HTTPS binding updated: $targetBindingInfo")
+            }
+
+            # Remove obsolete bindings with different port/protocol when reconfiguring
+            Get-WebBinding -Name $SiteName -ErrorAction SilentlyContinue | Where-Object {
+                $_.protocol -ne "https" -or ($_.bindingInformation -split ':')[1] -ne [string]$SitePort
+            } | ForEach-Object {
+                Write-Info (Msg "Rimozione binding obsoleto non corrispondente: $($_.protocol) su $($_.bindingInformation)" "Removing non-matching obsolete binding: $($_.protocol) on $($_.bindingInformation)")
+                Remove-WebBinding -Name $SiteName -BindingInformation $_.bindingInformation -Protocol $_.protocol -ErrorAction SilentlyContinue
             }
         }
 
@@ -1030,9 +1073,21 @@ if ($targetSite) {
             Write-Fail (Msg "Installazione interrotta: HTTP in chiaro bloccato by default. Ripetere con -UseHttps -CertThumbprint <thumbprint>." "Installation aborted: unencrypted HTTP is blocked by default. Rerun with -UseHttps -CertThumbprint <thumbprint>.")
             exit 1
         }
+        $targetBindingInfo = "*:${SitePort}:${SiteHostHeader}"
         $binding = Get-WebBinding -Name $SiteName -Protocol "http" -ErrorAction SilentlyContinue | Where-Object { ($_.bindingInformation -split ':')[1] -eq [string]$SitePort } | Select-Object -First 1
         if (-not $binding) {
             New-WebBinding -Name $SiteName -Protocol "http" -Port $SitePort -HostHeader $SiteHostHeader -IPAddress "*" | Out-Null
+        }
+        elseif ($binding.bindingInformation -ne $targetBindingInfo) {
+            Set-WebBinding -Name $SiteName -BindingInformation $binding.bindingInformation -PropertyName "bindingInformation" -Value $targetBindingInfo
+            Write-Info (Msg "Binding HTTP aggiornato: $targetBindingInfo" "HTTP binding updated: $targetBindingInfo")
+        }
+        # Remove obsolete bindings
+        Get-WebBinding -Name $SiteName -ErrorAction SilentlyContinue | Where-Object {
+            $_.protocol -ne "http" -or ($_.bindingInformation -split ':')[1] -ne [string]$SitePort
+        } | ForEach-Object {
+            Write-Info (Msg "Rimozione binding obsoleto non corrispondente: $($_.protocol) su $($_.bindingInformation)" "Removing non-matching obsolete binding: $($_.protocol) on $($_.bindingInformation)")
+            Remove-WebBinding -Name $SiteName -BindingInformation $_.bindingInformation -Protocol $_.protocol -ErrorAction SilentlyContinue
         }
     }
     Write-OK (Msg "Sito IIS '$SiteName' aggiornato con successo." "IIS site '$SiteName' successfully updated.")
@@ -1372,9 +1427,9 @@ if ($defaultWs -and $defaultWs.State -eq "Started") {
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Green
 if ($script:IsItalian) {
-    Write-Host "  INSTALLAZIONE COMPLETATA (v2.5.0)                              " -ForegroundColor White
+    Write-Host "  INSTALLAZIONE COMPLETATA (v2.5.1)                              " -ForegroundColor White
 } else {
-    Write-Host "  INSTALLATION COMPLETED (v2.5.0)                                " -ForegroundColor White
+    Write-Host "  INSTALLATION COMPLETED (v2.5.1)                                " -ForegroundColor White
 }
 Write-Host "==================================================================" -ForegroundColor Green
 Write-Host ""

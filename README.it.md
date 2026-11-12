@@ -184,7 +184,7 @@ dove è attivo Microsoft Web Enrollment (certsrv), **senza modificare né interr
 
 ### 📦 Setup Installer grafico (Inno Setup)
 
-È disponibile anche l'installer grafico compilato (`build\PkiPortal-Setup-2.5.0.exe`) con supporto multilingua:
+È disponibile anche l'installer grafico compilato (`build\PkiPortal-Setup-2.5.1.exe`) con supporto multilingua:
 - Include i binari precompilati (non richiede .NET SDK sul server).
 - **Rilevamento automatico upgrade**: se rileva una versione precedente, propone l'**Aggiornamento rapido (consigliato)** che preserva sito, porte, certificati SSL, credenziali dell'AppPool e `appsettings.json` senza richiedere alcun parametro.
 - Include l'opzione di installazione personalizzata per modificare parametri o percorsi.
@@ -323,7 +323,7 @@ Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 * **Service Account**: L'Application Pool di IIS deve eseguire con un account che abbia i permessi *Request Certificates* (Enroll) sui template ADCS desiderati. Per la modalità Standalone all'interno della foresta, `NetworkService` o un Managed Service Account è sufficiente.
 * **Separazione da certsrv**: Il portale utilizza un sito IIS e un Application Pool completamente separati, garantendo che un problema sul portale non impatti certsrv e viceversa.
 
-### Hardening e Novità (v2.1.0 - v2.5.0)
+### Hardening e Novità (v2.1.0 - v2.5.1)
 
 * **Rilevamento Automatico CA nella Configurazione (v2.5.0)**: Semplificazione della configurazione delle CA nel pannello di amministrazione con eliminazione dei campi ridondanti. Pulsante *🔍 Rileva CA* per identificare automaticamente le Certification Authority disponibili specificando solo la Foresta/Dominio AD (o il Server CA), interrogando direttamente il partizionamento Configuration di Active Directory via LDAP/LDAPS (oggetti `pKIEnrollmentService` e attributo standard `dNSHostName`), senza alcuna necessità di porte HTTP/HTTPS 80/443. La selezione della CA compila automaticamente sia il Nome CA che il Server CA, calcolando `Config String` e `Credential Target`.
 * **Tracciamento Richiedenti ACME & Filtraggio Richieste (v2.4.0)**: Identificazione automatica del richiedente per i certificati emessi via ACME RFC 8555 con indirizzo IP del client (ACME (<ip>) o ACME) ed evidenziazione con badge grafica. Nuova barra filtri dinamica (per richiedente, template, stato e ricerca libera live) nel portale e nel pannello admin, con supporto query parameters nelle API RESTful.

@@ -5,10 +5,10 @@ ma con una finestra wizard per inserire i parametri, e con disinstallatore che r
 `Uninstall-PkiPortal.ps1`.
 
 - Sorgente: [PkiPortal.iss](PkiPortal.iss)
-- Output: `..\build\PkiPortal-Setup-2.5.0.exe` (self-extracting, nessuna dipendenza)
+- Output: `..\build\PkiPortal-Setup-2.5.1.exe` (self-extracting, nessuna dipendenza)
 - Compilato con **Inno Setup 6.7.3** (API `[Code]` di Inno 6, non 7.x)
 
-I file applicativi sono **pre-pubblicati** (cartella `..\publish`, v2.5.0): il server di
+I file applicativi sono **pre-pubblicati** (cartella `..\publish`, v2.5.1): il server di
 destinazione **non** richiede .NET SDK né accesso a NuGet. Lo script viene lanciato con
 `-SkipDotnetPublish` e la fase di build viene sostituita dal bundle embeddato.
 

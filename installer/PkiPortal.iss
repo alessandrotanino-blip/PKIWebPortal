@@ -12,11 +12,11 @@
 ; require .NET SDK or NuGet access.
 ;
 ; Build:   powershell .\build-installer.ps1
-; Output:  ..\build\PkiPortal-Setup-2.5.0.exe
+; Output:  ..\build\PkiPortal-Setup-2.5.1.exe
 ; ============================================================================
 
 #define MyAppName        "PkiPortal"
-#define MyAppVersion     "2.5.0"
+#define MyAppVersion     "2.5.1"
 #define MyAppPublisher   "Enterprise PKI Team"
 #define MyAppExeName     "PkiPortal.exe"
 
@@ -104,6 +104,8 @@ english.UpgradeModeQuick=Fast upgrade (recommended)
 english.UpgradeModeQuickDesc=Update application files preserving IIS site, ports, certificates, AppPool identity, and configuration without prompting.
 english.UpgradeModeCustom=Custom installation (modify parameters)
 english.UpgradeModeCustomDesc=Allows modifying the installation path, IIS site name, port, certificate, or AppPool credentials.
+english.UpgradeModeClean=Clean installation (reset parameters)
+english.UpgradeModeCleanDesc=Resets all parameters to defaults, ignores previous settings, and overwrites existing configuration.
 english.ReadyMemoUpgradeTitle=Installation Mode: Fast Upgrade
 english.ReadyMemoPrevVersion=Previous version:
 english.ReadyMemoInstallDir=Installation folder:
@@ -160,6 +162,8 @@ italian.UpgradeModeQuick=Aggiornamento rapido (consigliato)
 italian.UpgradeModeQuickDesc=Aggiorna i file applicativi preservando sito IIS, porte, certificati, identità del pool e configurazione senza ulteriori richieste.
 italian.UpgradeModeCustom=Installazione personalizzata (modifica parametri)
 italian.UpgradeModeCustomDesc=Consente di modificare il percorso di installazione, il sito IIS, le porte, i certificati o l'identità del pool.
+italian.UpgradeModeClean=Nuova installazione pulita (reimposta parametri)
+italian.UpgradeModeCleanDesc=Reimposta tutti i parametri ai valori predefiniti, ignora la configurazione esistente e sovrascrive i file di configurazione.
 italian.ReadyMemoUpgradeTitle=Modalità di installazione: Aggiornamento rapido
 italian.ReadyMemoPrevVersion=Versione precedente:
 italian.ReadyMemoInstallDir=Cartella di installazione:
@@ -216,6 +220,8 @@ french.UpgradeModeQuick=Mise à niveau rapide (recommandé)
 french.UpgradeModeQuickDesc=Met à jour les fichiers applicatifs en conservant le site IIS, les ports, les certificats, l'identité du pool et la configuration.
 french.UpgradeModeCustom=Installation personnalisée (modifier les paramètres)
 french.UpgradeModeCustomDesc=Permet de modifier le dossier d'installation, le site IIS, les ports, les certificats ou l'identité du pool.
+french.UpgradeModeClean=Nouvelle installation propre (réinitialiser les paramètres)
+french.UpgradeModeCleanDesc=Réinitialise tous les paramètres par défaut, ignore la configuration existante et écrase les fichiers de configuration.
 french.ReadyMemoUpgradeTitle=Mode d'installation : Mise à niveau rapide
 french.ReadyMemoPrevVersion=Version précédente :
 french.ReadyMemoInstallDir=Dossier d'installation :
@@ -272,6 +278,8 @@ german.UpgradeModeQuick=Schnelles Upgrade (empfohlen)
 german.UpgradeModeQuickDesc=Aktualisiert Anwendungsdateien unter Beibehaltung von IIS-Site, Ports, Zertifikaten, Pool-Identität und Konfiguration.
 german.UpgradeModeCustom=Benutzerdefinierte Installation (Parameter ändern)
 german.UpgradeModeCustomDesc=Ermöglicht das Anpassen von Installationspfad, IIS-Site, Ports, Zertifikaten oder Pool-Identität.
+german.UpgradeModeClean=Saubere Neuinstallation (Parameter zurücksetzen)
+german.UpgradeModeCleanDesc=Setzt alle Parameter auf Standardwerte zurück, ignoriert vorherige Einstellungen und überschreibt die Konfiguration.
 german.ReadyMemoUpgradeTitle=Installationsmodus: Schnelles Upgrade
 german.ReadyMemoPrevVersion=Vorherige Version:
 german.ReadyMemoInstallDir=Installationsordner:
@@ -328,6 +336,8 @@ spanish.UpgradeModeQuick=Actualización rápida (recomendado)
 spanish.UpgradeModeQuickDesc=Actualiza los archivos de la aplicación conservando el sitio IIS, puertos, certificados, identidad del grupo y configuración.
 spanish.UpgradeModeCustom=Instalación personalizada (modificar parámetros)
 spanish.UpgradeModeCustomDesc=Permite modificar la ruta de instalación, el sitio IIS, los puertos, los certificados o la identidad del grupo.
+spanish.UpgradeModeClean=Nueva instalación limpia (restablecer parámetros)
+spanish.UpgradeModeCleanDesc=Restablece todos los parámetros a los valores predeterminados, ignora la configuración previa y sobrescribe la configuración.
 spanish.ReadyMemoUpgradeTitle=Modo de instalación: Actualización rápida
 spanish.ReadyMemoPrevVersion=Versión anterior:
 spanish.ReadyMemoInstallDir=Carpeta de instalación:
@@ -384,6 +394,8 @@ portuguese.UpgradeModeQuick=Atualização rápida (recomendado)
 portuguese.UpgradeModeQuickDesc=Atualiza os ficheiros da aplicação preservando o site IIS, portas, certificados, identidade do pool e configuração sem solicitar parâmetros.
 portuguese.UpgradeModeCustom=Instalação personalizada (modificar parâmetros)
 portuguese.UpgradeModeCustomDesc=Permite modificar o caminho de instalação, o site IIS, as portas, os certificados ou a identidade do pool.
+portuguese.UpgradeModeClean=Nova instalação limpa (repor parâmetros)
+portuguese.UpgradeModeCleanDesc=Repõe todos os parâmetros para os valores predefinidos, ignora a configuração anterior e substitui os ficheiros de configuração.
 portuguese.ReadyMemoUpgradeTitle=Modo de instalação: Atualização rápida
 portuguese.ReadyMemoPrevVersion=Versão anterior:
 portuguese.ReadyMemoInstallDir=Pasta de instalação:
@@ -440,6 +452,8 @@ brazilianportuguese.UpgradeModeQuick=Atualização rápida (recomendado)
 brazilianportuguese.UpgradeModeQuickDesc=Atualiza os arquivos do aplicativo preservando o site IIS, portas, certificados, identidade do pool e configuração sem solicitar parâmetros.
 brazilianportuguese.UpgradeModeCustom=Instalação personalizada (modificar parâmetros)
 brazilianportuguese.UpgradeModeCustomDesc=Permite modificar o caminho de instalação, o site IIS, as portas, os certificados ou a identidade do pool.
+brazilianportuguese.UpgradeModeClean=Nova instalação limpa (redefinir parâmetros)
+brazilianportuguese.UpgradeModeCleanDesc=Redefine todos os parâmetros para os padrões, ignora a configuração anterior e substitui os arquivos de configuração.
 brazilianportuguese.ReadyMemoUpgradeTitle=Modo de instalação: Atualização rápida
 brazilianportuguese.ReadyMemoPrevVersion=Versão anterior:
 brazilianportuguese.ReadyMemoInstallDir=Pasta de instalação:
@@ -449,7 +463,7 @@ brazilianportuguese.ReadyMemoIdentity=Identidade do pool:
 brazilianportuguese.ReadyMemoPreserveNote=A configuração existente (appsettings.json), logs e configurações do IIS serão preservados.
 
 ; ----------------------------------------------------------------------------
-; File applicativi pre-pubblicati (output di dotnet publish, v2.5.0)
+; File applicativi pre-pubblicati (output di dotnet publish, v2.5.1)
 ; NOTA: appsettings.json NON viene inserito nell'installer poiché contiene la
 ; configurazione specifica d'ambiente. Alla prima installazione lo script
 ; genera appsettings.json partendo dal modello pulito appsettings.example.json;
@@ -496,8 +510,8 @@ var
 
   UpgradePage: TWizardPage;
   UpgradeInfoBox: TNewStaticText;
-  QuickUpgradeRadio, CustomUpgradeRadio: TNewRadioButton;
-  QuickDescText, CustomDescText: TNewStaticText;
+  QuickUpgradeRadio, CustomUpgradeRadio, CleanInstallRadio: TNewRadioButton;
+  QuickDescText, CustomDescText, CleanDescText: TNewStaticText;
 
   // --- Pagina 1: parametri sito ---
   SitePage: TWizardPage;
@@ -709,6 +723,7 @@ var
   UninstallKey, DetectScript, TmpIni, IniVal: String;
   EC: Integer;
   DWordVal: Cardinal;
+  HasReg, SiteFound, PoolFound: Boolean;
 begin
   IsUpgrade := False;
   IsQuickUpgrade := False;
@@ -778,15 +793,12 @@ begin
     PrevSkipFirewall := True;
 
   // 4. Controllo filesystem fallback nel percorso predefinito
+  HasReg := (PrevInstallPath <> '');
   if (PrevInstallPath = '') and FileExists('C:\inetpub\PkiWebEnrollment\PkiPortal.dll') then
     PrevInstallPath := 'C:\inetpub\PkiWebEnrollment';
 
-  // Se abbiamo trovato una cartella valida con PkiPortal.dll, l'installazione esiste!
+  // Se abbiamo trovato una cartella candidata con PkiPortal.dll, interroga IIS per verificare se il sito/pool esiste
   if (PrevInstallPath <> '') and FileExists(PrevInstallPath + '\PkiPortal.dll') then
-    IsUpgrade := True;
-
-  // Se è un upgrade, interroga SEMPRE la configurazione reale di IIS (ground truth)
-  if IsUpgrade then
   begin
     TmpIni := ExpandConstant('{tmp}\pki_detect.ini');
     DetectScript := ExpandConstant('{tmp}\pki_detect.ps1');
@@ -794,14 +806,15 @@ begin
       '$p = ''' + PrevInstallPath + '''' + #13#10 +
       'Import-Module WebAdministration -ErrorAction SilentlyContinue' + #13#10 +
       '$s = Get-Website | Where-Object { ($_.PhysicalPath -replace "\\$","") -eq ($p -replace "\\$","") -or $_.Name -eq "PkiWebEnrollment" } | Select-Object -First 1' + #13#10 +
+      '$hasSite = if ($s) { "1" } else { "0" }' + #13#10 +
       '$dll = Join-Path $p "PkiPortal.dll"' + #13#10 +
       '$ver = if (Test-Path $dll) { [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dll).FileVersion } else { "" }' + #13#10 +
-      '$siteName = if ($s) { $s.Name } else { "PkiWebEnrollment" }' + #13#10 +
-      '$wb = Get-WebBinding -Name $siteName -ErrorAction SilentlyContinue' + #13#10 +
-      '$b = $wb | Where-Object { $_.protocol -eq "https" } | Select-Object -First 1' + #13#10 +
-      'if (-not $b) { $b = $wb | Select-Object -First 1 }' + #13#10 +
-      '$proto = if ($b -and $b.protocol) { $b.protocol } else { "https" }' + #13#10 +
-      '$sitePort = if ($b -and $b.bindingInformation) { ($b.bindingInformation -split ":")[1] } else { "443" }' + #13#10 +
+      '$siteName = if ($s) { $s.Name } else { "" }' + #13#10 +
+      '$wb = if ($s) { Get-WebBinding -Name $siteName -ErrorAction SilentlyContinue } else { $null }' + #13#10 +
+      '$b = if ($wb) { $wb | Where-Object { $_.protocol -eq "https" } | Select-Object -First 1 } else { $null }' + #13#10 +
+      'if (-not $b -and $wb) { $b = $wb | Select-Object -First 1 }' + #13#10 +
+      '$proto = if ($b -and $b.protocol) { $b.protocol } else { "" }' + #13#10 +
+      '$sitePort = if ($b -and $b.bindingInformation) { ($b.bindingInformation -split ":")[1] } else { "" }' + #13#10 +
       '$hh = if ($b -and $b.bindingInformation) { ($b.bindingInformation -split ":")[2] } else { "" }' + #13#10 +
       '$thumb = ""' + #13#10 +
       'if ($proto -eq "https" -and $b -and $b.certificateHash) {' + #13#10 +
@@ -809,8 +822,9 @@ begin
       '  if ($rawH -is [byte[]]) { $thumb = [BitConverter]::ToString($rawH) -replace "-","" }' + #13#10 +
       '  else { $thumb = ($rawH -replace "[\s\-]","").Trim() }' + #13#10 +
       '}' + #13#10 +
-      '$pool = if ($s) { $s.ApplicationPool } else { "" }' + #13#10 +
-      '$ident = "ApplicationPoolIdentity"; $isGmsa = "0"' + #13#10 +
+      '$pool = if ($s) { $s.ApplicationPool } else { if (Test-Path "IIS:\AppPools\PkiWebEnrollment_Pool") { "PkiWebEnrollment_Pool" } else { "" } }' + #13#10 +
+      '$hasPool = if ($pool -and (Test-Path ("IIS:\AppPools\" + $pool))) { "1" } else { "0" }' + #13#10 +
+      '$ident = ""; $isGmsa = "0"' + #13#10 +
       'if ($pool) {' + #13#10 +
       '  $ap = Get-ItemProperty ("IIS:\AppPools\" + $pool) -ErrorAction SilentlyContinue' + #13#10 +
       '  if ($ap) {' + #13#10 +
@@ -824,6 +838,8 @@ begin
       '}' + #13#10 +
       '[System.IO.File]::WriteAllLines(''' + TmpIni + ''', @(' + #13#10 +
       '  "[Detected]",' + #13#10 +
+      '  ("SiteFound=" + $hasSite),' + #13#10 +
+      '  ("PoolFound=" + $hasPool),' + #13#10 +
       '  ("Version=" + $ver),' + #13#10 +
       '  ("SiteName=" + $siteName),' + #13#10 +
       '  ("SitePort=" + $sitePort),' + #13#10 +
@@ -839,50 +855,64 @@ begin
       DeleteFile(DetectScript);
       if FileExists(TmpIni) then
       begin
-        IniVal := GetIniString('Detected', 'Version', '', TmpIni);
-        if IniVal <> '' then PrevVersion := IniVal;
+        SiteFound := (GetIniString('Detected', 'SiteFound', '0', TmpIni) = '1');
+        PoolFound := (GetIniString('Detected', 'PoolFound', '0', TmpIni) = '1');
 
-        IniVal := GetIniString('Detected', 'SiteName', '', TmpIni);
-        if IniVal <> '' then PrevSiteName := IniVal;
+        if HasReg or SiteFound or PoolFound then
+        begin
+          IsUpgrade := True;
+          IniVal := GetIniString('Detected', 'Version', '', TmpIni);
+          if IniVal <> '' then PrevVersion := IniVal;
 
-        IniVal := GetIniString('Detected', 'SitePort', '', TmpIni);
-        if IniVal <> '' then PrevSitePort := IniVal;
+          IniVal := GetIniString('Detected', 'SiteName', '', TmpIni);
+          if IniVal <> '' then PrevSiteName := IniVal;
 
-        IniVal := GetIniString('Detected', 'SiteHostHeader', '', TmpIni);
-        if IniVal <> '' then PrevHostHeader := IniVal;
+          IniVal := GetIniString('Detected', 'SitePort', '', TmpIni);
+          if IniVal <> '' then PrevSitePort := IniVal;
 
-        IniVal := GetIniString('Detected', 'Protocol', '', TmpIni);
-        if IniVal <> '' then PrevProtocol := IniVal;
+          IniVal := GetIniString('Detected', 'SiteHostHeader', '', TmpIni);
+          if IniVal <> '' then PrevHostHeader := IniVal;
 
-        IniVal := GetIniString('Detected', 'CertThumbprint', '', TmpIni);
-        if IniVal <> '' then PrevCertThumb := IniVal;
+          IniVal := GetIniString('Detected', 'Protocol', '', TmpIni);
+          if IniVal <> '' then PrevProtocol := IniVal;
 
-        IniVal := GetIniString('Detected', 'AppPoolIdentity', '', TmpIni);
-        if IniVal <> '' then PrevAppPoolIdentity := IniVal;
+          IniVal := GetIniString('Detected', 'CertThumbprint', '', TmpIni);
+          if IniVal <> '' then PrevCertThumb := IniVal;
 
-        if GetIniString('Detected', 'IsGMSA', '0', TmpIni) = '1' then
-          PrevIsGMSA := True;
+          IniVal := GetIniString('Detected', 'AppPoolIdentity', '', TmpIni);
+          if IniVal <> '' then PrevAppPoolIdentity := IniVal;
+
+          if GetIniString('Detected', 'IsGMSA', '0', TmpIni) = '1' then
+            PrevIsGMSA := True;
+        end
+        else
+        begin
+          // File su disco senza né chiavi di registro né sito/pool in IIS: non è un aggiornamento
+          IsUpgrade := False;
+          PrevInstallPath := '';
+        end;
 
         DeleteFile(TmpIni);
       end;
     end;
   end;
 
-  // Normalizza default per campi che fossero ancora vuoti
-  if PrevSiteName = '' then PrevSiteName := 'PkiWebEnrollment';
-  if PrevProtocol = '' then PrevProtocol := 'https';
-  if PrevSitePort = '' then
-  begin
-    if PrevProtocol = 'https' then
-      PrevSitePort := '443'
-    else
-      PrevSitePort := '8443';
-  end;
-  if PrevAppPoolIdentity = '' then PrevAppPoolIdentity := 'ApplicationPoolIdentity';
-  if PrevVersion = '' then PrevVersion := '2.x';
-
   if IsUpgrade then
+  begin
+    // Normalizza default per campi che fossero ancora vuoti solo se è un vero upgrade
+    if PrevSiteName = '' then PrevSiteName := 'PkiWebEnrollment';
+    if PrevProtocol = '' then PrevProtocol := 'https';
+    if PrevSitePort = '' then
+    begin
+      if PrevProtocol = 'https' then
+        PrevSitePort := '443'
+      else
+        PrevSitePort := '8443';
+    end;
+    if PrevAppPoolIdentity = '' then PrevAppPoolIdentity := 'ApplicationPoolIdentity';
+    if PrevVersion = '' then PrevVersion := '2.x';
     IsQuickUpgrade := True;
+  end;
 end;
 
 // ----------------------------------------------------------------------------
@@ -912,27 +942,39 @@ begin
 
   QuickUpgradeRadio := TNewRadioButton.Create(WizardForm);
   QuickUpgradeRadio.Parent := UpgradePage.Surface;
-  QuickUpgradeRadio.SetBounds(16, 88, 460, 20);
+  QuickUpgradeRadio.SetBounds(16, 82, 460, 20);
   QuickUpgradeRadio.Caption := CustomMessage('UpgradeModeQuick');
   QuickUpgradeRadio.Font.Style := [fsBold];
   QuickUpgradeRadio.Checked := True;
 
   QuickDescText := TNewStaticText.Create(WizardForm);
   QuickDescText.Parent := UpgradePage.Surface;
-  QuickDescText.SetBounds(34, 110, 440, 36);
+  QuickDescText.SetBounds(34, 102, 440, 28);
   QuickDescText.Caption := CustomMessage('UpgradeModeQuickDesc');
 
   CustomUpgradeRadio := TNewRadioButton.Create(WizardForm);
   CustomUpgradeRadio.Parent := UpgradePage.Surface;
-  CustomUpgradeRadio.SetBounds(16, 154, 460, 20);
+  CustomUpgradeRadio.SetBounds(16, 132, 460, 20);
   CustomUpgradeRadio.Caption := CustomMessage('UpgradeModeCustom');
   CustomUpgradeRadio.Font.Style := [fsBold];
   CustomUpgradeRadio.Checked := False;
 
   CustomDescText := TNewStaticText.Create(WizardForm);
   CustomDescText.Parent := UpgradePage.Surface;
-  CustomDescText.SetBounds(34, 176, 440, 36);
+  CustomDescText.SetBounds(34, 152, 440, 28);
   CustomDescText.Caption := CustomMessage('UpgradeModeCustomDesc');
+
+  CleanInstallRadio := TNewRadioButton.Create(WizardForm);
+  CleanInstallRadio.Parent := UpgradePage.Surface;
+  CleanInstallRadio.SetBounds(16, 182, 460, 20);
+  CleanInstallRadio.Caption := CustomMessage('UpgradeModeClean');
+  CleanInstallRadio.Font.Style := [fsBold];
+  CleanInstallRadio.Checked := False;
+
+  CleanDescText := TNewStaticText.Create(WizardForm);
+  CleanDescText.Parent := UpgradePage.Surface;
+  CleanDescText.SetBounds(34, 202, 440, 28);
+  CleanDescText.Caption := CustomMessage('UpgradeModeCleanDesc');
 
   // ================= Pagina 1: parametri sito =================
   SitePage := CreateCustomPage(wpSelectDir,
@@ -1050,9 +1092,29 @@ begin
 
   if CurPageID = UpgradePage.ID then
   begin
-    IsQuickUpgrade := QuickUpgradeRadio.Checked;
-    if IsQuickUpgrade then
+    if CleanInstallRadio.Checked then
     begin
+      IsUpgrade := False;
+      IsQuickUpgrade := False;
+      WizardForm.DirEdit.Text := 'C:\inetpub\PkiWebEnrollment';
+      SiteNameEdit.Text := 'PkiWebEnrollment';
+      SitePortEdit.Text := '443';
+      HostHeaderEdit.Text := '';
+      IdentityCombo.ItemIndex := 0;
+      AccountEdit.Text := '';
+      PasswordEdit.Text := '';
+      GMSACheck.Checked := False;
+      ProtocolCombo.ItemIndex := 0;
+      ManualThumbEdit.Text := '';
+      AllowHttpCheck.Checked := False;
+      SkipFirewallCheck.Checked := False;
+      OverwriteConfigCheck.Checked := True;
+      RefreshIdentityVisibility;
+      RefreshProtocolVisibility;
+    end
+    else if QuickUpgradeRadio.Checked then
+    begin
+      IsQuickUpgrade := True;
       WizardForm.DirEdit.Text := PrevInstallPath;
       SiteNameEdit.Text := PrevSiteName;
       SitePortEdit.Text := PrevSitePort;
@@ -1086,6 +1148,11 @@ begin
       OverwriteConfigCheck.Checked := False;
       RefreshIdentityVisibility;
       RefreshProtocolVisibility;
+    end
+    else
+    begin
+      // Installazione personalizzata: consentiamo la modifica di qualsiasi parametro
+      IsQuickUpgrade := False;
     end;
     Result := True;
     Exit;
@@ -1415,8 +1482,7 @@ begin
   end
   else
   begin
-    if Identity <> 'ApplicationPoolIdentity' then
-      ScriptParams := ScriptParams + ' -AppPoolIdentity "' + Identity + '"';
+    ScriptParams := ScriptParams + ' -AppPoolIdentity "' + Identity + '"';
     if IsGMSA then
       ScriptParams := ScriptParams + ' -IsGMSA';
   end;
