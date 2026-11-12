@@ -1694,7 +1694,7 @@ public class AdcsService : IAdcsService
                 if (!string.IsNullOrWhiteSpace(defCtx)) return ($"CN=Configuration,{defCtx}", defCtx, null);
                 return (null, defCtx, "configurationNamingContext non presente in rootDSE");
             }
-            catch (LdapException ex)
+            catch (Exception ex)
             {
                 return (null, null, ex.Message);
             }

@@ -636,8 +636,21 @@ admin.MapPost("/ca/discover", async ([FromBody] CaDiscoveryRequest request, Http
     if (!HasValidCsrf(ctx))
         return CsrfDenied();
 
-    var result = await adcsService.DiscoverCaNamesAsync(request);
-    return Results.Ok(result);
+    try
+    {
+        var result = await adcsService.DiscoverCaNamesAsync(request);
+        return Results.Ok(result);
+    }
+    catch (Exception ex)
+    {
+        var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Errore non gestito durante l'invocazione di DiscoverCaNamesAsync per la richiesta {@Request}", request);
+        return Results.Json(new CaDiscoveryResponse
+        {
+            Success = false,
+            ErrorMessage = $"Errore interno durante il rilevamento CA: {ex.Message}"
+        }, statusCode: StatusCodes.Status500InternalServerError);
+    }
 });
 
 // Lock di sincronizzazione per evitare corruzioni da scritture concorrenti su appsettings.json

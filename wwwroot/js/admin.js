@@ -426,7 +426,14 @@
               credentialTarget: serverVal || forestVal
             })
           });
-          if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
+          if (!resp.ok) {
+            let errorDetail = '';
+            try {
+              const errBody = await resp.json();
+              errorDetail = errBody.errorMessage || errBody.error || errBody.title || '';
+            } catch (_) { }
+            throw new Error(errorDetail ? `HTTP ${resp.status}: ${errorDetail}` : `HTTP ${resp.status}`);
+          }
           const result = await resp.json();
           const rawCas = result.cas || result.cAs || result.CAs || [];
           const rawNames = result.caNames || result.CaNames || [];
@@ -563,7 +570,14 @@
             })
           });
 
-          if (!resp.ok) throw new Error('Errore HTTP ' + resp.status);
+          if (!resp.ok) {
+            let errorDetail = '';
+            try {
+              const errBody = await resp.json();
+              errorDetail = errBody.errorMessage || errBody.error || errBody.title || '';
+            } catch (_) { }
+            throw new Error(errorDetail ? `HTTP ${resp.status}: ${errorDetail}` : `HTTP ${resp.status}`);
+          }
           const result = await resp.json();
           const templates = Array.isArray(result) ? result : (result.templates || []);
           const isSuccess = Array.isArray(result) ? templates.length > 0 : (result.success ?? (templates.length > 0));
