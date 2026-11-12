@@ -495,6 +495,8 @@ const
 
 var
   // --- Rilevamento Aggiornamento / Upgrade ---
+  HasPreviousInstall: Boolean;
+  SelectedUpgradeMode: Integer; // 0 = Quick Upgrade, 1 = Custom Upgrade, 2 = Clean Install
   IsUpgrade: Boolean;
   IsQuickUpgrade: Boolean;
   PrevVersion: String;
@@ -725,6 +727,8 @@ var
   DWordVal: Cardinal;
   HasReg, SiteFound, PoolFound: Boolean;
 begin
+  HasPreviousInstall := False;
+  SelectedUpgradeMode := 0;
   IsUpgrade := False;
   IsQuickUpgrade := False;
   PrevVersion := '';
@@ -899,6 +903,7 @@ begin
 
   if IsUpgrade then
   begin
+    HasPreviousInstall := True;
     // Normalizza default per campi che fossero ancora vuoti solo se è un vero upgrade
     if PrevSiteName = '' then PrevSiteName := 'PkiWebEnrollment';
     if PrevProtocol = '' then PrevProtocol := 'https';
@@ -913,6 +918,48 @@ begin
     if PrevVersion = '' then PrevVersion := '2.x';
     IsQuickUpgrade := True;
   end;
+end;
+
+// ----------------------------------------------------------------------------
+// Gestione selezione modalità di aggiornamento nella pagina UpgradePage
+// ----------------------------------------------------------------------------
+procedure SetUpgradeMode(Mode: Integer);
+begin
+  SelectedUpgradeMode := Mode;
+  QuickUpgradeRadio.Checked := (Mode = 0);
+  CustomUpgradeRadio.Checked := (Mode = 1);
+  CleanInstallRadio.Checked := (Mode = 2);
+
+  if Mode = 0 then
+  begin
+    IsUpgrade := True;
+    IsQuickUpgrade := True;
+  end
+  else if Mode = 1 then
+  begin
+    IsUpgrade := True;
+    IsQuickUpgrade := False;
+  end
+  else // Mode = 2
+  begin
+    IsUpgrade := False;
+    IsQuickUpgrade := False;
+  end;
+end;
+
+procedure QuickUpgradeClick(Sender: TObject);
+begin
+  SetUpgradeMode(0);
+end;
+
+procedure CustomUpgradeClick(Sender: TObject);
+begin
+  SetUpgradeMode(1);
+end;
+
+procedure CleanInstallClick(Sender: TObject);
+begin
+  SetUpgradeMode(2);
 end;
 
 // ----------------------------------------------------------------------------
@@ -946,11 +993,13 @@ begin
   QuickUpgradeRadio.Caption := CustomMessage('UpgradeModeQuick');
   QuickUpgradeRadio.Font.Style := [fsBold];
   QuickUpgradeRadio.Checked := True;
+  QuickUpgradeRadio.OnClick := @QuickUpgradeClick;
 
   QuickDescText := TNewStaticText.Create(WizardForm);
   QuickDescText.Parent := UpgradePage.Surface;
   QuickDescText.SetBounds(34, 102, 440, 28);
   QuickDescText.Caption := CustomMessage('UpgradeModeQuickDesc');
+  QuickDescText.OnClick := @QuickUpgradeClick;
 
   CustomUpgradeRadio := TNewRadioButton.Create(WizardForm);
   CustomUpgradeRadio.Parent := UpgradePage.Surface;
@@ -958,11 +1007,13 @@ begin
   CustomUpgradeRadio.Caption := CustomMessage('UpgradeModeCustom');
   CustomUpgradeRadio.Font.Style := [fsBold];
   CustomUpgradeRadio.Checked := False;
+  CustomUpgradeRadio.OnClick := @CustomUpgradeClick;
 
   CustomDescText := TNewStaticText.Create(WizardForm);
   CustomDescText.Parent := UpgradePage.Surface;
   CustomDescText.SetBounds(34, 152, 440, 28);
   CustomDescText.Caption := CustomMessage('UpgradeModeCustomDesc');
+  CustomDescText.OnClick := @CustomUpgradeClick;
 
   CleanInstallRadio := TNewRadioButton.Create(WizardForm);
   CleanInstallRadio.Parent := UpgradePage.Surface;
@@ -970,11 +1021,13 @@ begin
   CleanInstallRadio.Caption := CustomMessage('UpgradeModeClean');
   CleanInstallRadio.Font.Style := [fsBold];
   CleanInstallRadio.Checked := False;
+  CleanInstallRadio.OnClick := @CleanInstallClick;
 
   CleanDescText := TNewStaticText.Create(WizardForm);
   CleanDescText.Parent := UpgradePage.Surface;
   CleanDescText.SetBounds(34, 202, 440, 28);
   CleanDescText.Caption := CustomMessage('UpgradeModeCleanDesc');
+  CleanDescText.OnClick := @CleanInstallClick;
 
   // ================= Pagina 1: parametri sito =================
   SitePage := CreateCustomPage(wpSelectDir,
@@ -1092,10 +1145,17 @@ begin
 
   if CurPageID = UpgradePage.ID then
   begin
+    // Determina la modalità selezionata in base al radio button attivo
     if CleanInstallRadio.Checked then
+      SetUpgradeMode(2)
+    else if CustomUpgradeRadio.Checked then
+      SetUpgradeMode(1)
+    else
+      SetUpgradeMode(0);
+
+    if SelectedUpgradeMode = 2 then
     begin
-      IsUpgrade := False;
-      IsQuickUpgrade := False;
+      // Nuova installazione pulita: reset di tutti i parametri ai default
       WizardForm.DirEdit.Text := 'C:\inetpub\PkiWebEnrollment';
       SiteNameEdit.Text := 'PkiWebEnrollment';
       SitePortEdit.Text := '443';
@@ -1112,9 +1172,9 @@ begin
       RefreshIdentityVisibility;
       RefreshProtocolVisibility;
     end
-    else if QuickUpgradeRadio.Checked then
+    else if SelectedUpgradeMode = 0 then
     begin
-      IsQuickUpgrade := True;
+      // Aggiornamento rapido: ripristina parametri rilevati
       WizardForm.DirEdit.Text := PrevInstallPath;
       SiteNameEdit.Text := PrevSiteName;
       SitePortEdit.Text := PrevSitePort;
@@ -1151,8 +1211,14 @@ begin
     end
     else
     begin
-      // Installazione personalizzata: consentiamo la modifica di qualsiasi parametro
-      IsQuickUpgrade := False;
+      // Installazione personalizzata (SelectedUpgradeMode = 1):
+      // pre-carica i parametri esistenti consentendo all'utente di modificarli
+      if WizardForm.DirEdit.Text = '' then
+        WizardForm.DirEdit.Text := PrevInstallPath;
+      if SiteNameEdit.Text = '' then
+        SiteNameEdit.Text := PrevSiteName;
+      if SitePortEdit.Text = '' then
+        SitePortEdit.Text := PrevSitePort;
     end;
     Result := True;
     Exit;
@@ -1250,11 +1316,11 @@ begin
 
   if PageID = UpgradePage.ID then
   begin
-    Result := not IsUpgrade;
+    Result := not HasPreviousInstall;
     Exit;
   end;
 
-  if IsUpgrade and IsQuickUpgrade then
+  if HasPreviousInstall and (SelectedUpgradeMode = 0) then
   begin
     if (PageID = wpSelectDir) or
        (PageID = SitePage.ID) or
