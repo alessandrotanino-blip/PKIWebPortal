@@ -106,13 +106,13 @@ window.I18N = (function () {
       th_actions: "Azioni",
 
       // Tab 4 Automation
-      automation_title: "Automazione Rilascio Certificati & win-acme",
-      automation_sub: "Questo portale espone API RESTful moderne che consentono di automatizzare le richieste da script PowerShell, Ansible, cURL o client ACME:",
+      automation_title: "Automazione Rilascio Certificati ACME (RFC 8555)",
+      automation_sub: "Questo portale implementa un Server ACME nativo (RFC 8555) che permette l'emissione e il rinnovo completamente automatico dei certificati TLS/SSL verso la Sub-CA interna senza installare componenti DCOM sui server client e senza esporre la CA.",
       automation_winacme_title: "1. Integrazione con win-acme",
       automation_winacme_desc: "win-acme è un client ACME per Windows. Per utilizzarlo verso la vostra PKI aziendale senza esporre direttamente la CA:",
       automation_winacme_li1: "Il portale funge da Registration Authority (RA) intermediaria.",
       automation_winacme_li2: "I server interni possono eseguire uno script PowerShell di rinnovo automatico schedulato via Windows Task Scheduler senza bisogno di installare componenti DCOM complessi sulle macchine client.",
-      automation_ps_title: "2. Esempio Richiesta Automatica via PowerShell",
+      automation_ps_title: "3. Alternativa: Script di Rinnovo Diretto via REST API (PowerShell)",
 
       // Result Section & PFX Download
       result_title: "Certificato Emesso con Successo!",
@@ -424,13 +424,13 @@ window.I18N = (function () {
       th_actions: "Actions",
 
       // Tab 4 Automation
-      automation_title: "Certificate Issuance Automation & win-acme",
-      automation_sub: "This portal exposes modern RESTful APIs that allow automating requests from PowerShell, Ansible, cURL, or ACME clients:",
+      automation_title: "Certificate Issuance Automation & ACME (RFC 8555)",
+      automation_sub: "This portal implements a native ACME Server (RFC 8555) allowing fully automated TLS/SSL certificate issuance and renewal to internal Sub-CAs without installing DCOM components on client machines.",
       automation_winacme_title: "1. Integration with win-acme",
       automation_winacme_desc: "win-acme is an ACME client for Windows. To use it against your enterprise PKI without exposing the CA directly:",
       automation_winacme_li1: "The portal acts as an intermediary Registration Authority (RA).",
       automation_winacme_li2: "Internal servers can run an automatic renewal PowerShell script scheduled via Windows Task Scheduler without requiring complex DCOM components on client machines.",
-      automation_ps_title: "2. Automatic Request Example via PowerShell",
+      automation_ps_title: "3. Alternative: Direct Request Script via REST API (PowerShell)",
 
       // Result Section & PFX Download
       result_title: "Certificate Issued Successfully!",

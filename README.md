@@ -329,8 +329,9 @@ Then open a browser at:
 * **ESC8 Hardening**: This portal does not expose the traditional `certsrv` endpoint.
 * **Separation from certsrv**: The portal uses a completely separate IIS website and Application Pool, ensuring that an issue with the portal does not affect certsrv, and vice versa.
 
-### Hardening & Features (v2.1.0 - v2.5.1)
+### Hardening & Features (v2.1.0 - v2.5.2)
 
+* **Interactive Dynamic ACME Guide ("Automation & win-acme") (v2.5.2)**: Overhauled the user portal automation tab with step-by-step setups for win-acme (Windows/IIS) and Certbot (Linux). All endpoints and syntax dynamically bind to the current portal deployment/host and selected Sub-CA.
 * **Automatic CA Detection in Configuration (v2.5.0)**: Streamlined CA configuration in the administration panel by eliminating redundant manual fields. New *🔍 Detect CAs* button to discover available Certification Authorities by specifying only the AD Forest/Domain (or CA Server), querying the Active Directory Configuration partition via LDAP/LDAPS (`pKIEnrollmentService` objects and standard `dNSHostName` attribute) with no need for HTTP/HTTPS ports 80/443. Selecting a CA automatically fills both CA Name and CA Server, computing `Config String` and `Credential Target`.
 * **ACME Requester Tracking & Request Filtering (v2.4.0)**: Automatic requester identification for certificates issued via ACME RFC 8555 with client IP tracking (ACME (<ip>) or ACME) and distinct visual badge indicators. New dynamic filter toolbar (by requester, template, status, and full-text search) in both the portal and admin panel, plus RESTful API query parameter support.
 

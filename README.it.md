@@ -323,8 +323,9 @@ Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 * **Service Account**: L'Application Pool di IIS deve eseguire con un account che abbia i permessi *Request Certificates* (Enroll) sui template ADCS desiderati. Per la modalità Standalone all'interno della foresta, `NetworkService` o un Managed Service Account è sufficiente.
 * **Separazione da certsrv**: Il portale utilizza un sito IIS e un Application Pool completamente separati, garantendo che un problema sul portale non impatti certsrv e viceversa.
 
-### Hardening e Novità (v2.1.0 - v2.5.1)
+### Hardening e Novità (v2.1.0 - v2.5.2)
 
+* **Guida Interattiva ACME Dinamica ("Automazione & win-acme") (v2.5.2)**: Riscritta la scheda di automazione del portale utente con configurazioni guidate passo-passo per win-acme (Windows/IIS) e Certbot (Linux). Tutti i comandi e gli endpoint si aggiornano in tempo reale in base all'installazione corrente del portale (host/schema effettivo) e alla Sub-CA attiva.
 * **Rilevamento Automatico CA nella Configurazione (v2.5.0)**: Semplificazione della configurazione delle CA nel pannello di amministrazione con eliminazione dei campi ridondanti. Pulsante *🔍 Rileva CA* per identificare automaticamente le Certification Authority disponibili specificando solo la Foresta/Dominio AD (o il Server CA), interrogando direttamente il partizionamento Configuration di Active Directory via LDAP/LDAPS (oggetti `pKIEnrollmentService` e attributo standard `dNSHostName`), senza alcuna necessità di porte HTTP/HTTPS 80/443. La selezione della CA compila automaticamente sia il Nome CA che il Server CA, calcolando `Config String` e `Credential Target`.
 * **Tracciamento Richiedenti ACME & Filtraggio Richieste (v2.4.0)**: Identificazione automatica del richiedente per i certificati emessi via ACME RFC 8555 con indirizzo IP del client (ACME (<ip>) o ACME) ed evidenziazione con badge grafica. Nuova barra filtri dinamica (per richiedente, template, stato e ricerca libera live) nel portale e nel pannello admin, con supporto query parameters nelle API RESTful.
 
@@ -603,10 +604,23 @@ Lo script esegue automaticamente:
 
 `win-acme` è il client ACME standard per Windows Server e IIS.
 
-#### A. Richiesta e Binding Automatico su IIS
+#### A. Automazione Diretta IIS (Consigliato)
+```cmd
+# Scaricare win-acme, scompattare in C:\winacme ed eseguire da CMD/PowerShell come Amministratore:
+C:\winacme\wacs.exe --source iis --host "nomevirtualhostsubind.dominio.it" --store certificatestore --installation iis --baseuri "https://<host-portale>/acme/directory" --accepttos --verbose
+```
+* **`--source iis`**: Rileva la configurazione e i binding dal web server IIS locale.
+* **`--host`**: Specifica l'header host / DNS esatto del sito da certificare.
+* **`--store certificatestore`**: Salva il certificato nel Certificate Store macchina di Windows.
+* **`--installation iis`**: Aggiorna direttamente il binding HTTPS sulla porta 443 di IIS.
+* **`--baseuri`**: Endpoint della directory ACME del portale.
+* **`--accepttos`**: Accetta automaticamente i Terms of Service.
+* **`--verbose`**: Abilita la diagnostica dettagliata.
+
+#### B. Richiesta e Binding Automatico su IIS (Interattivo)
 ```powershell
 # Scaricare win-acme ed eseguire da prompt amministratore:
-.\wacs.exe --baseurl "https://pki.azienda.lan/acme/directory" `
+.\wacs.exe --baseurl "https://<host-portale>/acme/directory" `
            --target iis `
            --siteid 1 `
            --validation selfhosting `
@@ -615,9 +629,9 @@ Lo script esegue automaticamente:
 ```
 * `win-acme` registra automaticamente un **Task Pianificato Windows** (`Task Scheduler`) che verifica e rinnova il certificato prima della scadenza.
 
-#### B. Modalità Manuale / Generazione PFX per Servizi Non-IIS
+#### C. Modalità Manuale / Generazione PFX per Servizi Non-IIS
 ```powershell
-.\wacs.exe --baseurl "https://pki.azienda.lan/acme/directory" `
+.\wacs.exe --baseurl "https://<host-portale>/acme/directory" `
            --target manual `
            --host "servizio.azienda.lan" `
            --validation filesystem `
@@ -631,18 +645,26 @@ Lo script esegue automaticamente:
 
 Per server Linux (Nginx, Apache, appliance o container):
 
-#### A. Modalità Standalone (Porta 80)
+#### A. Con Nginx / Apache attivo (Webroot - Senza Downtime)
 ```bash
-certbot certonly --standalone \
-  --server "https://pki.azienda.lan/acme/directory" \
-  --email "admin@azienda.lan" \
-  --agree-tos \
-  -d "app01.azienda.lan"
+sudo certbot certonly --webroot -w /var/www/html \
+  --server "https://<host-portale>/acme/directory" \
+  -d "nomesito.dominio.it" \
+  --agree-tos --register-unsafely-without-email
 ```
 
-#### B. Con Nginx / Apache attivo (Webroot)
+#### B. Modalità Standalone (Porta 80 libera)
 ```bash
-certbot certonly --webroot -w /var/www/html \
+sudo certbot certonly --standalone \
+  --server "https://<host-portale>/acme/directory" \
+  -d "nomesito.dominio.it" \
+  --agree-tos --register-unsafely-without-email
+```
+
+#### C. Verifica e Test di Rinnovo Automatico
+```bash
+sudo certbot renew --dry-run
+```
   --server "https://pki.azienda.lan/acme/directory" \
   --email "admin@azienda.lan" \
   --agree-tos \

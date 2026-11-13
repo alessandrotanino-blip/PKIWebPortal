@@ -144,6 +144,76 @@
     // Popola i template per la nuova CA
     renderTemplates(templates);
     renderUploadTemplates(templates);
+
+    // Aggiorna la documentazione ACME in base all'istanza e alla CA corrente
+    updateAcmeDocumentation();
+  }
+
+  // 2b. Aggiorna la documentazione e i comandi nella tab ACME
+  function updateAcmeDocumentation() {
+    try {
+      const acme = portalData ? (portalData.acme || portalData.Acme) : null;
+      const currentOrigin = window.location.origin;
+      const directoryUrl = (acme && acme.directoryUrl) ? acme.directoryUrl : `${currentOrigin}/acme/directory`;
+      const currentHost = (acme && acme.host) ? acme.host : window.location.host;
+      const caDisplayName = currentCa ? (currentCa.displayName || currentCa.DisplayName || currentCa.id || currentCa.Id) : 'CA Predefinita';
+      const caId = currentCa ? (currentCa.id || currentCa.Id) : 'default';
+
+      // Template ACME o primo template web server della CA
+      let templateName = (acme && acme.defaultTemplate) ? acme.defaultTemplate : 'WebServer5y';
+      if (currentCa && currentCa.templates && currentCa.templates.length > 0) {
+        const matchingTpl = currentCa.templates.find(t => (t.name || t.Name) === templateName);
+        if (!matchingTpl) {
+          templateName = currentCa.templates[0].name || currentCa.templates[0].Name || templateName;
+        }
+      }
+
+      // Aggiorna box info
+      const elDir = document.getElementById('acme-info-directory');
+      if (elDir) elDir.textContent = directoryUrl;
+
+      const elCa = document.getElementById('acme-info-ca');
+      if (elCa) elCa.textContent = `${caDisplayName} (${currentCa?.forestOrDomain || currentCa?.ForestOrDomain || 'CA Interna'})`;
+
+      const elTpl = document.getElementById('acme-info-template');
+      if (elTpl) elTpl.textContent = templateName;
+
+      const elHost = document.getElementById('acme-info-host');
+      if (elHost) elHost.textContent = currentHost;
+
+      const elVal = document.getElementById('acme-info-validation');
+      if (elVal) {
+        const valMode = (acme && acme.validationMode) ? acme.validationMode : 'Http01';
+        const httpPort = (acme && acme.httpPort) ? acme.httpPort : 80;
+        elVal.textContent = `${valMode} (porta ${httpPort} HTTP)`;
+      }
+
+      // Aggiorna blocchi di codice
+      const elWinAcme = document.getElementById('acme-code-winacme');
+      if (elWinAcme) {
+        elWinAcme.textContent = `C:\\winacme\\wacs.exe --source iis --host "nomevirtualhostsubind.dominio.it" --store certificatestore --installation iis --baseuri "${directoryUrl}" --accepttos --verbose`;
+      }
+
+      const elDynAcmeDir = document.querySelectorAll('.dyn-acme-dir');
+      elDynAcmeDir.forEach(el => { el.textContent = directoryUrl; });
+
+      const elCertbotWebroot = document.getElementById('acme-code-certbot-webroot');
+      if (elCertbotWebroot) {
+        elCertbotWebroot.textContent = `sudo certbot certonly --webroot -w /var/www/html \\\n  --server "${directoryUrl}" \\\n  -d "nomesito.dominio.it" \\\n  --agree-tos --register-unsafely-without-email`;
+      }
+
+      const elCertbotStandalone = document.getElementById('acme-code-certbot-standalone');
+      if (elCertbotStandalone) {
+        elCertbotStandalone.textContent = `sudo certbot certonly --standalone \\\n  --server "${directoryUrl}" \\\n  -d "nomesito.dominio.it" \\\n  --agree-tos --register-unsafely-without-email`;
+      }
+
+      const elPs = document.getElementById('acme-code-powershell');
+      if (elPs) {
+        elPs.textContent = `# Genera o carica il CSR locale generato sulla macchina\n$csr = (Get-Content "C:\\cert\\request.csr" -Raw)\n\n# Invio richiesta al Portale PKI via REST API con la CA e il template correnti\n$body = @{\n    CaId = "${caId}"\n    TemplateName = "${templateName}"\n    CsrPem = $csr\n} | ConvertTo-Json\n\n$response = Invoke-RestMethod -Uri "${currentOrigin}/api/certificates/request" \\\n    -Method Post -Body $body -ContentType "application/json" -UseDefaultCredentials\n\nif ($response.success -and $response.disposition -eq "Issued") {\n    $response.certificatePem | Out-File "C:\\cert\\issued.cer" -Encoding ascii\n    Write-Host "Certificato emesso con successo! Request ID: $($response.requestId)" -ForegroundColor Green\n}`;
+      }
+    } catch (e) {
+      console.warn('Errore aggiornamento documentazione ACME:', e);
+    }
   }
 
   // 3. Render delle schede template

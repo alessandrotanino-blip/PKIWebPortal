@@ -6,6 +6,16 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.5.2] - 2026-11-13
+
+### Automazione & Server ACME (RFC 8555)
+
+- **Guida ACME Interattiva & Dinamica ("Automazione & win-acme")**:
+  - Riscritta interamente la scheda "Automazione & win-acme" del portale utente con guide passo-passo dettagliate ("a prova di scimmia") per client Windows (win-acme / WACS) e Linux (Certbot).
+  - **Parametrizzazione dinamica multi-installazione**: l'endpoint `GET /api/config` restituisce ora l'oggetto `acme` con `directoryUrl`, `baseUrl`, `host`, `defaultCaId` e `defaultTemplate`. Tutti i comandi generati a video (win-acme, certbot webroot/standalone, script PowerShell) si adattano in tempo reale all'URL effettivo del server/installazione da cui l'utente sta navigando (es. `pkiwebportal.vd.ld`, `pkiwebportal.ld.ge`, ecc.) e alla Sub-CA correntemente selezionata dal menu a tendina.
+  - Spiegazione chiara dei requisiti di rete (porta 443 outbound verso il portale ACME, porta 80 inbound sul server richiedente per la challenge HTTP-01).
+  - Dettaglio espandibile di ogni singolo switch dei comandi `wacs.exe` e `certbot`.
+
 ## [2.5.1] - 2026-11-12
 
 ### Correzioni Installer & Script di Installazione

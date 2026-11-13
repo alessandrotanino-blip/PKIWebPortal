@@ -1,11 +1,11 @@
 ====== Portale PKI Web Enrollment per Microsoft AD CS ======
 ^ Autore | Alessandro Tanino - a.tanino@liguriadigitale.it |
-^ Versione | 2.5.1 |
-^ Data | 10 Novembre 2026 |
+^ Versione | 2.5.2 |
+^ Data | 13 Novembre 2026 |
 ^ Compatibilità | Windows Server 2016, 2019, 2022, 2025 | IIS 10.0+ | .NET 8.0 LTS |
 ^ Requisiti Browser | Chrome, Microsoft Edge, Mozilla Firefox, Safari, Mobile (Zero ActiveX) |
-^ URL Deploy | [[https://pkiwebportal.vd.ld]] \\ [[https://pkiwebportal.ld.ge]] \\ [[https://pkiwebportal.regione.liguria.it]] |
-^ Accesso e Deleghe | Oltre agli amministratori, sono state date deleghe al gruppo ''DOMAIN\DelegheNoc'' |
+^ URL Deploy         | URL interna\\ https://pkiwebportal.vd.ld \\ https://pkiwebportal.ld.ge \\ https://pkiwebportal.regione.liguria.it\\ https://pkiwebportal.usl3.it e https://pkiwebportal.asl3.liguria.it  | Hosting VM\\ vdwebportal.vd.ld\\ ldpkicrl1.ld.ge\\ rpkicrl.regione.liguria.it\\ asl3pkicrl.usl3.it  |               |
+^ Accesso e Deleghe  | Oltre agli amministratori, sono state date deleghe al gruppo ''DOMAIN\DelegheNoc''          |
 
 ===== 1. Introduzione e Obiettivi =====
 
@@ -592,10 +592,21 @@ A partire dalla versione 2.3.0, il portale agisce come Registration Authority (R
 === Esempio di utilizzo con win-acme (Windows Server / IIS) ===
 
 ''win-acme'' (''wacs.exe'') è il client ACME standard per ambienti Windows Server.
+Il portale calcola e adatta dinamicamente i comandi in base all'istanza host attiva (es. ''https://pkiwebportal.vd.ld/acme/directory'').
 
 ^ Scenario ^ Comando wacs.exe ^
-| **Binding automatico IIS** | ''wacs.exe --baseurl "https://pki.azienda.lan/acme/directory" --target iis --siteid 1 --validation selfhosting --accepttos --emailaddress "admin@azienda.lan"'' |
-| **Certificato manuale / PFX** | ''wacs.exe --baseurl "https://pki.azienda.lan/acme/directory" --target manual --host "servizio.azienda.lan" --validation filesystem --webroot "C:\inetpub\wwwroot" --store certman'' |
+| **Automazione diretta IIS (consigliato)** | ''C:\winacme\wacs.exe --source iis --host "nomevirtualhostsubind.dominio.it" --store certificatestore --installation iis --baseuri "https://<host-portale>/acme/directory" --accepttos --verbose'' |
+| **Binding automatico IIS (interattivo)** | ''wacs.exe --baseurl "https://<host-portale>/acme/directory" --target iis --siteid 1 --validation selfhosting --accepttos --emailaddress "admin@azienda.lan"'' |
+| **Certificato manuale / PFX** | ''wacs.exe --baseurl "https://<host-portale>/acme/directory" --target manual --host "servizio.azienda.lan" --validation filesystem --webroot "C:\inetpub\wwwroot" --store certman'' |
+
+**Dettaglio delle opzioni principali:**
+  * ''--source iis'' : Indica a win-acme dove recuperare i binding e configurazioni dal web server IIS locale.
+  * ''--host "nomevirtualhostsubind.dominio.it"'' : Specifica il DNS / Host header da certificare.
+  * ''--store certificatestore'' : Definisce il salvataggio nel Certificate Store macchina di Windows.
+  * ''--installation iis'' : Aggiorna automaticamente l'associazione del binding HTTPS sulla porta 443 di IIS.
+  * ''--baseuri "https://<host-portale>/acme/directory"'' : Endpoint della directory ACME del portale.
+  * ''--accepttos'' : Accetta automaticamente i Terms of Service senza prompt interattivo.
+  * ''--verbose'' : Abilita la diagnostica dettagliata.
 
 * ''win-acme'' provvede automaticamente a creare un **Task Pianificato Windows** (''Task Scheduler'') che controllerà ed effettuerà il rinnovo periodico prima della scadenza del certificato.
 
@@ -604,9 +615,9 @@ A partire dalla versione 2.3.0, il portale agisce come Registration Authority (R
 Per server Linux, container Docker e appliance di rete:
 
 ^ Scenario ^ Comando Certbot ^
-| **Modalità Standalone (Porta 80 libera)** | ''certbot certonly --standalone --server "https://pki.azienda.lan/acme/directory" --email "admin@azienda.lan" --agree-tos -d "app01.azienda.lan"'' |
-| **Modalità Webroot (Nginx / Apache attivo)** | ''certbot certonly --webroot -w /var/www/html --server "https://pki.azienda.lan/acme/directory" --email "admin@azienda.lan" --agree-tos -d "web01.azienda.lan"'' |
-| **Test di Rinnovo (Dry-Run)** | ''certbot renew --dry-run'' |
+| **Modalità Webroot (Nginx / Apache attivo)** | ''sudo certbot certonly --webroot -w /var/www/html --server "https://<host-portale>/acme/directory" -d "nomesito.dominio.it" --agree-tos --register-unsafely-without-email'' |
+| **Modalità Standalone (Porta 80 libera)** | ''sudo certbot certonly --standalone --server "https://<host-portale>/acme/directory" -d "nomesito.dominio.it" --agree-tos --register-unsafely-without-email'' |
+| **Test di Rinnovo (Dry-Run)** | ''sudo certbot renew --dry-run'' |
 
 === Test Automatico di Collaudo con Test-AcmeProtocol.ps1 ===
 

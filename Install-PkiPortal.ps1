@@ -100,7 +100,7 @@
 
 .NOTES
     Author:  Enterprise PKI Team
-    Version: 2.5.1
+    Version: 2.5.2
     Requires: Windows Server 2016+ with the IIS role, local administrator privileges.
     IMPORTANT: This script does NOT modify the "Default Web Site" site or certsrv in any way.
 #>
@@ -339,10 +339,10 @@ if ($PreserveAppPoolIdentity) {
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Cyan
 if ($script:IsItalian) {
-    Write-Host "  INSTALLAZIONE PORTALE PKI WEB ENROLLMENT (AD CS Modern) v2.5.1 " -ForegroundColor White
+    Write-Host "  INSTALLAZIONE PORTALE PKI WEB ENROLLMENT (AD CS Modern) v2.5.2 " -ForegroundColor White
     Write-Host "  Installazione a fianco di Microsoft certsrv (non intrusiva)     " -ForegroundColor Gray
 } else {
-    Write-Host "  PKI WEB ENROLLMENT PORTAL INSTALLATION (AD CS Modern) v2.5.1   " -ForegroundColor White
+    Write-Host "  PKI WEB ENROLLMENT PORTAL INSTALLATION (AD CS Modern) v2.5.2   " -ForegroundColor White
     Write-Host "  Side-by-side with Microsoft certsrv (non-intrusive)             " -ForegroundColor Gray
 }
 Write-Host "==================================================================" -ForegroundColor Cyan
@@ -1427,9 +1427,9 @@ if ($defaultWs -and $defaultWs.State -eq "Started") {
 Write-Host ""
 Write-Host "==================================================================" -ForegroundColor Green
 if ($script:IsItalian) {
-    Write-Host "  INSTALLAZIONE COMPLETATA (v2.5.1)                              " -ForegroundColor White
+    Write-Host "  INSTALLAZIONE COMPLETATA (v2.5.2)                              " -ForegroundColor White
 } else {
-    Write-Host "  INSTALLATION COMPLETED (v2.5.1)                                " -ForegroundColor White
+    Write-Host "  INSTALLATION COMPLETED (v2.5.2)                                " -ForegroundColor White
 }
 Write-Host "==================================================================" -ForegroundColor Green
 Write-Host ""

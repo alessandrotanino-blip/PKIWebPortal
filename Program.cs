@@ -167,7 +167,10 @@ api.MapGet("/config", async (HttpContext ctx, IAdcsService adcsService, IConfigu
     }
 
     var portalConfig = config.GetSection("PortalConfig").Get<PortalConfig>() ?? new PortalConfig();
+    var acmeConfig = config.GetSection("AcmeConfig").Get<AcmeConfig>() ?? new AcmeConfig();
     var cas = await adcsService.GetAvailableCAsAsync();
+
+    string acmeBaseUrl = GetAcmeBaseUrl(ctx, acmeConfig);
 
     // IsAllowed: indica se l'identità corrente può emettere con quel template
     // (template senza gruppi = accessibile a tutti; admin del portale = sempre true).
@@ -176,6 +179,17 @@ api.MapGet("/config", async (HttpContext ctx, IAdcsService adcsService, IConfigu
         portalConfig.PortalTitle,
         portalConfig.PortalMode,
         portalConfig.DefaultCaId,
+        acme = new
+        {
+            enabled = acmeConfig.Enabled,
+            directoryUrl = $"{acmeBaseUrl}/acme/directory",
+            baseUrl = acmeBaseUrl,
+            host = new Uri(acmeBaseUrl).Host,
+            defaultCaId = acmeConfig.DefaultCaId ?? portalConfig.DefaultCaId,
+            defaultTemplate = acmeConfig.DefaultTemplateName,
+            validationMode = acmeConfig.ValidationMode,
+            httpPort = acmeConfig.HttpPort
+        },
         cas = cas.Select(c => new
         {
             c.Id,

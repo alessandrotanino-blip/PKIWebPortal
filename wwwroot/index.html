@@ -6,8 +6,8 @@
   <title>Enterprise PKI Web Enrollment Portal</title>
   <link rel="preload" href="/fonts/titillium-web-v19-latin_latin-ext-regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/titillium-web-v19-latin_latin-ext-600.woff2" as="font" type="font/woff2" crossorigin>
-  <script src="/js/theme-init.js?v=2.5.1"></script>
-  <link rel="stylesheet" href="/css/styles.css?v=2.5.1">
+  <script src="/js/theme-init.js?v=2.5.2"></script>
+  <link rel="stylesheet" href="/css/styles.css?v=2.5.2">
 </head>
 <body>
 
@@ -17,7 +17,7 @@
       <div class="brand-icon">PKI</div>
       <div class="brand-text">
         <h1 id="portal-title" data-i18n="portal_title">Enterprise PKI Web Enrollment</h1>
-        <p id="portal-subtitle"><span data-i18n="portal_subtitle">Active Directory Certificate Services (AD CS) Modern Gateway</span> <span class="brand-version">v2.5.1</span></p>
+        <p id="portal-subtitle"><span data-i18n="portal_subtitle">Active Directory Certificate Services (AD CS) Modern Gateway</span> <span class="brand-version">v2.5.2</span></p>
       </div>
     </div>
     <div class="nav-actions">
@@ -333,35 +333,145 @@
     <section id="tab-automation" class="tab-pane" style="display: none;">
       <div class="card">
         <div class="card-title">
-          <span data-i18n="automation_title">Automazione Rilascio Certificati & win-acme</span>
+          <span data-i18n="automation_title">Automazione Rilascio Certificati ACME (RFC 8555)</span>
         </div>
-        <p class="card-subtitle" data-i18n="automation_sub">Questo portale espone API RESTful moderne che consentono di automatizzare le richieste da script PowerShell, Ansible, cURL o client ACME:</p>
-
-        <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; font-size: 0.95rem;" data-i18n="automation_winacme_title">1. Integrazione con win-acme</h4>
-        <p style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 0.75rem;" data-i18n="automation_winacme_desc">
-          win-acme è un client ACME per Windows. Per utilizzarlo verso la vostra PKI aziendale senza esporre direttamente la CA:
+        <p class="card-subtitle" data-i18n="automation_sub">
+          Questo portale implementa un <strong>Server ACME nativo (RFC 8555)</strong> che permette l'emissione e il rinnovo completamente automatico dei certificati TLS/SSL verso la Sub-CA interna (senza installare componenti DCOM sui server client e senza esporre direttamente la CA).
         </p>
-        <ul style="font-size: 0.85rem; color: var(--gray-700); margin-left: 1.5rem; margin-bottom: 1rem;">
-          <li data-i18n="automation_winacme_li1">Il portale funge da Registration Authority (RA) intermediaria.</li>
-          <li data-i18n="automation_winacme_li2">I server interni possono eseguire uno script PowerShell di rinnovo automatico schedulato via Windows Task Scheduler senza bisogno di installare componenti DCOM complessi sulle macchine client.</li>
-        </ul>
 
-        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.95rem;" data-i18n="automation_ps_title">2. Esempio Richiesta Automatica via PowerShell</h4>
-        <pre style="background: #ffffff; color: #000000; padding: 1rem; border-radius: var(--radius); font-size: 0.8rem; overflow-x: auto; border: 1px solid var(--gray-300);"><code># Genera CSR locale su IIS o Windows Server
+        <!-- Box Prerequisiti & Dati Connessione -->
+        <div class="alert alert-info" style="margin-top: 1rem; margin-bottom: 1.5rem;">
+          <div>
+            <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <span>Endpoint Directory & Parametri CA Attuale</span>
+            </div>
+            <div style="font-size: 0.85rem; line-height: 1.6;">
+              <p style="margin: 0.25rem 0;">• <strong>ACME Directory URL:</strong> <code id="acme-info-directory" style="background: rgba(0,0,0,0.1); padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600;">https://.../acme/directory</code></p>
+              <p style="margin: 0.25rem 0;">• <strong>Sub-CA Attiva:</strong> <span id="acme-info-ca" style="font-weight: 600;">Caricamento...</span></p>
+              <p style="margin: 0.25rem 0;">• <strong>Certificate Template rilasciato:</strong> <code id="acme-info-template" style="background: rgba(0,0,0,0.1); padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600;">WebServer</code></p>
+              <p style="margin: 0.25rem 0;">• <strong>Validazione Challenge:</strong> <span id="acme-info-validation">HTTP-01 (porta 80 HTTP)</span></p>
+            </div>
+            <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed rgba(255,255,255,0.2); font-size: 0.82rem; line-height: 1.5;">
+              <strong>Requisiti di Rete:</strong>
+              <ul style="margin: 0.3rem 0 0 1.25rem; padding: 0;">
+                <li><strong>Outbound dal Server Richiedente:</strong> porta <strong>443 (HTTPS)</strong> verso il portale ACME (<code id="acme-info-host" style="background: rgba(0,0,0,0.1); padding: 0.1rem 0.3rem; border-radius: 3px;">...</code>).</li>
+                <li><strong>Inbound sul Server Richiedente:</strong> porta <strong>80 (HTTP)</strong> raggiungibile dal Portale ACME per la verifica della challenge <code style="background: rgba(0,0,0,0.1); padding: 0.1rem 0.3rem; border-radius: 3px;">/.well-known/acme-challenge/*</code>.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- SEZIONE 1: WIN-ACME (WINDOWS / IIS) -->
+        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🪟 1. Guida Rapida: Win-Acme per Windows Server / IIS</span>
+        </h4>
+        <p style="font-size: 0.85rem; color: var(--gray-700); margin-bottom: 0.75rem;">
+          <strong>win-acme (WACS)</strong> è il client ACME ufficiale per ambienti Windows. Configura il rinnovo automatico e aggiorna direttamente i binding HTTPS di IIS registrando un Task Pianificato su Windows Task Scheduler.
+        </p>
+
+        <div style="background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.25rem;">
+          <strong style="font-size: 0.85rem; color: var(--primary);">Passaggi di Installazione:</strong>
+          <ol style="font-size: 0.83rem; margin: 0.5rem 0 0.75rem 1.25rem; color: var(--gray-700); line-height: 1.6;">
+            <li>Scaricare <strong>win-acme</strong> (versione <em>pluggable</em> o <em>standalone</em> x64) dal repository ufficiale GitHub.</li>
+            <li>Estrarre l'archivio .zip nella cartella locale: <code style="background: var(--gray-200); padding: 0.1rem 0.3rem; border-radius: 3px;">C:\winacme</code></li>
+            <li>Aprire <strong>PowerShell</strong> o il <strong>Prompt dei Comandi (CMD)</strong> come <strong>Amministratore</strong>.</li>
+            <li>Eseguire il comando di richiesta automatica sotto riportato:</li>
+          </ol>
+
+          <p style="font-size: 0.83rem; font-weight: 600; margin-bottom: 0.35rem; color: var(--gray-800);">Comando Diretto Esecuzione (IIS Automation):</p>
+          <pre style="background: #0f172a; color: #f8fafc; padding: 0.85rem 1rem; border-radius: var(--radius); font-size: 0.8rem; overflow-x: auto; border: 1px solid #334155;"><code id="acme-code-winacme">C:\winacme\wacs.exe --source iis --host "nomevirtualhostsubind.dominio.it" --store certificatestore --installation iis --baseuri "https://.../acme/directory" --accepttos --verbose</code></pre>
+
+          <details style="margin-top: 0.75rem; font-size: 0.82rem; color: var(--gray-700);">
+            <summary style="cursor: pointer; font-weight: 600; color: var(--primary);">Dettaglio e spiegazione dei parametri del comando:</summary>
+            <ul style="margin: 0.5rem 0 0 1.25rem; line-height: 1.6;">
+              <li><code style="font-weight: 600;">--source iis</code> : indica a win-acme di rilevare la configurazione e i binding dal web server IIS locale.</li>
+              <li><code style="font-weight: 600;">--host "nomevirtualhostsubind.dominio.it"</code> : specifica il FQDN esatto del sito o virtual host da certificare (deve corrispondere all'header host del sito).</li>
+              <li><code style="font-weight: 600;">--store certificatestore</code> : salva il certificato ottenuto nel Certificate Store macchina di Windows (Computer Locale \ Personale / WebHosting).</li>
+              <li><code style="font-weight: 600;">--installation iis</code> : crea o aggiorna automaticamente il binding HTTPS sulla porta 443 del sito IIS associando il nuovo certificato.</li>
+              <li><code style="font-weight: 600;">--baseuri "<span class="dyn-acme-dir">https://.../acme/directory</span>"</code> : URL della directory ACME del presente portale PKI aziendale.</li>
+              <li><code style="font-weight: 600;">--accepttos</code> : accetta automaticamente i Terms of Service del server ACME senza richiedere prompt interattivi.</li>
+              <li><code style="font-weight: 600;">--verbose</code> : abilita il log diagnostico dettagliato utile per verificare tutti gli step di emissione.</li>
+            </ul>
+          </details>
+
+          <p style="font-size: 0.82rem; color: var(--gray-600); margin-top: 0.75rem; margin-bottom: 0;">
+            💡 <strong>Rinnovo Automatico:</strong> Win-acme crea in automatico un Task pianificato in Windows (<em>"win-acme renew"</em>) che viene eseguito quotidianamente e rinnova il certificato prima della scadenza (predefinito: 55 giorni prima).
+          </p>
+        </div>
+
+        <!-- SEZIONE 2: CERTBOT (LINUX) -->
+        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🐧 2. Guida Rapida: Certbot per Linux (Debian, Ubuntu, RHEL, Rocky Linux, Nginx, Apache)</span>
+        </h4>
+        <p style="font-size: 0.85rem; color: var(--gray-700); margin-bottom: 0.75rem;">
+          Per server Linux è possibile utilizzare <strong>Certbot</strong> standard. Certbot configurerà il cron job o il timer systemd per rinnovare automaticamente il certificato ogni 60 giorni.
+        </p>
+
+        <div style="background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.25rem;">
+          <strong style="font-size: 0.85rem; color: var(--primary);">A. Installazione Certbot:</strong>
+          <pre style="background: #0f172a; color: #f8fafc; padding: 0.75rem 1rem; border-radius: var(--radius); font-size: 0.8rem; overflow-x: auto; border: 1px solid #334155; margin-top: 0.4rem;"><code># Ubuntu / Debian
+sudo apt update && sudo apt install -y certbot
+
+# RHEL / Rocky Linux / AlmaLinux
+sudo dnf install -y epel-release && sudo dnf install -y certbot</code></pre>
+
+          <strong style="font-size: 0.85rem; color: var(--primary); display: block; margin-top: 1rem;">B. Emissione Certificato (Scegliere in base al web server):</strong>
+
+          <!-- Scenario Webroot -->
+          <p style="font-size: 0.83rem; font-weight: 600; margin: 0.6rem 0 0.25rem 0; color: var(--gray-800);">
+            • Opzione 1: Server con Nginx o Apache attivo (Modalità Webroot - Nessun downtime):
+          </p>
+          <pre style="background: #0f172a; color: #f8fafc; padding: 0.75rem 1rem; border-radius: var(--radius); font-size: 0.8rem; overflow-x: auto; border: 1px solid #334155;"><code id="acme-code-certbot-webroot">sudo certbot certonly --webroot -w /var/www/html \
+  --server "https://.../acme/directory" \
+  -d "nomesito.dominio.it" \
+  --agree-tos --register-unsafely-without-email</code></pre>
+
+          <!-- Scenario Standalone -->
+          <p style="font-size: 0.83rem; font-weight: 600; margin: 0.75rem 0 0.25rem 0; color: var(--gray-800);">
+            • Opzione 2: Server senza web server attivo sulla porta 80 (Modalità Standalone):
+          </p>
+          <pre style="background: #0f172a; color: #f8fafc; padding: 0.75rem 1rem; border-radius: var(--radius); font-size: 0.8rem; overflow-x: auto; border: 1px solid #334155;"><code id="acme-code-certbot-standalone">sudo certbot certonly --standalone \
+  --server "https://.../acme/directory" \
+  -d "nomesito.dominio.it" \
+  --agree-tos --register-unsafely-without-email</code></pre>
+
+          <!-- Deploy Hook e Percorsi -->
+          <div style="margin-top: 0.85rem; font-size: 0.82rem; color: var(--gray-700); line-height: 1.5;">
+            <strong>Dove vengono salvati i file:</strong><br>
+            • Certificato & Chiave Privata: <code style="background: var(--gray-200); padding: 0.1rem 0.3rem; border-radius: 3px;">/etc/letsencrypt/live/nomesito.dominio.it/</code><br>
+            • <code>fullchain.pem</code> (certificato + catena Sub-CA) e <code>privkey.pem</code> (chiave privata locale).
+          </div>
+
+          <p style="font-size: 0.83rem; font-weight: 600; margin: 0.85rem 0 0.25rem 0; color: var(--gray-800);">
+            • Verifica e Test di Rinnovo Automatico:
+          </p>
+          <pre style="background: #0f172a; color: #f8fafc; padding: 0.65rem 1rem; border-radius: var(--radius); font-size: 0.8rem; overflow-x: auto; border: 1px solid #334155;"><code>sudo certbot renew --dry-run</code></pre>
+        </div>
+
+        <!-- SEZIONE 3: SCRIPT POWERSHELL REST API (ALTERNATIVA SENZA CLIENT ACME) -->
+        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;" data-i18n="automation_ps_title">
+          <span>⚙️ 3. Alternativa: Script di Rinnovo Diretto via REST API (PowerShell)</span>
+        </h4>
+        <p style="font-size: 0.85rem; color: var(--gray-700); margin-bottom: 0.75rem;">
+          Se non si desidera installare client ACME, è sempre possibile sottomettere un CSR generato localmente invocando le REST API native del portale:
+        </p>
+        <pre style="background: #0f172a; color: #f8fafc; padding: 1rem; border-radius: var(--radius); font-size: 0.8rem; overflow-x: auto; border: 1px solid #334155;"><code id="acme-code-powershell"># Genera o carica il CSR locale generato sulla macchina
 $csr = (Get-Content "C:\cert\request.csr" -Raw)
 
-# Sottometti al Portale PKI via REST API
+# Invio richiesta al Portale PKI via REST API con la CA e il template correnti
 $body = @{
-    CaId = "ca-foresta1"
+    CaId = "..."
     TemplateName = "WebServer"
     CsrPem = $csr
 } | ConvertTo-Json
 
-$response = Invoke-RestMethod -Uri "https://pki.azienda.lan/api/certificates/request" -Method Post -Body $body -ContentType "application/json"
+$response = Invoke-RestMethod -Uri "https://.../api/certificates/request" `
+    -Method Post -Body $body -ContentType "application/json" -UseDefaultCredentials
 
 if ($response.success -and $response.disposition -eq "Issued") {
     $response.certificatePem | Out-File "C:\cert\issued.cer" -Encoding ascii
-    Write-Host "Certificato emesso con successo!" -ForegroundColor Green
+    Write-Host "Certificato emesso con successo! Request ID: $($response.requestId)" -ForegroundColor Green
 }</code></pre>
       </div>
     </section>
@@ -442,9 +552,9 @@ if ($response.success -and $response.disposition -eq "Issued") {
   </footer>
 
   <!-- Script Libraries -->
-  <script src="/js/vendor/forge.min.js?v=2.5.1"></script>
-  <script src="/js/crypto-helper.js?v=2.5.1"></script>
-  <script src="/js/i18n.js?v=2.5.1"></script>
-  <script src="/js/app.js?v=2.5.1"></script>
+  <script src="/js/vendor/forge.min.js?v=2.5.2"></script>
+  <script src="/js/crypto-helper.js?v=2.5.2"></script>
+  <script src="/js/i18n.js?v=2.5.2"></script>
+  <script src="/js/app.js?v=2.5.2"></script>
 </body>
 </html>

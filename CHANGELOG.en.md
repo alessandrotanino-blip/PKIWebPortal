@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.2] - 2026-11-13
+
+### Automation & ACME Server (RFC 8555)
+
+- **Interactive & Dynamic ACME Guide ("Automation & win-acme")**:
+  - Completely revamped the "Automation & win-acme" tab on the user portal with step-by-step guides for Windows clients (win-acme / WACS) and Linux (Certbot).
+  - **Dynamic Multi-Deployment Parameterization**: The `GET /api/config` endpoint now returns the `acme` runtime object (`directoryUrl`, `baseUrl`, `host`, `defaultCaId`, `defaultTemplate`). All generated commands on the interface (win-acme, certbot webroot/standalone, PowerShell scripts) dynamically bind to the current portal hostname/deployment and the actively selected Sub-CA.
+  - Clear explanation of network prerequisites (port 443 outbound to ACME portal, port 80 inbound to requesting server for HTTP-01 challenge).
+  - Detailed breakdown of all command-line switches for `wacs.exe` and `certbot`.
+
 ## [2.5.1] - 2026-11-12
 
 ### Installer & Setup Script Fixes
