@@ -16,6 +16,13 @@ public interface IAdcsService
     /// </summary>
     Task<CertificateRevocationResponse> RevokeCertificateAsync(string? caId, string serialNumber, string reason);
     Task<List<PublishedTemplate>> GetPublishedTemplatesAsync(string caId);
+
+    /// <summary>
+    /// SECURITY (2.6.0): pubblica/aggiorna la CRL della CA specificata
+    /// (certutil -CRL). Forza la generazione e pubblicazione sincrona
+    /// della Certificate Revocation List.
+    /// </summary>
+    Task<CrlPublishResponse> PublishCrlAsync(string? caId);
     Task<TemplateDiscoveryResponse> DiscoverTemplatesAsync(TemplateDiscoveryRequest request);
 
     /// <summary>

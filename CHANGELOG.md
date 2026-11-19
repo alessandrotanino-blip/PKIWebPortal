@@ -6,6 +6,48 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.6.0] - 2026-11-20
+
+### Revoca Certificati & Pubblicazione CRL
+
+- **Revoca Certificati dall'Amministratore (nuova funzionalità)**:
+  - I certificati già emessi (stato `Issued` o `Approved`) possono ora essere revocati direttamente dal pannello di amministrazione con il pulsante **🔒 Revoca Certificato**.
+  - La revoca viene eseguita sulla CA AD CS in tempo reale tramite `certutil -revoke` (con impersonazione del contesto di sicurezza della CA) e il certificato revocato finisce nella CRL.
+  - Il portale registra chi ha revocato, quando e il motivo, con il nuovo stato `Revoked`.
+  - Nuovo campo `SerialNumber` estratto automaticamente dal certificato PEM archiviato.
+  - Nuovo endpoint API: `POST /api/admin/held-requests/{holdId}/revoke` (admin + CSRF).
+
+- **Revoca Automatica su Rifiuto (sicurezza)**:
+  - Quando un amministratore rifiuta una richiesta (`Reject`) per la quale il certificato è già stato emesso dalla CA (template con `RequiresApproval`), il portale **revoca automaticamente il certificato sulla CA** prima di registrare il rifiuto, impedendo che certificati rifiutati dal portale restino validi nella PKI.
+  - Se la revoca automatica sulla CA fallisce, il rifiuto nel portale prosegue comunque e l'errore viene registrato nei log del server.
+
+- **Pubblicazione Sincrona della CRL (nuova funzionalità)**:
+  - Nuovo pulsante **📢 Pubblica CRL** nel pannello di amministrazione: forza la generazione e pubblicazione sincrona della Certificate Revocation List su tutte le CA configurate (o su una CA specifica).
+  - Implementato tramite `certutil -CRL` nel contesto di sicurezza della CA.
+  - Nuovo endpoint API: `POST /api/admin/crl/publish` (admin + CSRF).
+
+### Modello & Store
+
+- Nuovo stato `Revoked` nell'enum `HoldStatus`.
+- Nuovi campi nel modello `HeldCertificateRequest`: `SerialNumber`, `RevokedAt`, `RevokedBy`, `RevocationReason`.
+- Nuovo metodo `RevokeRequestAsync()` nello store con persistenza atomica.
+- Nuovo modello `CrlPublishResponse`.
+- Nuova interfaccia `PublishCrlAsync()` in `IAdcsService`.
+- Utility `ExtractSerialNumberFromPem()` per estrarre il numero seriale esadecimale dal certificato PEM.
+
+### Admin GUI
+
+- Pulsante **🔒 Revoca Certificato** sulle schede dei certificati emessi/approvati.
+- Pulsante **📢 Pubblica CRL** nella barra azioni dell'elenco richieste.
+- Nuovo filtro **Solo Revocate** nel dropdown stato del pannello richieste.
+- Badge stato **Revocato** con stile dedicato e dettagli revoca (data, operatore, motivo, serial number).
+- Dialogo di conferma con avvertenza di irreversibilità per la revoca.
+- Prompt opzionale per il motivo della revoca.
+
+### Versioning
+
+- Bump versione a `2.6.0` su `.csproj`, badge UI e cache-busting.
+
 ## [2.5.2] - 2026-11-13
 
 ### Automazione & Server ACME (RFC 8555)

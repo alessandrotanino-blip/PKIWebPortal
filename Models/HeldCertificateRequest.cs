@@ -32,6 +32,12 @@ public class HeldCertificateRequest
     public HoldStatus Status { get; set; } = HoldStatus.PendingApproval;
     public string? ReviewedBy { get; set; }
     public string? RejectionReason { get; set; }
+
+    // Revoca (v2.6.0)
+    public string? SerialNumber { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public string? RevokedBy { get; set; }
+    public string? RevocationReason { get; set; }
 }
 
 public enum HoldStatus
@@ -40,5 +46,6 @@ public enum HoldStatus
     Approved,
     Rejected,
     Issued,
-    UnderSubmission
+    UnderSubmission,
+    Revoked
 }

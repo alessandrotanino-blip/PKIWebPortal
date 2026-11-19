@@ -47,6 +47,16 @@ public class CertificateRevocationResponse
     public string? RawOutput { get; set; }
 }
 
+/// <summary>
+/// Risposta alla pubblicazione/aggiornamento della CRL (v2.6.0).
+/// </summary>
+public class CrlPublishResponse
+{
+    public bool Success { get; set; }
+    public string StatusMessage { get; set; } = string.Empty;
+    public string? RawOutput { get; set; }
+}
+
 public class CsrParseRequest
 {
     public string CsrPem { get; set; } = string.Empty;

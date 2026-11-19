@@ -904,6 +904,7 @@ admin.MapGet("/held-requests", async (
         "rejected" => HoldStatus.Rejected,
         "issued" => HoldStatus.Issued,
         "undersubmission" => HoldStatus.UnderSubmission,
+        "revoked" => HoldStatus.Revoked,
         "all" => null,
         _ => HoldStatus.PendingApproval // default: solo pending
     };
@@ -975,7 +976,11 @@ admin.MapGet("/held-requests", async (
             r.RejectionReason,
             r.RequesterComments,
             HasCertificate = !string.IsNullOrEmpty(r.CertificatePem),
-            HasPrivateKey = !string.IsNullOrEmpty(r.PrivateKeyPem)
+            HasPrivateKey = !string.IsNullOrEmpty(r.PrivateKeyPem),
+            r.SerialNumber,
+            r.RevokedAt,
+            r.RevokedBy,
+            r.RevocationReason
         })
     });
 });
@@ -1028,7 +1033,7 @@ admin.MapPost("/held-requests/{holdId}/approve", async (string holdId, HttpConte
 });
 
 // POST /api/admin/held-requests/{holdId}/reject - Rifiuta una richiesta trattenuta
-admin.MapPost("/held-requests/{holdId}/reject", async (string holdId, HttpContext ctx, IHeldRequestStore holdStore, [FromBody] RejectHeldRequestBody? body) =>
+admin.MapPost("/held-requests/{holdId}/reject", async (string holdId, HttpContext ctx, IHeldRequestStore holdStore, IAdcsService adcsService, [FromBody] RejectHeldRequestBody? body) =>
 {
     if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
         return Results.Challenge();
@@ -1041,6 +1046,39 @@ admin.MapPost("/held-requests/{holdId}/reject", async (string holdId, HttpContex
 
     string rejectedBy = ctx.User.Identity.Name ?? "Admin";
     string? reason = body?.Reason;
+
+    // SECURITY (2.6.0): se il certificato è già stato emesso dalla CA,
+    // revocalo automaticamente sulla CA prima di rifiutare nel portale.
+    var existingRequest = await holdStore.GetByHoldIdAsync(holdId);
+    if (existingRequest != null &&
+        existingRequest.Status == HoldStatus.PendingApproval &&
+        !string.IsNullOrWhiteSpace(existingRequest.CertificatePem))
+    {
+        string? serial = AdcsService.ExtractSerialNumberFromPem(existingRequest.CertificatePem);
+        if (!string.IsNullOrWhiteSpace(serial))
+        {
+            app.Logger.LogInformation(
+                "Rifiuto con revoca automatica: HoldId={HoldId}, Serial={Serial}, CA={CaId}",
+                holdId, serial, existingRequest.CaId);
+
+            var revokeResult = await adcsService.RevokeCertificateAsync(
+                existingRequest.CaId, serial, reason ?? "Richiesta rifiutata dall'amministratore del portale");
+
+            if (!revokeResult.Success)
+            {
+                app.Logger.LogWarning(
+                    "Revoca automatica sulla CA fallita per HoldId={HoldId}, Serial={Serial}: {Msg}. Il rifiuto nel portale proseguirà comunque.",
+                    holdId, serial, revokeResult.StatusMessage);
+            }
+            else
+            {
+                existingRequest.SerialNumber = serial;
+                app.Logger.LogInformation(
+                    "Revoca automatica sulla CA riuscita per HoldId={HoldId}, Serial={Serial}.",
+                    holdId, serial);
+            }
+        }
+    }
 
     var rejected = await holdStore.RejectRequestAsync(holdId, rejectedBy, reason);
 
@@ -1057,6 +1095,123 @@ admin.MapPost("/held-requests/{holdId}/reject", async (string holdId, HttpContex
         rejectedAt = rejected.ReviewedAt
     });
 });
+
+// POST /api/admin/held-requests/{holdId}/revoke - Revoca un certificato già emesso (v2.6.0)
+admin.MapPost("/held-requests/{holdId}/revoke", async (string holdId, HttpContext ctx, IHeldRequestStore holdStore, IAdcsService adcsService, [FromBody] RevokeHeldRequestBody? body) =>
+{
+    if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
+        return Results.Challenge();
+
+    if (!IsServerAdmin(ctx))
+        return Results.Forbid();
+
+    if (!HasValidCsrf(ctx))
+        return CsrfDenied();
+
+    string revokedBy = ctx.User.Identity.Name ?? "Admin";
+    string? reason = body?.Reason;
+
+    var existingRequest = await holdStore.GetByHoldIdAsync(holdId);
+    if (existingRequest == null)
+        return Results.NotFound(new { message = $"Richiesta con Hold ID '{holdId}' non trovata." });
+
+    if (existingRequest.Status != HoldStatus.Issued && existingRequest.Status != HoldStatus.Approved)
+        return Results.BadRequest(new { message = $"La richiesta '{holdId}' non è in stato Emesso/Approvato (stato attuale: {existingRequest.Status})." });
+
+    if (string.IsNullOrWhiteSpace(existingRequest.CertificatePem))
+        return Results.BadRequest(new { message = $"Nessun certificato archiviato per la richiesta '{holdId}'." });
+
+    // Estrai il numero seriale dal certificato emesso
+    string? serial = AdcsService.ExtractSerialNumberFromPem(existingRequest.CertificatePem);
+    if (string.IsNullOrWhiteSpace(serial))
+        return Results.BadRequest(new { message = $"Impossibile estrarre il numero seriale dal certificato della richiesta '{holdId}'." });
+
+    // Revoca sulla CA AD CS
+    app.Logger.LogInformation(
+        "Revoca certificato dal pannello admin: HoldId={HoldId}, Serial={Serial}, CA={CaId}, Revocato da={RevokedBy}",
+        holdId, serial, existingRequest.CaId, revokedBy);
+
+    var caRevokeResult = await adcsService.RevokeCertificateAsync(
+        existingRequest.CaId, serial, reason ?? "Revocato dall'amministratore del portale");
+
+    if (!caRevokeResult.Success)
+    {
+        app.Logger.LogError(
+            "Revoca sulla CA fallita per HoldId={HoldId}, Serial={Serial}: {Msg}",
+            holdId, serial, caRevokeResult.StatusMessage);
+        return Results.Json(new
+        {
+            success = false,
+            message = $"Revoca sulla CA fallita: {caRevokeResult.StatusMessage}"
+        }, statusCode: StatusCodes.Status502BadGateway);
+    }
+
+    // Aggiorna il numero seriale e revoca nello store del portale
+    existingRequest.SerialNumber = serial;
+    var revoked = await holdStore.RevokeRequestAsync(holdId, revokedBy, reason);
+
+    if (revoked == null)
+        return Results.Problem("Errore durante l'aggiornamento dello stato nel portale.");
+
+    return Results.Ok(new
+    {
+        success = true,
+        message = $"Certificato '{holdId}' (serial {serial}) revocato con successo sulla CA e nel portale da {revokedBy}.",
+        holdId = revoked.HoldId,
+        serialNumber = serial,
+        reason = revoked.RevocationReason,
+        revokedBy = revoked.RevokedBy,
+        revokedAt = revoked.RevokedAt
+    });
+});
+
+// POST /api/admin/crl/publish - Pubblica/aggiorna la CRL di una o tutte le CA (v2.6.0)
+admin.MapPost("/crl/publish", async (HttpContext ctx, IAdcsService adcsService, [FromBody] CrlPublishRequestBody? body) =>
+{
+    if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
+        return Results.Challenge();
+
+    if (!IsServerAdmin(ctx))
+        return Results.Forbid();
+
+    if (!HasValidCsrf(ctx))
+        return CsrfDenied();
+
+    string adminUser = ctx.User.Identity.Name ?? "Admin";
+    string? caId = body?.CaId;
+
+    app.Logger.LogInformation("Pubblicazione CRL richiesta da {Admin} per CA '{CaId}'.", adminUser, caId ?? "(tutte)");
+
+    if (!string.IsNullOrWhiteSpace(caId))
+    {
+        // Pubblica CRL per una CA specifica
+        var result = await adcsService.PublishCrlAsync(caId);
+        return Results.Ok(new
+        {
+            success = result.Success,
+            message = result.StatusMessage,
+            caId = caId
+        });
+    }
+
+    // Pubblica CRL per tutte le CA configurate
+    var cas = await adcsService.GetAvailableCAsAsync();
+    var results = new List<object>();
+    bool allSuccess = true;
+    foreach (var ca in cas)
+    {
+        var result = await adcsService.PublishCrlAsync(ca.Id);
+        results.Add(new { caId = ca.Id, caName = ca.DisplayName, success = result.Success, message = result.StatusMessage });
+        if (!result.Success) allSuccess = false;
+    }
+
+    return Results.Ok(new
+    {
+        success = allSuccess,
+        message = allSuccess ? "CRL aggiornata e pubblicata con successo per tutte le CA." : "Pubblicazione CRL completata con errori su alcune CA.",
+        details = results
+    });
+}).RequireRateLimiting("portal-submit");
 
 // GET /api/certificates/held/{holdId} - Endpoint utente per recuperare un certificato approvato (con controllo di proprietà)
 api.MapGet("/certificates/held/{holdId}", async (string holdId, IHeldRequestStore holdStore, HttpContext ctx) =>
@@ -1128,6 +1283,14 @@ api.MapGet("/certificates/held/{holdId}", async (string holdId, IHeldRequestStor
             RequestId = request.CaRequestId,
             StatusMessage = $"La richiesta è stata rifiutata da {request.ReviewedBy} il {request.ReviewedAt:dd/MM/yyyy HH:mm}." +
                            (string.IsNullOrWhiteSpace(request.RejectionReason) ? "" : $" Motivo: {request.RejectionReason}")
+        }),
+        HoldStatus.Revoked => Results.Ok(new CertificateSubmissionResponse
+        {
+            Success = false,
+            Disposition = "Revoked",
+            RequestId = request.CaRequestId,
+            StatusMessage = $"Il certificato è stato revocato da {request.RevokedBy} il {request.RevokedAt:dd/MM/yyyy HH:mm}." +
+                           (string.IsNullOrWhiteSpace(request.RevocationReason) ? "" : $" Motivo: {request.RevocationReason}")
         }),
         _ => Results.Problem("Stato richiesta non riconosciuto.")
     };
@@ -1407,3 +1570,9 @@ app.Run();
 
 // DTO per il body della reject
 public record RejectHeldRequestBody(string? Reason);
+
+// DTO per il body della revoca (v2.6.0)
+public record RevokeHeldRequestBody(string? Reason);
+
+// DTO per il body della pubblicazione CRL (v2.6.0)
+public record CrlPublishRequestBody(string? CaId);

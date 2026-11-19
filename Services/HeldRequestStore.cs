@@ -526,6 +526,33 @@ public class HeldRequestStore : IHeldRequestStore
         return request;
     }
 
+    public async Task<HeldCertificateRequest?> RevokeRequestAsync(string holdId, string revokedBy, string? reason)
+    {
+        HeldCertificateRequest? request;
+        lock (_stateLock)
+        {
+            if (!_store.TryGetValue(holdId, out request))
+            {
+                return null;
+            }
+
+            if (request.Status != HoldStatus.Issued && request.Status != HoldStatus.Approved)
+            {
+                _logger.LogWarning("Tentativo di revocare una richiesta non in stato Issued/Approved: HoldId={HoldId}, Stato={Status}", holdId.Replace("\r", string.Empty).Replace("\n", string.Empty), request.Status);
+                return null;
+            }
+
+            request.Status = HoldStatus.Revoked;
+            request.RevokedAt = DateTime.UtcNow;
+            request.RevokedBy = revokedBy;
+            request.RevocationReason = reason;
+        }
+
+        _logger.LogInformation("Richiesta certificato REVOCATA: HoldId={HoldId}, Revocata da={RevokedBy}, Motivo={Reason}", holdId.Replace("\r", string.Empty).Replace("\n", string.Empty), revokedBy.Replace("\r", string.Empty).Replace("\n", string.Empty), reason?.Replace("\r", string.Empty).Replace("\n", string.Empty));
+        await SaveToDiskAsync();
+        return request;
+    }
+
     #region Persistenza su disco
 
     private void LoadFromDisk()
@@ -679,7 +706,11 @@ public class HeldRequestStore : IHeldRequestStore
             PrivateKeyPem = EncryptAtRest(r.PrivateKeyPem),
             Status = r.Status,
             ReviewedBy = r.ReviewedBy,
-            RejectionReason = r.RejectionReason
+            RejectionReason = r.RejectionReason,
+            SerialNumber = r.SerialNumber,
+            RevokedAt = r.RevokedAt,
+            RevokedBy = r.RevokedBy,
+            RevocationReason = r.RevocationReason
         };
     }
 

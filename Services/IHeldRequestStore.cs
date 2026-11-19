@@ -53,4 +53,9 @@ public interface IHeldRequestStore
     /// Recupera tutte le richieste inoltrate da uno specifico utente (per storico e download personale).
     /// </summary>
     Task<List<HeldCertificateRequest>> GetRequestsByUserAsync(string userName);
+
+    /// <summary>
+    /// Revoca una richiesta: cambia lo stato a Revoked (v2.6.0).
+    /// </summary>
+    Task<HeldCertificateRequest?> RevokeRequestAsync(string holdId, string revokedBy, string? reason);
 }

@@ -683,6 +683,131 @@ public class AdcsService : IAdcsService
         };
     }
 
+    /// <summary>
+    /// Pubblica/aggiorna la CRL della CA specificata tramite certutil -CRL
+    /// (v2.6.0). Eseguito nel contesto di sicurezza della CA.
+    /// </summary>
+    public async Task<CrlPublishResponse> PublishCrlAsync(string? caId)
+    {
+        var ca = await GetCaConfigAsync(caId);
+        if (ca == null)
+        {
+            return new CrlPublishResponse
+            {
+                Success = false,
+                StatusMessage = "Configurazione CA non trovata."
+            };
+        }
+
+        if (ca.UseSimulator || !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return new CrlPublishResponse
+            {
+                Success = true,
+                StatusMessage = "[SIMULATORE] Pubblicazione CRL simulata con successo."
+            };
+        }
+
+        _logger.LogInformation("Pubblicazione CRL per la CA '{CaId}' (ConfigString: {ConfigString}).", ca.Id, ca.ConfigString);
+
+        return await ExecuteInSecurityContextAsync(ca, async () =>
+            await PublishCrlViaCertutilAsync(ca.ConfigString));
+    }
+
+    private async Task<CrlPublishResponse> PublishCrlViaCertutilAsync(string configString)
+    {
+        if (!CaConfigStringRegex.IsMatch(configString))
+        {
+            return new CrlPublishResponse
+            {
+                Success = false,
+                StatusMessage = "ConfigString CA non valida."
+            };
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "certutil.exe",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        startInfo.ArgumentList.Add("-config");
+        startInfo.ArgumentList.Add(configString);
+        startInfo.ArgumentList.Add("-CRL");
+
+        using var process = new Process { StartInfo = startInfo };
+        var stdoutBuilder = new StringBuilder();
+        var stderrBuilder = new StringBuilder();
+        process.OutputDataReceived += (s, e) => { if (e.Data != null) stdoutBuilder.AppendLine(e.Data); };
+        process.ErrorDataReceived += (s, e) => { if (e.Data != null) stderrBuilder.AppendLine(e.Data); };
+
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        int exitCode;
+        try
+        {
+            await process.WaitForExitAsync(cts.Token);
+            exitCode = process.ExitCode;
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            return new CrlPublishResponse
+            {
+                Success = false,
+                StatusMessage = "Timeout: certutil -CRL non ha risposto entro 30 secondi."
+            };
+        }
+
+        string stdout = stdoutBuilder.ToString();
+        string stderr = stderrBuilder.ToString();
+        _logger.LogInformation("Output certutil -CRL (exit {ExitCode}):\nSTDOUT: {Stdout}\nSTDERR: {Stderr}",
+            exitCode, SanitizeForLog(stdout), SanitizeForLog(stderr));
+
+        bool success = exitCode == 0 &&
+            !stdout.Contains("0x8009", StringComparison.OrdinalIgnoreCase) &&
+            !stderr.Contains("0x8009", StringComparison.OrdinalIgnoreCase);
+
+        return new CrlPublishResponse
+        {
+            Success = success,
+            StatusMessage = success
+                ? "CRL aggiornata e pubblicata con successo."
+                : $"certutil -CRL ha restituito codice di uscita {exitCode}.",
+            RawOutput = stdout + (string.IsNullOrWhiteSpace(stderr) ? "" : "\n[STDERR]\n" + stderr)
+        };
+    }
+
+    /// <summary>
+    /// Estrae il numero seriale esadecimale da un certificato in formato PEM (v2.6.0).
+    /// Restituisce null se il parsing fallisce.
+    /// </summary>
+    internal static string? ExtractSerialNumberFromPem(string? certificatePem)
+    {
+        if (string.IsNullOrWhiteSpace(certificatePem))
+            return null;
+
+        try
+        {
+            var certBytes = Convert.FromBase64String(
+                    certificatePem
+                        .Replace("-----BEGIN CERTIFICATE-----", "")
+                        .Replace("-----END CERTIFICATE-----", "")
+                        .Trim());
+            using var cert = new X509Certificate2(certBytes);
+            return cert.SerialNumber; // Esadecimale senza prefisso
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     #region Gestione Contesto di Sicurezza & Windows Credential Manager
 
     /// <summary>

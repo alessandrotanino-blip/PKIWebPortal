@@ -1089,6 +1089,10 @@
       if (refreshBtn) {
         refreshBtn.addEventListener('click', loadHeldRequests);
       }
+      const publishCrlBtn = document.getElementById('btn-publish-crl');
+      if (publishCrlBtn) {
+        publishCrlBtn.addEventListener('click', publishCrl);
+      }
       const searchInput = document.getElementById('filter-held-search');
       if (searchInput) {
         searchInput.addEventListener('input', applyAndRenderAdminHeldRequests);
@@ -1292,7 +1296,10 @@
       const btnRejectText = window.I18N ? window.I18N.t('admin_btn_reject_req', '❌ Rifiuta Richiesta') : '❌ Rifiuta Richiesta';
       const btnApproveText = window.I18N ? window.I18N.t('admin_btn_approve_req', '✅ Approva & Rilascia Certificato') : '✅ Approva & Rilascia Certificato';
       const btnViewCertText = window.I18N ? window.I18N.t('btn_view_cert', 'Visualizza Certificato') : 'Visualizza Certificato';
+      const btnRevokeText = window.I18N ? window.I18N.t('admin_btn_revoke_req', '🔒 Revoca Certificato') : '🔒 Revoca Certificato';
       const pendingCaHint = window.I18N ? window.I18N.t('admin_pending_ca_hint', 'In attesa di approvazione sulla CA ADCS') : 'In attesa di approvazione sulla CA ADCS';
+      const lblRevoked = window.I18N ? window.I18N.t('admin_revoked_label', 'Revocato:') : 'Revocato:';
+      const lblRevocationReason = window.I18N ? window.I18N.t('admin_revocation_reason_label', 'Motivo Revoca:') : 'Motivo Revoca:';
 
       container.innerHTML = '';
       requests.forEach(r => {
@@ -1311,6 +1318,10 @@
         const requesterComments = r.requesterComments || r.RequesterComments || '';
         const reviewedBy = r.reviewedBy || r.ReviewedBy || '';
         const rejectionReason = r.rejectionReason || r.RejectionReason || '';
+        const revokedBy = r.revokedBy || r.RevokedBy || '';
+        const revocationReason = r.revocationReason || r.RevocationReason || '';
+        const revokedAt = r.revokedAt || r.RevokedAt;
+        const serialNumber = r.serialNumber || r.SerialNumber || '';
         const submittedAt = r.submittedAt || r.SubmittedAt;
         const reviewedAt = r.reviewedAt || r.ReviewedAt;
 
@@ -1332,6 +1343,9 @@
         } else if (status === 'Rejected') {
           statusClass = 'status-rejected';
           statusLabel = window.I18N ? window.I18N.t('status_rejected', 'Rifiutato') : 'Rifiutato';
+        } else if (status === 'Revoked') {
+          statusClass = 'status-rejected';
+          statusLabel = window.I18N ? window.I18N.t('status_revoked', 'Revocato') : 'Revocato';
         } else {
           statusClass = 'status-pending';
           statusLabel = esc(status);
@@ -1372,6 +1386,9 @@
             ${requesterComments ? `<div><strong>${escapeHtml(lblReqNotes)}</strong> ${esc(requesterComments)}</div>` : ''}
             ${reviewedDate ? `<div><strong>${escapeHtml(lblReviewed)}</strong> ${reviewedDate} ${escapeHtml(lblBy)} ${esc(reviewedBy || 'Admin')}</div>` : ''}
             ${rejectionReason ? `<div style="grid-column: 1 / -1; color: var(--danger);"><strong>${escapeHtml(lblRejectionReason)}</strong> ${esc(rejectionReason)}</div>` : ''}
+            ${status === 'Revoked' && revokedAt ? `<div><strong>${escapeHtml(lblRevoked)}</strong> ${new Date(revokedAt).toLocaleString(dateLocale)} ${escapeHtml(lblBy)} ${esc(revokedBy || 'Admin')}</div>` : ''}
+            ${status === 'Revoked' && serialNumber ? `<div><strong>Serial:</strong> <code>${esc(serialNumber)}</code></div>` : ''}
+            ${revocationReason ? `<div style="grid-column: 1 / -1; color: var(--danger);"><strong>${escapeHtml(lblRevocationReason)}</strong> ${esc(revocationReason)}</div>` : ''}
           </div>
 
           <div class="held-actions">
@@ -1386,6 +1403,9 @@
             ${(status === 'Approved' || status === 'Issued') ? `
               <button type="button" class="btn btn-secondary btn-sm btn-toggle-cert" data-target="${certBoxId}" data-id="${esc(holdId)}">
                 📄 ${escapeHtml(btnViewCertText)}
+              </button>
+              <button type="button" class="btn btn-danger btn-sm btn-revoke-held" data-id="${esc(holdId)}" style="background-color: #7c3aed; border-color: #7c3aed; color: white;">
+                ${escapeHtml(btnRevokeText)}
               </button>
             ` : ''}
             ${status === 'UnderSubmission' ? `
@@ -1406,6 +1426,10 @@
 
       container.querySelectorAll('.btn-reject-held').forEach(btn => {
         btn.addEventListener('click', () => rejectHeldRequest(btn.getAttribute('data-id')));
+      });
+
+      container.querySelectorAll('.btn-revoke-held').forEach(btn => {
+        btn.addEventListener('click', () => revokeHeldRequest(btn.getAttribute('data-id')));
       });
 
       container.querySelectorAll('.btn-toggle-cert').forEach(btn => {
@@ -1434,7 +1458,7 @@
           showToast(result.message || successMsg, 'success');
           loadHeldRequests();
         } else {
-          showToast('Errore: ' + (result.message || defaultErrMsg), 'error');
+          showToast((result.message || defaultErrMsg), 'error');
         }
       } catch (err) {
         const commErrMsg = window.I18N ? window.I18N.t('admin_toast_comm_error', 'Errore di comunicazione: ') : 'Errore di comunicazione: ';
@@ -1463,11 +1487,82 @@
           showToast(result.message || successMsg, 'success');
           loadHeldRequests();
         } else {
-          showToast('Errore: ' + (result.message || defaultErrMsg), 'error');
+          showToast((result.message || defaultErrMsg), 'error');
         }
       } catch (err) {
         const commErrMsg = window.I18N ? window.I18N.t('admin_toast_comm_error', 'Errore di comunicazione: ') : 'Errore di comunicazione: ';
         showToast(commErrMsg + err.message, 'error');
+      }
+    }
+
+    async function revokeHeldRequest(holdId) {
+      const confirmTpl = window.I18N
+        ? window.I18N.t('admin_confirm_revoke_req', "⚠️ ATTENZIONE: Confermi la REVOCA del certificato con Hold ID '{0}'?\n\nIl certificato verrà revocato sulla CA AD CS e finirà nella CRL.\nQuesta operazione è IRREVERSIBILE.")
+        : "⚠️ ATTENZIONE: Confermi la REVOCA del certificato con Hold ID '{0}'?\n\nIl certificato verrà revocato sulla CA AD CS e finirà nella CRL.\nQuesta operazione è IRREVERSIBILE.";
+      const confirmMsg = confirmTpl.replace('{0}', holdId);
+      if (!confirm(confirmMsg)) return;
+
+      const promptTpl = window.I18N
+        ? window.I18N.t('admin_prompt_revoke_reason', "Inserisci il motivo della revoca (opzionale):")
+        : "Inserisci il motivo della revoca (opzionale):";
+      const reason = prompt(promptTpl);
+      if (reason === null) return;
+
+      try {
+        const resp = await fetch(`/api/admin/held-requests/${encodeURIComponent(holdId)}/revoke`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': await ensureCsrfToken() },
+          body: JSON.stringify({ reason: reason.trim() })
+        });
+        const result = await resp.json();
+        const successMsg = window.I18N ? window.I18N.t('admin_toast_revoked', 'Certificato revocato con successo!') : 'Certificato revocato con successo!';
+        const defaultErrMsg = window.I18N ? window.I18N.t('admin_toast_revoke_error', 'Impossibile revocare') : 'Impossibile revocare';
+        if (resp.ok && result.success) {
+          showToast(result.message || successMsg, 'success');
+          loadHeldRequests();
+        } else {
+          showToast((result.message || defaultErrMsg), 'error');
+        }
+      } catch (err) {
+        const commErrMsg = window.I18N ? window.I18N.t('admin_toast_comm_error', 'Errore di comunicazione: ') : 'Errore di comunicazione: ';
+        showToast(commErrMsg + err.message, 'error');
+      }
+    }
+
+    async function publishCrl() {
+      const confirmMsg = window.I18N
+        ? window.I18N.t('admin_confirm_publish_crl', "Pubblicare/aggiornare la CRL per tutte le CA configurate?\n\nQuesta operazione forza la generazione e pubblicazione sincrona della Certificate Revocation List.")
+        : "Pubblicare/aggiornare la CRL per tutte le CA configurate?\n\nQuesta operazione forza la generazione e pubblicazione sincrona della Certificate Revocation List.";
+      if (!confirm(confirmMsg)) return;
+
+      const btn = document.getElementById('btn-publish-crl');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-sm"></span> ' + (window.I18N ? window.I18N.t('admin_crl_publishing', 'Pubblicazione...') : 'Pubblicazione...');
+      }
+
+      try {
+        const resp = await fetch('/api/admin/crl/publish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Pki-Portal-Admin': await ensureCsrfToken() },
+          body: JSON.stringify({})
+        });
+        const result = await resp.json();
+        const successMsg = window.I18N ? window.I18N.t('admin_toast_crl_published', 'CRL pubblicata con successo!') : 'CRL pubblicata con successo!';
+        const defaultErrMsg = window.I18N ? window.I18N.t('admin_toast_crl_error', 'Errore nella pubblicazione CRL') : 'Errore nella pubblicazione CRL';
+        if (resp.ok && result.success) {
+          showToast(result.message || successMsg, 'success');
+        } else {
+          showToast((result.message || defaultErrMsg), 'error');
+        }
+      } catch (err) {
+        const commErrMsg = window.I18N ? window.I18N.t('admin_toast_comm_error', 'Errore di comunicazione: ') : 'Errore di comunicazione: ';
+        showToast(commErrMsg + err.message, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = window.I18N ? window.I18N.t('btn_publish_crl', '📢 Pubblica CRL') : '📢 Pubblica CRL';
+        }
       }
     }
 

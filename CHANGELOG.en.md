@@ -6,6 +6,44 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-11-20
+
+### Certificate Revocation & CRL Publishing
+
+- **Admin Certificate Revocation (new feature)**:
+  - Certificates already issued (status `Issued` or `Approved`) can now be revoked directly from the admin panel via the **🔒 Revoke Certificate** button.
+  - Revocation is performed on the AD CS CA in real time using `certutil -revoke` (with CA security context impersonation), and the revoked certificate is added to the CRL.
+  - The portal records who performed the revocation, when, and the reason, with the new `Revoked` status.
+  - New `SerialNumber` field automatically extracted from the stored PEM certificate.
+  - New API endpoint: `POST /api/admin/held-requests/{holdId}/revoke` (admin + CSRF).
+
+- **Automatic Revocation on Reject (security)**:
+  - When an admin rejects a request (`Reject`) for which the certificate has already been issued by the CA (`RequiresApproval` templates), the portal **automatically revokes the certificate on the CA** before recording the rejection, preventing certificates rejected by the portal from remaining valid in the PKI.
+  - If automatic revocation on the CA fails, the portal rejection proceeds anyway and the error is logged to the server logs.
+
+- **Synchronous CRL Publishing (new feature)**:
+  - New **📢 Publish CRL** button in the admin panel: forces synchronous Certificate Revocation List generation and publication on all configured CAs (or a specific CA).
+  - Implemented via `certutil -CRL` in the CA security context.
+  - New API endpoint: `POST /api/admin/crl/publish` (admin + CSRF).
+
+### Model & Store
+
+- New `Revoked` status in the `HoldStatus` enum.
+- New fields in the `HeldCertificateRequest` model: `SerialNumber`, `RevokedAt`, `RevokedBy`, `RevocationReason`.
+- New `RevokeRequestAsync()` method in the store with atomic persistence.
+- New `CrlPublishResponse` model.
+- New `PublishCrlAsync()` interface in `IAdcsService`.
+- `ExtractSerialNumberFromPem()` utility to extract the hex serial number from a PEM certificate.
+
+### Admin GUI
+
+- **🔒 Revoke Certificate** button on issued/approved certificate cards.
+- **📢 Publish CRL** button in the requests list action bar.
+- New **Revoked Only** filter in the status dropdown of the requests panel.
+- **Revoked** status badge with dedicated styling and revocation details (date, operator, reason, serial number).
+- Confirmation dialog with irreversibility warning for revocation.
+- Optional prompt for revocation reason.
+
 ## [2.5.2] - 2026-11-13
 
 ### Automation & ACME Server (RFC 8555)
