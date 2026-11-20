@@ -319,9 +319,9 @@
         <div style="margin-bottom: 0.75rem;">
           <label for="acme-validation-mode" style="font-size:0.85rem; font-weight:600; color:var(--gray-700); display:block; margin-bottom:0.4rem;" data-i18n="acme_field_validation_mode">Modalità Validazione</label>
           <select id="acme-validation-mode" class="form-control" style="width:100%;">
-            <option value="Http01">Http01 — Verifica HTTP reale (RFC 8555, porta 80)</option>
-            <option value="AutoApprove">AutoApprove — Auto-approvazione (lab / reti isolate)</option>
-            <option value="Http01WithAutoFallback">Http01WithAutoFallback — HTTP con fallback auto</option>
+            <option value="Http01" data-i18n="acme_opt_val_http01">Http01 — Verifica HTTP reale (RFC 8555, porta 80)</option>
+            <option value="AutoApprove" data-i18n="acme_opt_val_autoapprove">AutoApprove — Auto-approvazione (lab / reti isolate)</option>
+            <option value="Http01WithAutoFallback" data-i18n="acme_opt_val_fallback">Http01WithAutoFallback — HTTP con fallback auto</option>
           </select>
         </div>
         <small style="padding: 0 0 0.75rem 188px; display:block; opacity:0.7;" data-i18n="acme_hint_validation_mode">In reti micro-segmentate o DMZ strette, usare <strong>AutoApprove</strong> se il server non può contattare i client sulla porta HTTP.</small>

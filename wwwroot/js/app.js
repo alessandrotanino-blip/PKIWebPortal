@@ -65,6 +65,9 @@
 
     window.addEventListener('languageChanged', () => {
       checkCurrentUser();
+      updatePortalModeBadge();
+      renderCaSelector();
+      updateCaBanner();
       if (currentCa) {
         const templates = currentCa.templates || currentCa.Templates || [];
         renderTemplates(templates);
@@ -76,6 +79,62 @@
         loadMyRequests();
       }
     });
+  }
+
+  function updatePortalModeBadge() {
+    const badge = document.getElementById('portal-mode-badge');
+    if (!badge || !portalData) return;
+    const isStandalone = (portalData.portalMode || portalData.PortalMode) === 'Standalone';
+    const localText = window.I18N ? window.I18N.t('portal_mode_local', 'Modalità Locale') : 'Modalità Locale';
+    const hubText = window.I18N ? window.I18N.t('portal_mode_hub', 'Modalità Hub Multi-CA') : 'Modalità Hub Multi-CA';
+    badge.textContent = isStandalone ? localText : hubText;
+  }
+
+  function renderCaSelector() {
+    const selector = document.getElementById('ca-selector');
+    if (!selector || !portalData) return;
+    const casList = portalData.cas || portalData.cAs || portalData.CAs || [];
+    selector.innerHTML = '';
+
+    if (casList.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = window.I18N ? window.I18N.t('no_ca_configured', 'Nessuna CA configurata') : 'Nessuna CA configurata';
+      selector.appendChild(opt);
+      const elName = document.getElementById('ca-info-name');
+      if (elName) elName.textContent = opt.textContent;
+      const elDesc = document.getElementById('ca-info-desc');
+      if (elDesc) elDesc.textContent = window.I18N ? window.I18N.t('no_ca_configured_desc', 'Accedere alla pagina di amministrazione per configurare una CA.') : 'Accedere alla pagina di amministrazione per configurare una CA.';
+      return;
+    }
+
+    const localDomainText = window.I18N ? window.I18N.t('ca_local_domain', 'Dominio Locale') : 'Dominio Locale';
+    casList.forEach(ca => {
+      const opt = document.createElement('option');
+      const caId = ca.id || ca.Id;
+      opt.value = caId;
+      opt.textContent = `${ca.displayName || ca.DisplayName || 'CA'} (${ca.forestOrDomain || ca.ForestOrDomain || localDomainText})`;
+      if (currentCa && (currentCa.id || currentCa.Id) === caId) {
+        opt.selected = true;
+      } else if (!currentCa && (ca.isDefault || ca.IsDefault)) {
+        opt.selected = true;
+      }
+      selector.appendChild(opt);
+    });
+  }
+
+  function updateCaBanner() {
+    if (!currentCa) return;
+    const elName = document.getElementById('ca-info-name');
+    if (elName) elName.textContent = currentCa.displayName || currentCa.DisplayName || '';
+
+    const elDesc = document.getElementById('ca-info-desc');
+    if (elDesc) {
+      const desc = currentCa.description || currentCa.Description || '';
+      const forestLabel = window.I18N ? window.I18N.t('ca_forest_domain_label', 'Foresta/Dominio:') : 'Foresta/Dominio:';
+      const forestVal = currentCa.forestOrDomain || currentCa.ForestOrDomain || 'N/A';
+      elDesc.textContent = desc ? `${desc} • ${forestLabel} ${forestVal}` : `${forestLabel} ${forestVal}`;
+    }
   }
 
   // 1. Caricamento configurazione da /api/config
@@ -90,42 +149,30 @@
 
       document.getElementById('portal-title').textContent = portalData.portalTitle || portalData.PortalTitle || 'Enterprise PKI Web Enrollment';
       
-      const badge = document.getElementById('portal-mode-badge');
-      badge.textContent = (portalData.portalMode || portalData.PortalMode) === 'Standalone' ? 'Modalità Locale' : 'Modalità Hub Multi-CA';
+      updatePortalModeBadge();
+      renderCaSelector();
 
       const selector = document.getElementById('ca-selector');
-      selector.innerHTML = '';
+      if (!selector._hasChangeListener) {
+        selector._hasChangeListener = true;
+        selector.addEventListener('change', (e) => {
+          switchCa(e.target.value);
+        });
+      }
 
       if (casList.length === 0) {
-        const opt = document.createElement('option');
-        opt.value = '';
-        opt.textContent = 'Nessuna CA configurata';
-        selector.appendChild(opt);
-        document.getElementById('ca-info-name').textContent = 'Nessuna CA configurata';
-        document.getElementById('ca-info-desc').textContent = 'Accedere alla pagina di amministrazione per configurare una CA.';
         renderTemplates([]);
         renderUploadTemplates([]);
         return;
       }
-
-      casList.forEach(ca => {
-        const opt = document.createElement('option');
-        opt.value = ca.id || ca.Id;
-        opt.textContent = `${ca.displayName || ca.DisplayName || 'CA'} (${ca.forestOrDomain || ca.ForestOrDomain || 'Dominio Locale'})`;
-        if (ca.isDefault || ca.IsDefault) opt.selected = true;
-        selector.appendChild(opt);
-      });
-
-      selector.addEventListener('change', (e) => {
-        switchCa(e.target.value);
-      });
 
       // Seleziona la prima CA o quella di default
       const defaultId = portalData.defaultCaId || portalData.DefaultCaId || (casList[0] ? (casList[0].id || casList[0].Id) : null);
       switchCa(defaultId);
     } catch (err) {
       console.error(err);
-      alert('Errore di connessione alle API del portale PKI: ' + err.message);
+      const errMsg = window.I18N ? window.I18N.t('err_api_connection', 'Errore di connessione alle API del portale PKI: ') : 'Errore di connessione alle API del portale PKI: ';
+      alert(errMsg + err.message);
     }
   }
 
@@ -137,9 +184,7 @@
     if (!currentCa) return;
 
     // Aggiorna banner informativo
-    document.getElementById('ca-info-name').textContent = currentCa.displayName || currentCa.DisplayName || '';
-    document.getElementById('ca-info-desc').textContent = 
-      `${currentCa.description || currentCa.Description || ''} • Foresta/Dominio: ${currentCa.forestOrDomain || currentCa.ForestOrDomain || 'N/A'}`;
+    updateCaBanner();
 
     const templates = currentCa.templates || currentCa.Templates || [];
     // Popola i template per la nuova CA
@@ -500,7 +545,9 @@
         hideProgress();
 
         if (!result.success && result.disposition !== 'UnderSubmission') {
-          alert('Errore emissione certificato: ' + (result.statusMessage || 'Errore sconosciuto.'));
+          const errPrefix = window.I18N ? window.I18N.t('err_cert_issue', 'Errore emissione certificato: ') : 'Errore emissione certificato: ';
+          const errUnknown = window.I18N ? window.I18N.t('err_unknown', 'Errore sconosciuto.') : 'Errore sconosciuto.';
+          alert(errPrefix + (result.statusMessage || errUnknown));
           return;
         }
 
@@ -542,7 +589,8 @@
       } catch (err) {
         hideProgress();
         console.error(err);
-        alert('Si è verificato un errore: ' + err.message);
+        const errGeneric = window.I18N ? window.I18N.t('err_generic', 'Si è verificato un errore: ') : 'Si è verificato un errore: ';
+        alert(errGeneric + err.message);
       }
     });
   }
@@ -599,7 +647,8 @@
         hideProgress();
 
         if (!result.success && result.disposition !== 'UnderSubmission') {
-          alert('Errore sottomissione CSR: ' + (result.statusMessage || 'Errore'));
+          const errCsr = window.I18N ? window.I18N.t('err_csr_submission', 'Errore sottomissione CSR: ') : 'Errore sottomissione CSR: ';
+          alert(errCsr + (result.statusMessage || 'Errore'));
           return;
         }
 
@@ -621,7 +670,8 @@
 
       } catch (err) {
         hideProgress();
-        alert('Errore durante la sottomissione: ' + err.message);
+        const errCsr = window.I18N ? window.I18N.t('err_csr_submission', 'Errore durante la sottomissione: ') : 'Errore durante la sottomissione: ';
+        alert(errCsr + err.message);
       }
     });
   }
@@ -646,11 +696,13 @@
         document.getElementById('csr-preview-sans').textContent = 
           (data.subjectAlternativeNames && data.subjectAlternativeNames.length > 0)
             ? data.subjectAlternativeNames.join(', ')
-            : 'Nessun SAN rilevato';
+            : (window.I18N ? window.I18N.t('csr_preview_no_sans', 'Nessun SAN rilevato') : 'Nessun SAN rilevato');
 
         previewBox.style.display = 'block';
       } else {
-        alert('Impossibile interpretare il CSR: ' + (data.errorMessage || 'Formato non valido'));
+        const errParse = window.I18N ? window.I18N.t('err_csr_parse', 'Impossibile interpretare il CSR: ') : 'Impossibile interpretare il CSR: ';
+        const errFmt = window.I18N ? window.I18N.t('err_invalid_format', 'Formato non valido') : 'Formato non valido';
+        alert(errParse + (data.errorMessage || errFmt));
       }
     } catch (e) {
       console.warn('Errore parsing CSR:', e);
@@ -900,7 +952,8 @@
           }
         } catch (err) {
           hideProgress();
-          alert('Errore durante la verifica: ' + err.message);
+          const errVerif = window.I18N ? window.I18N.t('err_verification', 'Errore durante la verifica: ') : 'Errore durante la verifica: ';
+          alert(errVerif + err.message);
         }
       });
     }
@@ -1184,7 +1237,8 @@
           }
         } catch (err) {
           hideProgress();
-          alert('Errore download: ' + err.message);
+          const errDl = window.I18N ? window.I18N.t('err_download', 'Errore download: ') : 'Errore download: ';
+          alert(errDl + err.message);
         }
       });
     });
@@ -1217,7 +1271,8 @@
           }
         } catch (err) {
           hideProgress();
-          alert('Errore download PFX: ' + err.message);
+          const errDlPfx = window.I18N ? window.I18N.t('err_download_pfx', 'Errore download PFX: ') : 'Errore download PFX: ';
+          alert(errDlPfx + err.message);
         }
       });
     });
@@ -1255,7 +1310,8 @@
 
     } catch (err) {
       if (filterContainer) filterContainer.style.display = 'none';
-      area.innerHTML = `<p style="color: #ef4444; font-size: 0.9rem;">Errore caricamento richieste: ${escapeHtml(err.message)}</p>`;
+      const errLoad = window.I18N ? window.I18N.t('err_load_requests', 'Errore caricamento richieste: ') : 'Errore caricamento richieste: ';
+      area.innerHTML = `<p style="color: #ef4444; font-size: 0.9rem;">${escapeHtml(errLoad)}${escapeHtml(err.message)}</p>`;
     }
   }
   // 8c. Controllo utente autenticato da /api/me

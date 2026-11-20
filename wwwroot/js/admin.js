@@ -213,6 +213,7 @@
       const hintCredTarget = window.I18N ? window.I18N.t('admin_hint_credential_target', 'Dedotto automaticamente dal Server CA (target della credenziale nel Windows Credential Manager).') : 'Dedotto automaticamente dal Server CA (target della credenziale nel Windows Credential Manager).';
       const caNamePlaceholder = window.I18N ? window.I18N.t('admin_ca_select_placeholder', '— seleziona un nome CA —') : '— seleziona un nome CA —';
       const autoTag = window.I18N ? window.I18N.t('admin_auto_tag', 'auto') : 'auto';
+      const optMultiForest = window.I18N ? window.I18N.t('admin_auth_multi_forest', 'CredentialManager (Multi-Foresta)') : 'CredentialManager (Multi-Foresta)';
 
       card.innerHTML = `
         <div class="ca-card-header">
@@ -267,7 +268,7 @@
             <label>${escapeHtml(lblAuth)}</label>
             <select class="form-control ca-field" data-ca="${caIndex}" data-field="authMode">
               <option value="LocalIdentity" ${authMode === 'LocalIdentity' ? 'selected' : ''}>LocalIdentity (App Pool)</option>
-              <option value="CredentialManager" ${authMode === 'CredentialManager' ? 'selected' : ''}>CredentialManager (Multi-Foresta)</option>
+              <option value="CredentialManager" ${authMode === 'CredentialManager' ? 'selected' : ''}>${escapeHtml(optMultiForest)}</option>
             </select>
           </div>
           <div class="field-row">
@@ -834,7 +835,8 @@
         select.disabled = true;
         addBtn.disabled = true;
       } else {
-        select.innerHTML = '<option value="">— Seleziona un template —</option>';
+        const selectTplText = window.I18N ? window.I18N.t('admin_template_select_placeholder', '— Seleziona un template —') : '— Seleziona un template —';
+        select.innerHTML = `<option value="">${escapeHtml(selectTplText)}</option>`;
         available.forEach(t => {
           const opt = document.createElement('option');
           opt.value = t.name;
@@ -1250,7 +1252,8 @@
       if (!container) return;
 
       setupHeldRequestsHandlers();
-      container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--gray-500);"><div class="spinner-sm"></div> Caricamento richieste in corso...</div>';
+      const loadingReqsText = window.I18N ? window.I18N.t('admin_loading_requests', 'Caricamento richieste in corso...') : 'Caricamento richieste in corso...';
+      container.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--gray-500);"><div class="spinner-sm"></div> ${escapeHtml(loadingReqsText)}</div>`;
 
       try {
         const resp = await fetch(`/api/admin/held-requests?status=${encodeURIComponent(filter)}`);
