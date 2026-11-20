@@ -54,7 +54,8 @@
       }
       const resp = await fetch('/api/admin/csrf');
       if (!resp.ok) {
-        throw new Error('Impossibile ottenere il token anti-CSRF (HTTP ' + resp.status + ').');
+        const csrfErrMsg = window.I18N ? window.I18N.t('admin_csrf_error', 'Impossibile ottenere il token anti-CSRF (HTTP #{status}).', { status: resp.status }) : 'Impossibile ottenere il token anti-CSRF (HTTP ' + resp.status + ').';
+        throw new Error(csrfErrMsg);
       }
       const data = await resp.json();
       csrfToken = data.token;
@@ -109,7 +110,8 @@
         renderConfig();
         document.getElementById('admin-panel').style.display = 'block';
       } catch (err) {
-        showToast('Errore caricamento configurazione: ' + err.message, 'error');
+        const cfgLoadErr = window.I18N ? window.I18N.t('admin_config_load_toast', 'Errore caricamento configurazione: #{error}', { error: err.message }) : 'Errore caricamento configurazione: ' + err.message;
+        showToast(cfgLoadErr, 'error');
       }
 
       // Setup event handlers
@@ -412,7 +414,8 @@
           return;
         }
 
-        const spinnerHtml = '<span class="spinner-sm"></span> Rilevamento...';
+        const detectingText = window.I18N ? window.I18N.t('admin_btn_detecting', 'Rilevamento...') : 'Rilevamento...';
+        btn.innerHTML = '<span class="spinner-sm"></span> ' + detectingText;
         btn.disabled = true;
         btn.innerHTML = spinnerHtml;
 
@@ -544,7 +547,8 @@
           }
 
           if (!cfgStrVal || !cfgStrVal.includes('\\')) {
-            showToast('Config String non valida o incompleta. Assicurati che siano compilati sia il Server CA che il Nome CA (formato: server\\Nome-CA).', 'error');
+            const cfgStrMsg = window.I18N ? window.I18N.t('admin_config_string_invalid', 'Config String non valida o incompleta.') : 'Config String non valida o incompleta.';
+            showToast(cfgStrMsg, 'error');
             return;
           }
         }
@@ -556,7 +560,8 @@
         caObj.useSimulator = useSimVal;
 
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-sm"></span> Interrogazione...';
+        const queryingText = window.I18N ? window.I18N.t('admin_btn_querying', 'Interrogazione...') : 'Interrogazione...';
+        btn.innerHTML = '<span class="spinner-sm"></span> ' + queryingText;
 
         try {
           const resp = await fetch('/api/admin/templates/discover', {
@@ -587,17 +592,21 @@
           if (!templates || templates.length === 0) {
             caObj.discoveredTemplates = [];
             populateDiscoveredDropdown(cardEl, caObj, ci);
-            showToast(errorMsg || 'Nessun template pubblicato trovato sulla CA.', 'error');
+            const noTplMsg = window.I18N ? window.I18N.t('admin_no_templates_found', 'Nessun template pubblicato trovato sulla CA.') : 'Nessun template pubblicato trovato sulla CA.';
+            showToast(errorMsg || noTplMsg, 'error');
           } else {
             caObj.discoveredTemplates = templates;
             populateDiscoveredDropdown(cardEl, caObj, ci);
-            showToast(`${templates.length} template pubblicati trovati sulla CA.`, 'success');
+            const tplFoundMsg = window.I18N ? window.I18N.t('admin_templates_found', '#{count} template pubblicati trovati sulla CA.', { count: templates.length }) : `${templates.length} template pubblicati trovati sulla CA.`;
+            showToast(tplFoundMsg, 'success');
           }
         } catch (err) {
-          showToast('Errore durante la scoperta: ' + err.message, 'error');
+          const discoverErrMsg = window.I18N ? window.I18N.t('admin_discover_error', 'Errore durante la scoperta: #{error}', { error: err.message }) : 'Errore durante la scoperta: ' + err.message;
+          showToast(discoverErrMsg, 'error');
         } finally {
           btn.disabled = false;
-          btn.innerHTML = '🔍 Scopri dalla CA';
+          const discoverBtnText = window.I18N ? window.I18N.t('admin_btn_discover', 'Scopri dalla CA') : 'Scopri dalla CA';
+          btn.innerHTML = '🔍 ' + discoverBtnText;
         }
       });
 
@@ -607,7 +616,8 @@
         const select = card.querySelector(`.discovered-templates-select[data-ca="${ci}"]`);
         const selectedOpt = select.options[select.selectedIndex];
         if (!select.value) {
-          showToast('Seleziona un template dalla tendina.', 'error');
+          const selectTplMsg = window.I18N ? window.I18N.t('admin_select_template', 'Seleziona un template dalla tendina.') : 'Seleziona un template dalla tendina.';
+          showToast(selectTplMsg, 'error');
           return;
         }
 
@@ -632,9 +642,11 @@
         });
         if (!cas[ci].templates) cas[ci].templates = templates;
         const validityInfo = validityDays != null
-          ? `validità ${validityDays} giorni, dalla definizione del template`
-          : 'validità non rilevata: riprovare con "Scopri dalla CA"';
-        showToast(`Template "${selectedOpt.dataset.displayName || select.value}" aggiunto (${validityInfo}).`, 'success');
+          ? (window.I18N ? window.I18N.t('admin_validity_from_tpl', 'validit\u00e0 #{days} giorni, dalla definizione del template', { days: validityDays }) : `validit\u00e0 ${validityDays} giorni, dalla definizione del template`)
+          : (window.I18N ? window.I18N.t('admin_validity_not_detected', 'validit\u00e0 non rilevata: riprovare con "Scopri dalla CA"') : 'validit\u00e0 non rilevata: riprovare con \"Scopri dalla CA\"');
+        const _tplName = selectedOpt.dataset.displayName || select.value;
+        const tplAddedMsg = window.I18N ? window.I18N.t('admin_template_added', 'Template \"#{name}\" aggiunto (#{validity}).', { name: _tplName, validity: validityInfo }) : `Template \"${_tplName}\" aggiunto (${validityInfo}).`;
+        showToast(tplAddedMsg, 'success');
         renderCaList();
       });
 
@@ -643,7 +655,7 @@
         const cas = portalConfig.cas || portalConfig.CAs || [];
         const templates = cas[caIndex].templates || cas[caIndex].Templates || [];
         templates.push({
-          name: '', displayName: 'Nuovo Template', description: '',
+          name: '', displayName: (window.I18N ? window.I18N.t('admin_new_template', 'Nuovo Template') : 'Nuovo Template'), description: '',
           requiresApproval: false, storePrivateKeyForRetrieval: true, validityDays: null,
           allowedKeyTypes: ['RSA-2048', 'RSA-4096'],
           keyUsages: ['DigitalSignature', 'KeyEncipherment'],
@@ -781,7 +793,8 @@
               if (v) {
                 templates[ti].validityDays = v;
                 renderCaList();
-                showToast(`Validità sincronizzata dalla definizione del template: ${v} giorni.`, 'success');
+                const syncMsg = window.I18N ? window.I18N.t('admin_validity_synced', 'Validit\u00e0 sincronizzata dalla definizione del template: #{days} giorni.', { days: v }) : `Validit\u00e0 sincronizzata dalla definizione del template: ${v} giorni.`;
+                showToast(syncMsg, 'success');
               }
             }
           }
@@ -831,7 +844,8 @@
 
       select.innerHTML = '';
       if (available.length === 0) {
-        select.innerHTML = '<option value="">Tutti i template sono già configurati</option>';
+        const allCfgMsg = window.I18N ? window.I18N.t('admin_all_templates_configured', 'Tutti i template sono gi\u00e0 configurati') : 'Tutti i template sono gi\u00e0 configurati';
+        select.innerHTML = '<option value="">' + allCfgMsg + '</option>';
         select.disabled = true;
         addBtn.disabled = true;
       } else {
@@ -841,7 +855,8 @@
           const opt = document.createElement('option');
           opt.value = t.name;
           const validity = parseInt(t.validityDays || t.ValidityDays, 10);
-          opt.textContent = `${t.displayName || t.name} (${t.name})` + (validity ? ` — validità ${validity} gg` : '');
+          const validityGg = validity ? (window.I18N ? ` — ${window.I18N.t('admin_validity_days_short', 'validit\u00e0 #{days} gg', { days: validity })}` : ` — validit\u00e0 ${validity} gg`) : '';
+          opt.textContent = `${t.displayName || t.name} (${t.name})${validityGg}`;
           opt.dataset.displayName = t.displayName || t.name;
           opt.dataset.validityDays = validity || '';
           select.appendChild(opt);
@@ -981,7 +996,7 @@
       const cas = portalConfig.cas || portalConfig.CAs || [];
       cas.push({
         id: 'ca-nuova-' + (cas.length + 1),
-        displayName: 'Nuova Certificate Authority',
+        displayName: (window.I18N ? window.I18N.t('admin_new_ca', 'Nuova Certificate Authority') : 'Nuova Certificate Authority'),
         forestOrDomain: '',
         caServer: '',
         caName: '',
@@ -1050,12 +1065,16 @@
         });
         const result = await resp.json();
         if (resp.ok && result.success) {
-          showToast(result.message || 'Configurazione salvata!', 'success');
+          const savedMsg = window.I18N ? window.I18N.t('admin_config_saved', 'Configurazione salvata!') : 'Configurazione salvata!';
+          showToast(result.message || savedMsg, 'success');
         } else {
-          showToast('Errore: ' + (result.message || result.detail || 'Salvataggio fallito'), 'error');
+          const saveFailMsg = window.I18N ? window.I18N.t('admin_save_failed', 'Salvataggio fallito') : 'Salvataggio fallito';
+          const errPrefix = window.I18N ? window.I18N.t('admin_error_prefix', 'Errore: ') : 'Errore: ';
+          showToast(errPrefix + (result.message || result.detail || saveFailMsg), 'error');
         }
       } catch (err) {
-        showToast('Errore di rete: ' + err.message, 'error');
+        const netErrMsg = window.I18N ? window.I18N.t('admin_network_error', 'Errore di rete: #{error}', { error: err.message }) : 'Errore di rete: ' + err.message;
+        showToast(netErrMsg, 'error');
       }
     }
 
@@ -1222,7 +1241,7 @@
         if (window.I18N) {
           counterEl.textContent = window.I18N.t('filter_counter_format', null, { shown: filtered.length, total: cachedAdminRequests.length });
         } else {
-          counterEl.textContent = `Mostrate ${filtered.length} su ${cachedAdminRequests.length} richieste`;
+          counterEl.textContent = window.I18N ? window.I18N.t('filter_counter_format', 'Mostrate #{shown} su #{total} richieste', { shown: filtered.length, total: cachedAdminRequests.length }) : `Mostrate ${filtered.length} su ${cachedAdminRequests.length} richieste`;
         }
       }
 
@@ -1635,13 +1654,15 @@
       try {
         const resp = await fetch('/api/admin/acme-config');
         if (!resp.ok) {
-          showToast('Errore caricamento configurazione ACME: HTTP ' + resp.status, 'error');
+          const acmeLoadErr = window.I18N ? window.I18N.t('admin_acme_config_load_error', 'Errore caricamento configurazione ACME: HTTP #{status}', { status: resp.status }) : 'Errore caricamento configurazione ACME: HTTP ' + resp.status;
+          showToast(acmeLoadErr, 'error');
           return;
         }
         acmeConfig = await resp.json();
         renderAcmeConfig();
       } catch (err) {
-        showToast('Errore di rete ACME: ' + err.message, 'error');
+        const acmeNetErr = window.I18N ? window.I18N.t('admin_acme_network_error', 'Errore di rete ACME: #{error}', { error: err.message }) : 'Errore di rete ACME: ' + err.message;
+        showToast(acmeNetErr, 'error');
       }
     }
 
@@ -1697,19 +1718,24 @@
         const result = await resp.json();
         if (resp.ok && result.success) {
           acmeConfig = payload;
-          showToast(result.message || 'Configurazione ACME salvata!', 'success');
+          const acmeSavedMsg = window.I18N ? window.I18N.t('admin_acme_config_saved', 'Configurazione ACME salvata!') : 'Configurazione ACME salvata!';
+          showToast(result.message || acmeSavedMsg, 'success');
         } else {
-          showToast('Errore: ' + (result.message || result.detail || 'Salvataggio fallito'), 'error');
+          const acmeSaveFailMsg = window.I18N ? window.I18N.t('admin_save_failed', 'Salvataggio fallito') : 'Salvataggio fallito';
+          const acmeErrPrefix = window.I18N ? window.I18N.t('admin_error_prefix', 'Errore: ') : 'Errore: ';
+          showToast(acmeErrPrefix + (result.message || result.detail || acmeSaveFailMsg), 'error');
         }
       } catch (err) {
-        showToast('Errore di rete: ' + err.message, 'error');
+        const acmeNetErrMsg = window.I18N ? window.I18N.t('admin_network_error', 'Errore di rete: #{error}', { error: err.message }) : 'Errore di rete: ' + err.message;
+        showToast(acmeNetErrMsg, 'error');
       }
     }
 
     async function testAcmeDirectory() {
       const resultDiv = document.getElementById('acme-dir-result');
       resultDiv.style.display = 'block';
-      resultDiv.innerHTML = '<span class="spinner-sm"></span> Contatto la directory ACME...';
+      const acmeDirLoading = window.I18N ? window.I18N.t('admin_acme_dir_loading', 'Contatto la directory ACME...') : 'Contatto la directory ACME...';
+      resultDiv.innerHTML = '<span class="spinner-sm"></span> ' + acmeDirLoading;
 
       try {
         const resp = await fetch('/acme/directory');
@@ -1717,13 +1743,15 @@
           const data = await resp.json();
           const hasRequired = data.newNonce && data.newAccount && data.newOrder;
           resultDiv.innerHTML = hasRequired
-            ? `<span style="color:var(--success);">✅ Directory ACME operativa — endpoint trovati: newNonce, newAccount, newOrder, finalize</span>`
-            : `<span style="color:var(--warning);">⚠️ Directory raggiunta ma risposta inattesa: <code>${JSON.stringify(data).substring(0, 200)}</code></span>`;
+            ? `<span style="color:var(--success);">✅ ${window.I18N ? window.I18N.t('admin_acme_dir_ok', 'Directory ACME operativa — endpoint trovati: newNonce, newAccount, newOrder, finalize') : 'Directory ACME operativa — endpoint trovati: newNonce, newAccount, newOrder, finalize'}</span>`
+            : `<span style="color:var(--warning);">⚠️ ${window.I18N ? window.I18N.t('admin_acme_dir_unexpected', 'Directory raggiunta ma risposta inattesa: ') : 'Directory raggiunta ma risposta inattesa: '}<code>${JSON.stringify(data).substring(0, 200)}</code></span>`;
         } else {
-          resultDiv.innerHTML = `<span style="color:var(--danger);">❌ Errore HTTP ${resp.status}: il server ACME potrebbe essere disabilitato o non raggiungibile.</span>`;
+          const acmeDirHttpErr = window.I18N ? window.I18N.t('admin_acme_dir_http_error', 'Errore HTTP #{status}: il server ACME potrebbe essere disabilitato o non raggiungibile.', { status: resp.status }) : `Errore HTTP ${resp.status}: il server ACME potrebbe essere disabilitato o non raggiungibile.`;
+          resultDiv.innerHTML = `<span style="color:var(--danger);">❌ ${acmeDirHttpErr}</span>`;
         }
       } catch (err) {
-        resultDiv.innerHTML = `<span style="color:var(--danger);">❌ Errore di rete: ${err.message}</span>`;
+        const acmeDirNetErr = window.I18N ? window.I18N.t('admin_acme_dir_net_error', 'Errore di rete: #{error}', { error: err.message }) : `Errore di rete: ${err.message}`;
+        resultDiv.innerHTML = `<span style="color:var(--danger);">❌ ${acmeDirNetErr}</span>`;
       }
     }
 
