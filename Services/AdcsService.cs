@@ -563,15 +563,18 @@ public class AdcsService : IAdcsService
     }
 
     /// <summary>
-    /// SECURITY (2.3.1): revoca di un certificato emesso via certutil
-    /// (-revoke &lt;serial&gt; &lt;motivo&gt;), eseguito nel contesto di sicurezza
+    /// SECURITY (2.3.1, 2.6.0): revoca di un certificato emesso via certutil
+    /// (-revoke &lt;serial&gt; [motivo]), eseguito nel contesto di sicurezza
     /// della CA (Credential Manager o identità locale).
     /// </summary>
     public async Task<CertificateRevocationResponse> RevokeCertificateAsync(string? caId, string serialNumber, string reason)
     {
-        // SECURITY: anti-iniezione — il serial è un token esadecimale stretto.
-        if (string.IsNullOrWhiteSpace(serialNumber) ||
-            !Regex.IsMatch(serialNumber, @"^[0-9A-Fa-f]{1,32}$"))
+        // Normalizza il serial (rimuovi eventuali spazi o trattini inseriti da copia/incolla o MMC)
+        string cleanSerial = (serialNumber ?? "").Replace(" ", "").Replace("-", "").Trim();
+
+        // SECURITY: anti-iniezione — il serial è un token esadecimale RFC 5280 (fino a 64 caratteri hex).
+        if (string.IsNullOrWhiteSpace(cleanSerial) ||
+            !Regex.IsMatch(cleanSerial, @"^[0-9A-Fa-f]{1,64}$"))
         {
             return new CertificateRevocationResponse
             {
@@ -599,17 +602,41 @@ public class AdcsService : IAdcsService
             };
         }
 
-        // Motivo: solo caratteri stampabili, troncati (va passato come singolo
-        // argomento a certutil, senza shell).
-        string safeReason = new string((reason ?? "Revoca ACME").Take(120)
-            .Where(c => !char.IsControl(c)).ToArray());
+        // Mappa il motivo in un codice numerico accettato da certutil (RFC 5280 CRLReason: 0..10 o -1)
+        string certutilReasonCode = MapRevocationReasonToCertutilCode(reason);
 
-        _logger.LogInformation("Revoca certificato AD CS {Serial} presso CA '{CaId}' (motivo: {Reason}).", serialNumber, ca.Id, SanitizeForLog(safeReason));
+        _logger.LogInformation("Revoca certificato AD CS {Serial} presso CA '{CaId}' (motivo testuale: '{Reason}', codice certutil: {Code}).",
+            cleanSerial, ca.Id, SanitizeForLog(reason ?? "N/A"), certutilReasonCode);
 
         var result = await ExecuteInSecurityContextAsync(ca, async () =>
-            await RevokeViaCertutilAsync(ca.ConfigString, serialNumber, safeReason));
+            await RevokeViaCertutilAsync(ca.ConfigString, cleanSerial, certutilReasonCode));
 
         return result;
+    }
+
+    /// <summary>
+    /// Mappa una stringa di motivo (testo libero o codice) nel codice numerico richiesto da certutil -revoke.
+    /// Default: "0" (CRL_REASON_UNSPECIFIED).
+    /// </summary>
+    internal static string MapRevocationReasonToCertutilCode(string? reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason))
+            return "0"; // CRL_REASON_UNSPECIFIED
+
+        var trimmed = reason.Trim();
+        if (int.TryParse(trimmed, out int code) && ((code >= 0 && code <= 10 && code != 7) || code == -1))
+            return code.ToString();
+
+        var lower = trimmed.ToLowerInvariant();
+        if (lower.Contains("compromis") || lower.Contains("chiave")) return "1"; // CRL_REASON_KEY_COMPROMISE
+        if (lower.Contains("cacompromise") || lower.Contains("ca compromessa")) return "2"; // CRL_REASON_CA_COMPROMISE
+        if (lower.Contains("affiliation") || lower.Contains("affiliazione")) return "3"; // CRL_REASON_AFFILIATION_CHANGED
+        if (lower.Contains("superseded") || lower.Contains("sostituit")) return "4"; // CRL_REASON_SUPERSEDED
+        if (lower.Contains("cessation") || lower.Contains("cessazion") || lower.Contains("termine")) return "5"; // CRL_REASON_CESSATION_OF_OPERATION
+        if (lower.Contains("hold") || lower.Contains("sospension")) return "6"; // CRL_REASON_CERTIFICATE_HOLD
+        if (lower.Contains("unrevoke") || lower.Contains("ripristina")) return "-1"; // Unrevoke
+
+        return "0"; // CRL_REASON_UNSPECIFIED
     }
 
     private async Task<CertificateRevocationResponse> RevokeViaCertutilAsync(string configString, string serialNumber, string reason)
@@ -673,12 +700,17 @@ public class AdcsService : IAdcsService
             !stdout.Contains("0x8009", StringComparison.OrdinalIgnoreCase) &&
             !stderr.Contains("0x8009", StringComparison.OrdinalIgnoreCase);
 
+        string errorDetails = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+        string firstErrorLine = errorDetails.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(l => l.Contains("0x") || l.Contains("NON RIUSCITO") || l.Contains("FAILED") || l.Contains("CertUtil:"))
+            ?? $"certutil -revoke ha restituito codice di uscita {exitCode}.";
+
         return new CertificateRevocationResponse
         {
             Success = success,
             StatusMessage = success
                 ? "Certificato revocato con successo."
-                : $"certutil -revoke ha restituito codice di uscita {exitCode}.",
+                : firstErrorLine.Trim(),
             RawOutput = stdout + (string.IsNullOrWhiteSpace(stderr) ? "" : "\n[STDERR]\n" + stderr)
         };
     }
@@ -773,19 +805,24 @@ public class AdcsService : IAdcsService
             !stdout.Contains("0x8009", StringComparison.OrdinalIgnoreCase) &&
             !stderr.Contains("0x8009", StringComparison.OrdinalIgnoreCase);
 
+        string errorDetails = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
+        string firstErrorLine = errorDetails.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(l => l.Contains("0x") || l.Contains("NON RIUSCITO") || l.Contains("FAILED") || l.Contains("CertUtil:"))
+            ?? $"certutil -CRL ha restituito codice di uscita {exitCode}.";
+
         return new CrlPublishResponse
         {
             Success = success,
             StatusMessage = success
                 ? "CRL aggiornata e pubblicata con successo."
-                : $"certutil -CRL ha restituito codice di uscita {exitCode}.",
+                : firstErrorLine.Trim(),
             RawOutput = stdout + (string.IsNullOrWhiteSpace(stderr) ? "" : "\n[STDERR]\n" + stderr)
         };
     }
 
     /// <summary>
-    /// Estrae il numero seriale esadecimale da un certificato in formato PEM (v2.6.0).
-    /// Restituisce null se il parsing fallisce.
+    /// Estrae il numero seriale esadecimale dal certificato foglia in formato PEM (v2.6.0).
+    /// Supporta certificati singoli o catene PEM multiple. Restituisce null se il parsing fallisce.
     /// </summary>
     internal static string? ExtractSerialNumberFromPem(string? certificatePem)
     {
@@ -794,11 +831,22 @@ public class AdcsService : IAdcsService
 
         try
         {
-            var certBytes = Convert.FromBase64String(
-                    certificatePem
-                        .Replace("-----BEGIN CERTIFICATE-----", "")
-                        .Replace("-----END CERTIFICATE-----", "")
-                        .Trim());
+            string pem = certificatePem;
+            const string beginMarker = "-----BEGIN CERTIFICATE-----";
+            const string endMarker = "-----END CERTIFICATE-----";
+
+            int beginIdx = pem.IndexOf(beginMarker, StringComparison.OrdinalIgnoreCase);
+            if (beginIdx >= 0)
+            {
+                int endIdx = pem.IndexOf(endMarker, beginIdx, StringComparison.OrdinalIgnoreCase);
+                if (endIdx > beginIdx)
+                {
+                    pem = pem.Substring(beginIdx + beginMarker.Length, endIdx - (beginIdx + beginMarker.Length));
+                }
+            }
+
+            var base64 = Regex.Replace(pem, @"\s+", "");
+            var certBytes = Convert.FromBase64String(base64);
             using var cert = new X509Certificate2(certBytes);
             return cert.SerialNumber; // Esadecimale senza prefisso
         }
