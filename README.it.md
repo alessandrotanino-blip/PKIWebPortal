@@ -387,10 +387,11 @@ Dopo l'approvazione, il certificato diventa scaricabile dal richiedente original
 |Stato|Descrizione|Azione disponibile|
 |-|-|-|
 |`PendingApproval`|Certificato trattenuto in attesa di autorizzazione amministrativa.|Approva e rilascia, oppure Rifiuta.|
-|`Approved`|Richiesta approvata da un amministratore.|Download del certificato abilitato per il richiedente.|
-|`Issued`|Certificato emesso direttamente (template senza approvazione).|Download diretto abilitato.|
+|`Approved`|Richiesta approvata da un amministratore.|Download del certificato abilitato per il richiedente, oppure Revoca.|
+|`Issued`|Certificato emesso direttamente (template senza approvazione).|Download abilitato, oppure Revoca.|
 |`UnderSubmission`|Richiesta in sospeso sulla CA AD CS stessa (richiesta marcata Pending dalla CA).|Visualizza stato richiesta.|
 |`Rejected`|Richiesta rifiutata da un amministratore.|Visualizza motivazione del rifiuto.|
+|`Revoked`|Certificato revocato sulla CA AD CS e nella CRL.|Visualizza operatore, data, seriale e motivazione.|
 
 ### Endpoint amministrativi
 
@@ -401,10 +402,44 @@ Dopo l'approvazione, il certificato diventa scaricabile dal richiedente original
 |GET|`/api/admin/config`|Legge l'intera configurazione del portale|Amministratore|
 |PUT|`/api/admin/config`|Salva la configurazione e ricarica il provider a caldo|Amministratore|
 |POST|`/api/admin/templates/discover`|Scopre i template pubblicati sulla CA tramite DCOM o LDAP|Amministratore|
-|GET|`/api/admin/held-requests?status={filter}`|Elenca le richieste trattenute (`pending`, `approved`, `rejected`, `all`)|Amministratore|
+|GET|`/api/admin/held-requests?status={filter}`|Elenca le richieste trattenute (`pending`, `approved`, `issued`, `rejected`, `revoked`, `all`)|Amministratore|
 |GET|`/api/admin/held-requests/{holdId}`|Mostra il dettaglio di una richiesta e il certificato archiviato|Amministratore|
 |POST|`/api/admin/held-requests/{holdId}/approve`|Approva e autorizza il rilascio del certificato|Amministratore|
-|POST|`/api/admin/held-requests/{holdId}/reject`|Rifiuta la richiesta con motivazione opzionale|Amministratore|
+|POST|`/api/admin/held-requests/{holdId}/reject`|Rifiuta la richiesta con motivazione opzionale (auto-revoca se emesso)|Amministratore|
+|POST|`/api/admin/held-requests/{holdId}/revoke`|Revoca il certificato su AD CS e nel portale con motivo opzionale|Amministratore|
+|POST|`/api/admin/crl/publish`|Forza la pubblicazione sincrona della CRL su una o tutte le CA|Amministratore|
+
+### 🔒 Revoca Certificati e Pubblicazione CRL (v2.6.0)
+
+Dalla versione 2.6.0, il portale supporta la revoca dei certificati direttamente su Active Directory Certificate Services (AD CS) e la pubblicazione sincrona delle CRL:
+
+1. **Revoca da console Admin**:
+   - Gli amministratori possono revocare certificati precedentemente emessi o approvati (`Issued` / `Approved`) con il pulsante **🔒 Revoca Certificato**.
+   - Il portale invoca `certutil -config <CA> -revoke <Serial> [codice]` nel contesto di sicurezza della CA, registrando nello store chi ha eseguito l'operazione, la data, il serial number e la motivazione.
+2. **Auto-revoca su rifiuto**:
+   - Se una richiesta in approvazione (`RequiresApproval: true`) viene **rifiutata** dall'amministratore, ma il certificato era già stato tecnicamente emesso dalla CA prima dell'intercettazione del portale, il portale **lo revoca automaticamente sulla CA** prima di registrare il rifiuto, impedendo che restino certificati orfani validi nella PKI.
+3. **Pubblicazione sincrona CRL**:
+   - Il pulsante **📢 Pubblica CRL** nella console di amministrazione invoca `certutil -config <CA> -CRL` nel contesto di sicurezza della CA per forzare la rigenerazione e pubblicazione immediata della Certificate Revocation List.
+
+#### 🔑 Permessi AD CS minimi richiesti per l'account dell'Application Pool
+
+Affinché le operazioni di revoca e pubblicazione CRL abbiano successo senza errori di `Access Denied`:
+
+1. **Console Autorità di Certificazione (`certsrv.msc`) sulla CA**:
+   - Clic destro sul nome della CA ➔ **Proprietà** ➔ Scheda **Sicurezza** (*Security*).
+   - Aggiungere l'account con cui viene eseguito il portale (o il computer account se si usano identità locali di IIS verso una CA remota) e assegnare:
+     - **Per la sola Revoca certificati (minimo)**: Spuntare **Consenti** su **"Rilascio e gestione dei certificati"** (*Issue and Manage Certificates*) e **"Lettura"** (*Read*). Questo assegna il ruolo di *Certificate Manager* necessario per invocare `ICertAdmin2::RevokeCertificate`.
+     - **Per la Pubblicazione sincrona CRL**: Spuntare **Consenti** su **"Gestione CA"** (*Manage CA*). L'architettura AD CS richiede i diritti amministrativi della CA per invocare `ICertAdmin2::PublishCRL`.
+   - *Nota*: Se sulla CA è attiva la restrizione per gestori certificati (scheda *Gestori certificati*), verificare che l'account possa gestire i template interessati.
+
+2. **Accesso DCOM di rete (se la CA è su un server remoto rispetto a IIS)**:
+   - Sulla macchina della CA, aprire **Gestione computer** ➔ **Utenti e gruppi locali** ➔ **Gruppi**.
+   - Aggiungere l'account al gruppo locale **`Utenti DCOM servizio certificati`** (*Certificate Service DCOM Access*). Questo gruppo concede i permessi DCOM di *Accesso Remoto* e *Attivazione Remota* all'interfaccia `CertSrv`.
+
+3. **Account da autorizzare in base alla configurazione**:
+   - **Account di Dominio o gMSA dedicato** (es. `DOMINIO\svc_pkiportal` o `DOMINIO\gmsa_pkiportal$`): autorizzare direttamente questo account.
+   - **Windows Credential Manager** (`AuthMode: "CredentialManager"`): autorizzare l'account memorizzato nel Credential Manager per il target della CA.
+   - **Identità predefinita IIS** (`ApplicationPoolIdentity` o `NetworkService`): verso una CA remota, IIS effettua la connessione come account macchina del server web: autorizzare `DOMINIO\NOME_SERVER_IIS$`.
 
 ## 🔎 Scoperta dei template e validità
 

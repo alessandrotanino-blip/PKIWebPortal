@@ -389,14 +389,17 @@ After approval, the certificate becomes available to the original requester thro
 |State|Description|Available action|
 |-|-|-|
 |`PendingApproval`|Certificate held pending administrator authorization.|Approve and release, or reject.|
-|`Approved`|Request approved by an administrator.|Certificate download is enabled for the requester.|
-|`Issued`|Certificate issued directly without portal approval.|Certificate can be retrieved.|
+|`Approved`|Request approved by an administrator.|Certificate download is enabled for the requester, or revoke.|
+|`Issued`|Certificate issued directly without portal approval.|Certificate can be retrieved, or revoke.|
 |`UnderSubmission`|Request is pending approval directly in AD CS.|View request details.|
 |`Rejected`|Request rejected by an administrator.|View rejection reason.|
+|`Revoked`|Certificate revoked on AD CS and added to CRL.|View operator, date, serial number, and revocation reason.|
 
 ### Administrative features
 
-* **Certificate requests**: filter by status and view Hold ID, submission date, requester, template, CN, SAN, target CA, AD CS Request ID, notes, review information, and rejection reason.
+* **Certificate requests**: filter by status (`pending`, `approved`, `issued`, `rejected`, `revoked`, `all`) and view Hold ID, submission date, requester, template, CN, SAN, target CA, AD CS Request ID, notes, review information, revocation details, and rejection reason.
+* **Certificate Revocation**: revoke issued or approved certificates directly from the admin panel, triggering real-time revocation on the AD CS CA and CRL addition.
+* **Synchronous CRL Publishing**: trigger immediate CRL regeneration and publication across configured CAs.
 * **Portal and CA configuration**: manage portal title, Standalone or Hub mode, default CA, CA connections, authentication mode, credential targets, templates, allowed key types, validity, key usages, and manual approval settings.
 * **Template discovery**: use “Discover from CA” to query published templates through DCOM or `certutil`.
 * **Hot reload**: saving the configuration updates the files and reloads the in-memory provider without restarting the IIS Application Pool.
@@ -410,10 +413,44 @@ After approval, the certificate becomes available to the original requester thro
 |GET|`/api/admin/config`|Returns the complete portal configuration.|Administrator|
 |PUT|`/api/admin/config`|Saves the configuration and reloads it in memory.|Administrator|
 |POST|`/api/admin/templates/discover`|Queries a CA for published certificate templates.|Administrator|
-|GET|`/api/admin/held-requests?status={filter}`|Lists held requests: `pending`, `approved`, `rejected`, or `all`.|Administrator|
+|GET|`/api/admin/held-requests?status={filter}`|Lists held requests: `pending`, `approved`, `issued`, `rejected`, `revoked`, or `all`.|Administrator|
 |GET|`/api/admin/held-requests/{holdId}`|Returns the details of a held request and its archived certificate.|Administrator|
 |POST|`/api/admin/held-requests/{holdId}/approve`|Approves the request and authorizes certificate release.|Administrator|
-|POST|`/api/admin/held-requests/{holdId}/reject`|Rejects the request, optionally recording a reason.|Administrator|
+|POST|`/api/admin/held-requests/{holdId}/reject`|Rejects the request, optionally recording a reason (auto-revokes on CA if issued).|Administrator|
+|POST|`/api/admin/held-requests/{holdId}/revoke`|Revokes the certificate on AD CS and marks it Revoked in the portal.|Administrator|
+|POST|`/api/admin/crl/publish`|Forces synchronous CRL regeneration and publication on one or all CAs.|Administrator|
+
+### 🔒 Certificate Revocation and CRL Publishing (v2.6.0)
+
+Starting with v2.6.0, the portal supports certificate revocation directly on Active Directory Certificate Services (AD CS) and synchronous CRL publishing:
+
+1. **Admin Console Revocation**:
+   - Administrators can revoke certificates previously issued or approved (`Issued` / `Approved`) using the **🔒 Revoke Certificate** button.
+   - The portal runs `certutil -config <CA> -revoke <Serial> [reasonCode]` in the CA's security context and records the operator, timestamp, serial number, and reason in the store.
+2. **Auto-Revocation on Reject**:
+   - When an approval-gated request (`RequiresApproval: true`) is **rejected** by an administrator, but the certificate was already issued by AD CS before portal interception, the portal **automatically revokes the certificate on the CA** before recording the rejection, preventing orphan valid certificates in the PKI.
+3. **Synchronous CRL Publishing**:
+   - The **📢 Publish CRL** button in the administration panel executes `certutil -config <CA> -CRL` in the CA's security context to force immediate regeneration and publication of the Certificate Revocation List.
+
+#### 🔑 Minimum AD CS Permissions Required for Application Pool Identity
+
+To perform certificate revocation and CRL publication without `Access Denied` errors:
+
+1. **Certification Authority Console (`certsrv.msc`) on the CA**:
+   - Right-click the CA name ➔ **Properties** ➔ **Security** tab.
+   - Add the account running the portal (or the machine account if using local IIS identity to access a remote CA) and assign:
+     - **For Certificate Revocation only (minimum)**: Check **Allow** on **"Issue and Manage Certificates"** and **"Read"**. This grants the *Certificate Manager* role needed for `ICertAdmin2::RevokeCertificate`.
+     - **For Synchronous CRL Publishing**: Check **Allow** on **"Manage CA"**. AD CS architecture requires CA Administrator rights to invoke `ICertAdmin2::PublishCRL`.
+   - *Note*: If Certificate Manager restrictions are enabled on the CA (in the *Certificate Managers* tab), ensure the account is allowed to manage the relevant certificate templates.
+
+2. **DCOM Network Access (when the CA is on a different server than IIS)**:
+   - On the CA machine, open **Computer Management** ➔ **Local Users and Groups** ➔ **Groups**.
+   - Add the account to the local group **`Certificate Service DCOM Access`** (in Italian: `Utenti DCOM servizio certificati`). This group grants the required *Remote Access* and *Remote Activation* DCOM permissions for `CertSrv`.
+
+3. **Account to authorize based on deployment**:
+   - **Domain Account or dedicated gMSA** (e.g. `DOMAIN\svc_pkiportal` or `DOMAIN\gmsa_pkiportal$`): authorize this account directly.
+   - **Windows Credential Manager** (`AuthMode: "CredentialManager"`): authorize the domain user stored in Credential Manager for the target CA.
+   - **Default IIS Identity** (`ApplicationPoolIdentity` or `NetworkService`): when accessing a remote CA, IIS connects using the computer account of the web server: authorize `DOMAIN\IIS_SERVER_NAME$`.
 
 ## 🔎 Template discovery and validity
 

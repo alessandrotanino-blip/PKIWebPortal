@@ -1465,7 +1465,10 @@ if ($script:IsItalian) {
     Write-Host "    1. Modificare $InstallPath\appsettings.json con le vere Sub-CA e i template" -ForegroundColor White
     Write-Host "    2. Impostare UseSimulator = false per le CA reali" -ForegroundColor White
     Write-Host "    3. Verificare che l'identità del pool ($identityAccount) abbia" -ForegroundColor White
-    Write-Host "       permessi 'Request Certificates' sui template ADCS" -ForegroundColor White
+    Write-Host "       - Permesso 'Request Certificates' sui template ADCS" -ForegroundColor White
+    Write-Host "       - Permesso 'Rilascio e gestione certificati' sulla CA (per revoche)" -ForegroundColor White
+    Write-Host "       - Permesso 'Gestione CA' sulla CA (se si usa 'Pubblica CRL')" -ForegroundColor White
+    Write-Host "       - Membro 'Utenti DCOM servizio certificati' sulla CA (se CA remota)" -ForegroundColor White
     if (-not $UseHttps) {
         Write-Host '    4. Configurare un binding HTTPS con un certificato SSL valido' -ForegroundColor White
         Write-Host '       (rieseguire con -UseHttps -CertThumbprint "THUMBPRINT")' -ForegroundColor White
@@ -1475,8 +1478,11 @@ if ($script:IsItalian) {
     Write-Host "    0. Configure ACME from the Admin panel: ${protocol}://localhost:${SitePort}/admin -> Server ACME tab" -ForegroundColor White
     Write-Host "    1. Configure $InstallPath\appsettings.json with real Sub-CAs and templates" -ForegroundColor White
     Write-Host "    2. Set UseSimulator = false for real CAs" -ForegroundColor White
-    Write-Host "    3. Verify pool identity ($identityAccount) has" -ForegroundColor White
-    Write-Host "       'Request Certificates' permissions on AD CS templates" -ForegroundColor White
+    Write-Host "    3. Verify pool identity ($identityAccount) has:" -ForegroundColor White
+    Write-Host "       - 'Request Certificates' permissions on AD CS templates" -ForegroundColor White
+    Write-Host "       - 'Issue and Manage Certificates' on the CA (for revocations)" -ForegroundColor White
+    Write-Host "       - 'Manage CA' on the CA (if using 'Publish CRL')" -ForegroundColor White
+    Write-Host "       - Member of 'Certificate Service DCOM Access' on CA (if remote CA)" -ForegroundColor White
     if (-not $UseHttps) {
         Write-Host '    4. Configure an HTTPS binding with a valid SSL certificate' -ForegroundColor White
         Write-Host '       (rerun with -UseHttps -CertThumbprint "THUMBPRINT")' -ForegroundColor White
