@@ -348,7 +348,7 @@
             </div>
             <div style="font-size: 0.85rem; line-height: 1.6;">
               <p style="margin: 0.25rem 0;">• <strong data-i18n="acme_info_dir_label">ACME Directory URL:</strong> <code id="acme-info-directory" style="background: rgba(0,0,0,0.1); padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600;">https://.../acme/directory</code></p>
-              <p style="margin: 0.25rem 0;">• <strong data-i18n="acme_info_ca_label">Sub-CA Attiva:</strong> <span id="acme-info-ca" style="font-weight: 600;" data-i18n="loading">Caricamento...</span></p>
+              <p style="margin: 0.25rem 0;">• <strong data-i18n="acme_info_ca_label">Sub-CA Attiva:</strong> <span id="acme-info-ca" style="font-weight: 600;">Caricamento...</span></p>
               <p style="margin: 0.25rem 0;">• <strong data-i18n="acme_info_template_label">Certificate Template rilasciato:</strong> <code id="acme-info-template" style="background: rgba(0,0,0,0.1); padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600;">WebServer</code></p>
               <p style="margin: 0.25rem 0;">• <strong data-i18n="acme_info_validation_label">Validazione Challenge:</strong> <span id="acme-info-validation">HTTP-01 (porta 80 HTTP)</span></p>
             </div>
@@ -450,8 +450,8 @@ sudo dnf install -y epel-release && sudo dnf install -y certbot</code></pre>
         </div>
 
         <!-- SEZIONE 3: SCRIPT POWERSHELL REST API (ALTERNATIVA SENZA CLIENT ACME) -->
-        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;" data-i18n="automation_ps_title">
-          <span>⚙️ 3. Alternativa: Script di Rinnovo Diretto via REST API (PowerShell)</span>
+        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+          <span data-i18n="automation_ps_title">⚙️ 3. Alternativa: Script di Rinnovo Diretto via REST API (PowerShell)</span>
         </h4>
         <p style="font-size: 0.85rem; color: var(--gray-700); margin-bottom: 0.75rem;" data-i18n="acme_ps_desc">
           Se non si desidera installare client ACME, è sempre possibile sottomettere un CSR generato localmente invocando le REST API native del portale:

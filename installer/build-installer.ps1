@@ -7,12 +7,16 @@
 [CmdletBinding()]
 param(
     # Percorso esplicito di ISCC.exe (opzionale)
-    [string]$IsccPath
+    [string]$IsccPath,
+    # Salta il dotnet publish preventivo
+    [switch]$SkipPublish
 )
 
 $ErrorActionPreference = 'Stop'
 $iss   = Join-Path $PSScriptRoot 'PkiPortal.iss'
-$build = Join-Path (Split-Path $PSScriptRoot -Parent) 'build'
+$root  = Split-Path $PSScriptRoot -Parent
+$build = Join-Path $root 'build'
+$publish = Join-Path $root 'publish'
 
 function Find-Iscc {
     $candidates = @(
@@ -43,11 +47,18 @@ if (-not (Test-Path $iss)) {
     return
 }
 
-# Verifica che il bundle pre-pubblicato esista (embeddato nell'EXE)
-$publish = Join-Path (Split-Path $PSScriptRoot -Parent) 'publish'
-if (-not (Test-Path (Join-Path $publish 'PkiPortal.dll'))) {
+# Rigenera il bundle di pubblicazione se non esplicitamente saltato
+if (-not $SkipPublish) {
+    Write-Host "Rigenerazione pacchetto: dotnet publish -c Release -o `"$publish`"..." -ForegroundColor Cyan
+    $proj = Join-Path $root 'PkiPortal.csproj'
+    & dotnet publish $proj -c Release -o $publish
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "dotnet publish fallito (exit $LASTEXITCODE)."
+        return
+    }
+} elseif (-not (Test-Path (Join-Path $publish 'PkiPortal.dll'))) {
     Write-Warning "PkiPortal.dll non trovato in ${publish} - il bundle embeddato sarà incompleto."
-    Write-Warning "Rigenerare prima con: dotnet publish -c Release -o publish"
+    Write-Warning "Rigenerare con: dotnet publish -c Release -o publish"
 }
 
 # Assicura che file di configurazione locali non vengano inclusi nell'installer
