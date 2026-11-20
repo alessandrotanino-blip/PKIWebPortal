@@ -1637,10 +1637,20 @@ begin
     Abort;
   end;
 
-  if UseHttps then
-    BaseUrl := 'https://localhost:' + SitePort
+  if HostHeader <> '' then
+  begin
+    if UseHttps then
+      BaseUrl := 'https://' + HostHeader + ':' + SitePort
+    else
+      BaseUrl := 'http://' + HostHeader + ':' + SitePort;
+  end
   else
-    BaseUrl := 'http://localhost:' + SitePort;
+  begin
+    if UseHttps then
+      BaseUrl := 'https://localhost:' + SitePort
+    else
+      BaseUrl := 'http://localhost:' + SitePort;
+  end;
   Url := BaseUrl + '/admin';
   if MsgBox(FmtMessage(CustomMessage('MsgSuccess'), [BaseUrl, Url, BaseUrl + '/acme/directory', InstallPath]),
             mbInformation, MB_OKCANCEL) = IDOK then

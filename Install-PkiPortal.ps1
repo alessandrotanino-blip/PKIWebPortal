@@ -1398,6 +1398,7 @@ catch {
 
 # HTTP verification attempt
 Start-Sleep -Seconds 2
+$displayHost = if ($SiteHostHeader) { $SiteHostHeader } else { 'localhost' }
 $testUrl = "${protocol}://localhost:${SitePort}/api/config"
 Write-Info "Verifica connettività: $testUrl" "Verifying connectivity: $testUrl"
 
@@ -1433,11 +1434,8 @@ if ($script:IsItalian) {
 }
 Write-Host "==================================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  $(Msg 'Portale PKI:' 'PKI Portal:')     ${protocol}://localhost:${SitePort}" -ForegroundColor Cyan
-Write-Host "  $(Msg 'ACME Directory:' 'ACME Directory:')  ${protocol}://localhost:${SitePort}/acme/directory" -ForegroundColor Cyan
-if ($SiteHostHeader) {
-    Write-Host "  $(Msg 'URL Hostname:' 'Hostname URL:')    ${protocol}://${SiteHostHeader}:${SitePort}" -ForegroundColor Cyan
-}
+Write-Host "  $(Msg 'Portale PKI:' 'PKI Portal:')     ${protocol}://${displayHost}:${SitePort}" -ForegroundColor Cyan
+Write-Host "  $(Msg 'ACME Directory:' 'ACME Directory:')  ${protocol}://${displayHost}:${SitePort}/acme/directory" -ForegroundColor Cyan
 Write-Host "  $(Msg 'Sito IIS:' 'IIS Site:')        $SiteName" -ForegroundColor White
 Write-Host "  $(Msg 'App Pool:' 'App Pool:')        $appPoolName" -ForegroundColor White
 Write-Host "  $(Msg 'Percorso Fisico:' 'Physical Path:') $InstallPath" -ForegroundColor White
@@ -1447,7 +1445,7 @@ Write-Host ""
 if ($script:IsItalian) {
     # ACME health check
     try {
-        $acmeUrl = "${protocol}://localhost:${SitePort}/acme/directory"
+        $acmeUrl = "${protocol}://${displayHost}:${SitePort}/acme/directory"
         $acmeResp = Invoke-WebRequest -Uri $acmeUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
         if ($acmeResp.StatusCode -eq 200) {
             Write-Host "  ACME Health:     " -NoNewline -ForegroundColor White
@@ -1461,7 +1459,7 @@ if ($script:IsItalian) {
     }
     Write-Host ""
     Write-Host "  PROSSIMI PASSI:" -ForegroundColor Yellow
-    Write-Host "    0. Configurare ACME dal pannello Admin: ${protocol}://localhost:${SitePort}/admin -> tab Server ACME" -ForegroundColor White
+    Write-Host "    0. Configurare ACME dal pannello Admin: ${protocol}://${displayHost}:${SitePort}/admin -> tab Server ACME" -ForegroundColor White
     Write-Host "    1. Modificare $InstallPath\appsettings.json con le vere Sub-CA e i template" -ForegroundColor White
     Write-Host "    2. Impostare UseSimulator = false per le CA reali" -ForegroundColor White
     Write-Host "    3. Verificare che l'identità del pool ($identityAccount) abbia" -ForegroundColor White
@@ -1475,7 +1473,7 @@ if ($script:IsItalian) {
     }
 } else {
     Write-Host "  NEXT STEPS:" -ForegroundColor Yellow
-    Write-Host "    0. Configure ACME from the Admin panel: ${protocol}://localhost:${SitePort}/admin -> Server ACME tab" -ForegroundColor White
+    Write-Host "    0. Configure ACME from the Admin panel: ${protocol}://${displayHost}:${SitePort}/admin -> Server ACME tab" -ForegroundColor White
     Write-Host "    1. Configure $InstallPath\appsettings.json with real Sub-CAs and templates" -ForegroundColor White
     Write-Host "    2. Set UseSimulator = false for real CAs" -ForegroundColor White
     Write-Host "    3. Verify pool identity ($identityAccount) has:" -ForegroundColor White
