@@ -12,11 +12,11 @@
 ; require .NET SDK or NuGet access.
 ;
 ; Build:   powershell .\build-installer.ps1
-; Output:  ..\build\PkiPortal-Setup-2.6.0.exe
+; Output:  ..\build\PkiPortal-Setup-2.6.1.exe
 ; ============================================================================
 
 #define MyAppName        "PkiPortal"
-#define MyAppVersion     "2.6.0"
+#define MyAppVersion     "2.6.1"
 #define MyAppPublisher   "Enterprise PKI Team"
 #define MyAppExeName     "PkiPortal.exe"
 

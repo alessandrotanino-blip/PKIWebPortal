@@ -6,6 +6,18 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.6.1] - 2026-11-20
+
+### Localizzazione & Interfaccia Utente
+
+- **Traduzione Scheda ACME (RFC 8555) nel Portale Utente**:
+  - Risolto il problema per cui i testi e gli esempi della scheda di automazione ACME (`tab-automation`) rimanevano bloccati in italiano anche selezionando un'altra lingua.
+  - Aggiunti attributi `data-i18n` a tutti i contenuti della scheda: prerequisiti di rete, parametri endpoint, guida win-acme (passaggi, spiegazione parametri ed esecuzione), guida Certbot per Linux (modalità webroot/standalone, percorsi di salvataggio e dry-run) e script alternativo PowerShell REST API.
+  - Localizzazione dinamica dei frammenti di codice ed esempi comandi (win-acme, certbot, script PowerShell con commenti e messaggi localizzati) in base alla lingua attiva.
+  - Registrato l'aggiornamento automatico della documentazione ACME al cambio lingua (`languageChanged`) e all'apertura della scheda ACME.
+  - Aggiornati i dizionari di traduzione in `i18n.js` per tutte le 7 lingue supportate (Italiano, English, Français, Deutsch, Español, Português, 中文).
+- Bump versione a `2.6.1` su `.csproj`, script di installazione, installer InnoSetup, badge UI e cache-busting.
+
 ## [2.6.0] - 2026-11-20
 
 ### Revoca Certificati & Pubblicazione CRL
