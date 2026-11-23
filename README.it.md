@@ -52,6 +52,11 @@ Portale web moderno in **HTML5** e **ASP.NET Core 8 (C#)** progettato per sostit
    * Supporto per challenge **`http-01`** (verifica automatica su porta 80), modalità **`AutoApprove`** (ideale per lab e reti interne) e firme JWS asimmetriche (RSA ed ECDSA).
 
    * Espone endpoint RESTful per integrare script di rinnovo automatico e client di automazione come `win-acme`.
+10. 💾 **[New Feature v2.7.0] Backup Cifrato, Migrazione Server & Disaster Recovery**:
+
+   * **Superamento del Vincolo DPAPI**: Poiché la cifratura DPAPI machine-scope (`CRYPTPROTECT_LOCAL_MACHINE`) o user-scope è vincolata alla macchina e all'account Windows, la migrazione su un nuovo server o il cambio di identità dell'Application Pool renderebbe le vecchie chiavi irrecuperabili.
+   * **Pacchetto Protetto `.pkibak`**: Consente l'esportazione sicura di richieste trattenute, chiavi private e dati ACME in un archivio cifrato con **AES-256-GCM** e **PBKDF2-HMAC-SHA256 (600.000 iterazioni)**.
+   * **Zero-Disk Cleartext & Re-encryption Automatica**: Durante l'export/import nessun dato viaggia o risiede in chiaro su disco. All'importazione sul nuovo server, le chiavi private vengono **automaticamente ricifrate con il provider DPAPI del nuovo ambiente**.
 
 ---
 
@@ -408,6 +413,27 @@ Dopo l'approvazione, il certificato diventa scaricabile dal richiedente original
 |POST|`/api/admin/held-requests/{holdId}/reject`|Rifiuta la richiesta con motivazione opzionale (auto-revoca se emesso)|Amministratore|
 |POST|`/api/admin/held-requests/{holdId}/revoke`|Revoca il certificato su AD CS e nel portale con motivo opzionale|Amministratore|
 |POST|`/api/admin/crl/publish`|Forza la pubblicazione sincrona della CRL su una o tutte le CA|Amministratore|
+|POST|`/api/admin/migration/export`|Esporta pacchetto binario (.pkibak) cifrato con PBKDF2 (600k iter.) e AES-256-GCM|Amministratore (CSRF)|
+|POST|`/api/admin/migration/import`|Ripristina il pacchetto .pkibak e ricifra le chiavi con il provider locale DPAPI|Amministratore (CSRF)|
+
+### 💾 Backup, Migrazione & Disaster Recovery (v2.7.0)
+
+A partire dalla versione 2.7.0, il portale include un sistema completo per la migrazione e il disaster recovery, progettato per superare i vincoli crittografici di Windows DPAPI:
+
+1. **Il Problema di DPAPI**:
+   - A riposo, le chiavi private dei certificati generati dal portale sono memorizzate in `App_Data/held-requests.json` e protette con DPAPI machine-scope (`CRYPTPROTECT_LOCAL_MACHINE`).
+   - Se il portale viene migrato su un altro server o se viene modificata l'identità dell'Application Pool (es. passaggio da account locale a dominio/gMSA), **il nuovo ambiente non è in grado di decifrare i vecchi dati**, con conseguente perdita irreversibile delle chiavi private.
+2. **Procedura di Esportazione Sicura**:
+   - Nella scheda **"💾 Backup & Migrazione"** del pannello Admin, l'amministratore imposta una passphrase (minimo 12 caratteri).
+   - Il server decifra temporaneamente le chiavi in memoria RAM (nessun file in chiaro su disco) e genera un archivio compresso protetto da:
+     - **Envelope crittografico**: Header magico `PKIB` (v1).
+     - **KDF**: PBKDF2-HMAC-SHA256 con salt casuale (16 byte) e **600.000 iterazioni**.
+     - **Cifratura autenticata**: AES-256-GCM con tag a 128 bit e nonce casuale a 96 bit.
+   - Il file generato `.pkibak` include tutte le richieste e relative chiavi private, i dati ACME e la configurazione.
+3. **Ripristino e Ricifratura Locale Automatica**:
+   - Sul nuovo server o dopo il cambio account, l'amministratore carica il file `.pkibak` e inserisce la passphrase.
+   - Il portale verifica l'integrità del pacchetto, decifra i dati in memoria e li persiste salvandoli su disco con **immediata ricifratura a riposo usando il nuovo provider DPAPI locale del nuovo server**.
+   - È supportata l'opzione di **Merge** per unire i dati a quelli già presenti senza cancellazioni.
 
 ### 🔒 Revoca Certificati e Pubblicazione CRL (v2.6.0)
 

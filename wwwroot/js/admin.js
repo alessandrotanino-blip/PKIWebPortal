@@ -119,6 +119,7 @@
       setupHeldRequestsHandlers();
       loadHeldRequests();
       setupAcmeTab();
+      setupMigrationTab();
 
       // Setup language changed listener
       window.addEventListener('languageChanged', () => {
@@ -1767,5 +1768,162 @@
       document.getElementById('acme-baseurl').addEventListener('input', (e) => {
         setAcmeDirectoryLink(e.target.value);
       });
+    }
+
+    function setupMigrationTab() {
+      const btnExport = document.getElementById('btn-export-migration');
+      const btnImport = document.getElementById('btn-import-migration');
+
+      if (btnExport) {
+        btnExport.addEventListener('click', async () => {
+          const p1 = document.getElementById('export-passphrase').value;
+          const p2 = document.getElementById('export-passphrase-confirm').value;
+
+          if (!p1 || p1.length < 12) {
+            const minMsg = window.I18N ? window.I18N.t('migration_err_pass_length', 'La passphrase deve contenere almeno 12 caratteri.') : 'La passphrase deve contenere almeno 12 caratteri.';
+            showToast(minMsg, 'error');
+            return;
+          }
+          if (p1 !== p2) {
+            const mismatchMsg = window.I18N ? window.I18N.t('migration_err_pass_mismatch', 'Le due passphrase non coincidono.') : 'Le due passphrase non coincidono.';
+            showToast(mismatchMsg, 'error');
+            return;
+          }
+
+          btnExport.disabled = true;
+          const origHtml = btnExport.innerHTML;
+          const exportingText = window.I18N ? window.I18N.t('migration_exporting', 'Cifratura ed esportazione in corso...') : 'Cifratura ed esportazione in corso...';
+          btnExport.innerHTML = '<span class="spinner-sm"></span> ' + exportingText;
+
+          try {
+            const csrf = await ensureCsrfToken();
+            const resp = await fetch('/api/admin/migration/export', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Pki-Portal-Admin': csrf
+              },
+              body: JSON.stringify({ passphrase: p1 })
+            });
+
+            if (!resp.ok) {
+              const errData = await resp.json().catch(() => ({}));
+              throw new Error(errData.message || ('HTTP ' + resp.status));
+            }
+
+            const blob = await resp.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            a.download = `pkiportal-backup-${nowStr}.pkibak`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+
+            const successMsg = window.I18N ? window.I18N.t('migration_export_success', 'Pacchetto di backup esportato con successo!') : 'Pacchetto di backup esportato con successo!';
+            showToast(successMsg, 'success');
+            document.getElementById('export-passphrase').value = '';
+            document.getElementById('export-passphrase-confirm').value = '';
+          } catch (err) {
+            const errPrefix = window.I18N ? window.I18N.t('migration_export_error', 'Errore durante l\'esportazione: ') : 'Errore durante l\'esportazione: ';
+            showToast(errPrefix + err.message, 'error');
+          } finally {
+            btnExport.disabled = false;
+            btnExport.innerHTML = origHtml;
+          }
+        });
+      }
+
+      if (btnImport) {
+        btnImport.addEventListener('click', async () => {
+          const fileInput = document.getElementById('import-file');
+          const passInput = document.getElementById('import-passphrase');
+          const mergeInput = document.getElementById('import-merge');
+          const resultBox = document.getElementById('import-result-box');
+
+          if (!fileInput.files || fileInput.files.length === 0) {
+            const noFileMsg = window.I18N ? window.I18N.t('migration_err_no_file', 'Seleziona un file di backup (.pkibak).') : 'Seleziona un file di backup (.pkibak).';
+            showToast(noFileMsg, 'error');
+            return;
+          }
+          if (!passInput.value) {
+            const noPassMsg = window.I18N ? window.I18N.t('migration_err_no_pass', 'Inserisci la passphrase per decifrare il file.') : 'Inserisci la passphrase per decifrare il file.';
+            showToast(noPassMsg, 'error');
+            return;
+          }
+
+          btnImport.disabled = true;
+          const origHtml = btnImport.innerHTML;
+          const importingText = window.I18N ? window.I18N.t('migration_importing', 'Decifratura e ricifratura locale...') : 'Decifratura e ricifratura locale...';
+          btnImport.innerHTML = '<span class="spinner-sm"></span> ' + importingText;
+          resultBox.style.display = 'none';
+
+          try {
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('passphrase', passInput.value);
+            formData.append('merge', mergeInput.checked ? 'true' : 'false');
+
+            const csrf = await ensureCsrfToken();
+            const resp = await fetch('/api/admin/migration/import', {
+              method: 'POST',
+              headers: {
+                'X-Pki-Portal-Admin': csrf
+              },
+              body: formData
+            });
+
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.success) {
+              throw new Error(data.message || ('HTTP ' + resp.status));
+            }
+
+            resultBox.style.display = 'block';
+            resultBox.style.background = 'var(--success-light, #ecfdf5)';
+            resultBox.style.color = 'var(--success-dark, #065f46)';
+            resultBox.style.border = '1px solid var(--success, #10b981)';
+
+            const doneTitle = window.I18N ? window.I18N.t('migration_import_done_title', 'Ripristino completato!') : 'Ripristino completato!';
+            const lblReq = window.I18N ? window.I18N.t('migration_lbl_req_imported', 'Richieste importate:') : 'Richieste importate:';
+            const lblReenc = window.I18N ? window.I18N.t('migration_lbl_keys_reencrypted', 'chiavi ricifrate per questo ambiente') : 'chiavi ricifrate per questo ambiente';
+            const lblAcme = window.I18N ? window.I18N.t('migration_lbl_acme_imported', 'Account ACME:') : 'Account ACME:';
+            const lblDate = window.I18N ? window.I18N.t('migration_lbl_orig_date', 'Data export:') : 'Data export:';
+
+            const noteNoKeys = (data.privateKeysImported === 0 && data.totalRequestsImported > 0)
+              ? `<div style="font-size:0.8rem; margin-top:0.4rem; opacity:0.85;">ℹ️ ${window.I18N ? window.I18N.t('migration_note_no_keys', 'Nota: le richieste ACME o inoltrate via CSR manuale non includono chiavi private nel portale (risiedono esclusivamente sui rispettivi client/server richiedenti).') : 'Nota: le richieste ACME o inoltrate via CSR manuale non includono chiavi private nel portale (risiedono esclusivamente sui rispettivi client/server richiedenti).'}</div>`
+              : '';
+
+            resultBox.innerHTML = `<strong>✅ ${doneTitle}</strong><br>` +
+              `• ${lblReq} <b>${data.totalRequestsImported}</b> (<b>${data.privateKeysImported}</b> ${lblReenc})<br>` +
+              `• ${lblAcme} <b>${data.acmeAccountsImported}</b><br>` +
+              `• ${lblDate} ${data.exportedAtUtc ? new Date(data.exportedAtUtc).toLocaleString() : '-'}` +
+              (data.exportedBy ? ` (${data.exportedBy}, v${data.sourcePortalVersion})` : '') +
+              noteNoKeys;
+
+            const succMsg = data.message || (window.I18N ? window.I18N.t('migration_import_success', 'Dati ripristinati e ricifrati con successo!') : 'Dati ripristinati e ricifrati con successo!');
+            showToast(succMsg, 'success');
+            fileInput.value = '';
+            passInput.value = '';
+
+            loadHeldRequests();
+          } catch (err) {
+            resultBox.style.display = 'block';
+            resultBox.style.background = 'var(--danger-light, #fef2f2)';
+            resultBox.style.color = 'var(--danger, #ef4444)';
+            resultBox.style.border = '1px solid var(--danger, #ef4444)';
+            const failTitle = window.I18N ? window.I18N.t('migration_import_fail_title', 'Errore durante l\'importazione') : 'Errore durante l\'importazione';
+            resultBox.innerHTML = `<strong>❌ ${failTitle}</strong><br>${err.message}`;
+
+            const errPrefix = window.I18N ? window.I18N.t('migration_import_error', 'Errore importazione: ') : 'Errore importazione: ';
+            showToast(errPrefix + err.message, 'error');
+          } finally {
+            btnImport.disabled = false;
+            btnImport.innerHTML = origHtml;
+          }
+        });
+      }
     }
   })();

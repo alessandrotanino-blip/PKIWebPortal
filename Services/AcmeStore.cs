@@ -361,64 +361,173 @@ public class AcmeStore : IAcmeStore
         }
     }
 
+    public Task<string> ExportDataJsonAsync()
+    {
+        var data = BuildStoreData();
+        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+        return Task.FromResult(json);
+    }
+
+    public async Task<int> ImportDataJsonAsync(string json, bool merge)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return 0;
+        var data = JsonSerializer.Deserialize<AcmeStoreData>(json);
+        if (data == null) return 0;
+
+        if (!merge)
+        {
+            _accounts.Clear();
+            _accountsByThumbprint.Clear();
+            _orders.Clear();
+            _authorizations.Clear();
+            _challenges.Clear();
+        }
+
+        int accountsCount = 0;
+        foreach (var acc in data.Accounts)
+        {
+            var account = new AcmeAccount
+            {
+                Id = acc.Id,
+                Status = acc.Status,
+                Contact = acc.Contact ?? new(),
+                TermsOfServiceAgreed = acc.TermsOfServiceAgreed,
+                CreatedAt = acc.CreatedAt,
+                Jwk = acc.Jwk,
+                Thumbprint = acc.Thumbprint ?? string.Empty
+            };
+            _accounts[account.Id] = account;
+            if (!string.IsNullOrEmpty(account.Thumbprint))
+            {
+                _accountsByThumbprint[account.Thumbprint] = account.Id;
+            }
+            accountsCount++;
+        }
+
+        foreach (var ord in data.Orders)
+        {
+            _orders[ord.Id] = new AcmeOrder
+            {
+                Id = ord.Id,
+                AccountId = ord.AccountId,
+                Status = ord.Status,
+                Expires = ord.Expires,
+                Identifiers = ord.Identifiers ?? new(),
+                Authorizations = ord.Authorizations ?? new(),
+                CreatedAt = ord.CreatedAt,
+                CaId = ord.CaId,
+                TemplateName = ord.TemplateName,
+                CaRequestId = ord.CaRequestId,
+                CertificateThumbprint = ord.CertificateThumbprint,
+                CertificatePem = ord.CertificatePem,
+                CertificateChainPem = ord.CertificateChainPem,
+                CaCertificatePem = ord.CaCertificatePem,
+                RevokedAt = ord.RevokedAt,
+                ClientIp = ord.ClientIp
+            };
+        }
+
+        foreach (var authRec in data.Authorizations)
+        {
+            _authorizations[authRec.Id] = new AcmeAuthorization
+            {
+                Id = authRec.Id,
+                OrderId = authRec.OrderId,
+                Status = authRec.Status,
+                Expires = authRec.Expires,
+                Identifier = authRec.Identifier ?? new(),
+                Wildcard = authRec.Wildcard,
+                Challenges = new List<AcmeChallenge>()
+            };
+        }
+
+        foreach (var challRec in data.Challenges)
+        {
+            var challenge = new AcmeChallenge
+            {
+                Id = challRec.Id,
+                AuthId = challRec.AuthId,
+                OrderId = challRec.OrderId,
+                Type = challRec.Type,
+                Token = challRec.Token,
+                Status = challRec.Status,
+                Validated = challRec.Validated,
+                Error = challRec.Error
+            };
+            _challenges[$"{challenge.AuthId}_{challenge.Type}"] = challenge;
+            if (_authorizations.TryGetValue(challenge.AuthId, out var auth))
+            {
+                auth.Challenges.Add(challenge);
+            }
+        }
+
+        await SaveToDiskAsync();
+        _logger.LogInformation("Importazione dati ACME completata: {Accounts} account, {Orders} ordini importati.", accountsCount, data.Orders.Count);
+        return accountsCount;
+    }
+
+    private AcmeStoreData BuildStoreData()
+    {
+        return new AcmeStoreData
+        {
+            Accounts = _accounts.Values.Select(a => new AcmeAccountRecord
+            {
+                Id = a.Id,
+                Status = a.Status,
+                Contact = a.Contact,
+                TermsOfServiceAgreed = a.TermsOfServiceAgreed,
+                CreatedAt = a.CreatedAt,
+                Jwk = a.Jwk,
+                Thumbprint = a.Thumbprint
+            }).ToList(),
+            Orders = _orders.Values.Select(o => new AcmeOrderRecord
+            {
+                Id = o.Id,
+                AccountId = o.AccountId,
+                Status = o.Status,
+                Expires = o.Expires,
+                Identifiers = o.Identifiers,
+                Authorizations = o.Authorizations,
+                CreatedAt = o.CreatedAt,
+                CaId = o.CaId,
+                TemplateName = o.TemplateName,
+                CaRequestId = o.CaRequestId,
+                CertificateThumbprint = o.CertificateThumbprint,
+                CertificatePem = o.CertificatePem,
+                CertificateChainPem = o.CertificateChainPem,
+                CaCertificatePem = o.CaCertificatePem,
+                RevokedAt = o.RevokedAt,
+                ClientIp = o.ClientIp
+            }).ToList(),
+            Authorizations = _authorizations.Values.Select(x => new AcmeAuthorizationRecord
+            {
+                Id = x.Id,
+                OrderId = x.OrderId,
+                Status = x.Status,
+                Expires = x.Expires,
+                Identifier = x.Identifier,
+                Wildcard = x.Wildcard
+            }).ToList(),
+            Challenges = _challenges.Values.Select(c => new AcmeChallengeRecord
+            {
+                Id = c.Id,
+                AuthId = c.AuthId,
+                OrderId = c.OrderId,
+                Type = c.Type,
+                Token = c.Token,
+                Status = c.Status,
+                Validated = c.Validated,
+                Error = c.Error
+            }).ToList()
+        };
+    }
+
     private async Task SaveToDiskAsync()
     {
         await _saveLock.WaitAsync();
         try
         {
-            var data = new AcmeStoreData
-            {
-                Accounts = _accounts.Values.Select(a => new AcmeAccountRecord
-                {
-                    Id = a.Id,
-                    Status = a.Status,
-                    Contact = a.Contact,
-                    TermsOfServiceAgreed = a.TermsOfServiceAgreed,
-                    CreatedAt = a.CreatedAt,
-                    Jwk = a.Jwk,
-                    Thumbprint = a.Thumbprint
-                }).ToList(),
-                Orders = _orders.Values.Select(o => new AcmeOrderRecord
-                {
-                    Id = o.Id,
-                    AccountId = o.AccountId,
-                    Status = o.Status,
-                    Expires = o.Expires,
-                    Identifiers = o.Identifiers,
-                    Authorizations = o.Authorizations,
-                    CreatedAt = o.CreatedAt,
-                    CaId = o.CaId,
-                    TemplateName = o.TemplateName,
-                    CaRequestId = o.CaRequestId,
-                    CertificateThumbprint = o.CertificateThumbprint,
-                    CertificatePem = o.CertificatePem,
-                    CertificateChainPem = o.CertificateChainPem,
-                    CaCertificatePem = o.CaCertificatePem,
-                    RevokedAt = o.RevokedAt,
-                    ClientIp = o.ClientIp
-                }).ToList(),
-                Authorizations = _authorizations.Values.Select(x => new AcmeAuthorizationRecord
-                {
-                    Id = x.Id,
-                    OrderId = x.OrderId,
-                    Status = x.Status,
-                    Expires = x.Expires,
-                    Identifier = x.Identifier,
-                    Wildcard = x.Wildcard
-                }).ToList(),
-                Challenges = _challenges.Values.Select(c => new AcmeChallengeRecord
-                {
-                    Id = c.Id,
-                    AuthId = c.AuthId,
-                    OrderId = c.OrderId,
-                    Type = c.Type,
-                    Token = c.Token,
-                    Status = c.Status,
-                    Validated = c.Validated,
-                    Error = c.Error
-                }).ToList()
-            };
-
+            var data = BuildStoreData();
             var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
             var tmp = _persistencePath + ".tmp";
             await File.WriteAllTextAsync(tmp, json);

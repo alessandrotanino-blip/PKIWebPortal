@@ -71,6 +71,15 @@ foreach ($cfg in $localConfigs) {
     }
 }
 
+# Rimuovi dati di runtime (App_Data, logs) da publish per evitare che entropia/chiavi/db locali vengano incorporati nel setup
+foreach ($dataDir in @('App_Data', 'logs')) {
+    $dirPath = Join-Path $publish $dataDir
+    if (Test-Path $dirPath) {
+        Write-Host "Rimozione di $dataDir da publish per escluderlo dall'installer..." -ForegroundColor Yellow
+        Remove-Item $dirPath -Recurse -Force
+    }
+}
+
 & $iscc $iss
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Compilazione fallita (exit $LASTEXITCODE)."

@@ -6,6 +6,40 @@ Tutte le modifiche rilevanti apportate a questo progetto saranno documentate in 
 
 Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/) e questo progetto aderisce al [Semantic Versioning](https://semver.org/lang/it/).
 
+## [2.7.0] - 2026-11-20
+
+### Backup, Migrazione & Disaster Recovery (Nuova Funzionalità)
+
+- **Superamento del Vincolo DPAPI per Migrazioni e Cambio Identità Pool**:
+  - Le chiavi private a riposo sono protette tramite Windows DPAPI legato alla macchina locale (`CRYPTPROTECT_LOCAL_MACHINE`) o al profilo utente; la migrazione su un nuovo server o il cambio dell'account di servizio dell'Application Pool IIS rende i dati non più decifrabili.
+  - Implementata la nuova architettura di esportazione e importazione sicura che consente la migrazione completa tra server diversi o tra account di servizio differenti senza perdita di dati o chiavi.
+
+- **Nuovo Formato di Backup Cifrato `.pkibak`**:
+  - **Envelope Crittografico Standalone**: Struttura binaria con firma magica `PKIB`, compressione interna GZip e cifratura simmetrica autenticata **AES-256-GCM** (tag a 128 bit, nonce casuale a 96 bit).
+  - **KDF a Elevata Resistenza**: Derivazione chiave a 256 bit tramite **PBKDF2-HMAC-SHA256** con salt casuale crittografico (16 byte) e **600.000 iterazioni**, garantendo massima resilienza ad attacchi di forza bruta offline.
+  - **Zero-Disk Cleartext**: La decifratura e ricifratura avvengono unicamente in memoria RAM (`MemoryStream`), e le chiavi simmetriche vengono bonificate dalla memoria (`CryptographicOperations.ZeroMemory`). Nessuna chiave o dato in chiaro viene mai scritto su disco durante l'esportazione o l'importazione.
+  - **Contenuto del Pacchetto**: Richieste certificato con chiavi private in formato PEM, account e ordini dello store ACME (RFC 8555), snapshot di configurazione portale e metadati di audit (autore, data UTC, versione di origine).
+
+- **Re-encryption Automatica all'Importazione**:
+  - All'importazione sul nuovo server, il pacchetto viene autenticato e decifrato con la passphrase; i record vengono salvati su disco e **ricifrati immediatamente a riposo tramite il provider DPAPI (o AES-GCM) della nuova macchina o utente**.
+  - Supporto per la modalità **Merge** (unione dei record importati con quelli esistenti senza cancellazioni) o sostituzione completa.
+
+- **Nuovi Servizi & API Amministrative**:
+  - Nuovo servizio dedicato `IMigrationService` e `MigrationService`.
+  - Nuovi metodi nello store: `ImportRequestsAsync()` in `IHeldRequestStore` / `HeldRequestStore`, `ExportDataJsonAsync()` e `ImportDataJsonAsync()` in `IAcmeStore` / `AcmeStore`.
+  - `POST /api/admin/migration/export`: esporta il pacchetto `.pkibak` con passphrase (min. 12 caratteri), protetto da Windows Authentication, anti-CSRF e rate limiting.
+  - `POST /api/admin/migration/import`: importa il pacchetto `.pkibak` in formato multipart/form-data con re-encryption e report statistico dettagliato.
+
+- **Nuova Scheda "💾 Backup & Migrazione" nel Pannello Admin**:
+  - Nuova scheda dedicata in `admin.html` con interfaccia a due colonne per esportazione ed importazione guidata.
+  - Validazione password e conferma, feedback visivo durante la crittografia, download automatico del file `.pkibak` con data/ora nel nome.
+  - Riepilogo post-importazione con conteggio richieste, chiavi private ricifrate per il nuovo ambiente e account ACME ripristinati.
+  - Supporto multilingua completo in `i18n.js` per tutte le 7 lingue supportate.
+
+- **Bump Versione**:
+  - Versione aggiornata a `2.7.0` su `PkiPortal.csproj`, `installer/PkiPortal.iss`, `wwwroot/admin.html`, `wwwroot/index.html`.
+  - Generato il nuovo installer `build/PkiPortal-Setup-2.7.0.exe`.
+
 ## [2.6.1] - 2026-11-20
 
 ### Localizzazione & Interfaccia Utente

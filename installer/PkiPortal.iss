@@ -12,11 +12,11 @@
 ; require .NET SDK or NuGet access.
 ;
 ; Build:   powershell .\build-installer.ps1
-; Output:  ..\build\PkiPortal-Setup-2.6.1.exe
+; Output:  ..\build\PkiPortal-Setup-2.7.0.exe
 ; ============================================================================
 
 #define MyAppName        "PkiPortal"
-#define MyAppVersion     "2.6.1"
+#define MyAppVersion     "2.7.0"
 #define MyAppPublisher   "Enterprise PKI Team"
 #define MyAppExeName     "PkiPortal.exe"
 
@@ -471,7 +471,7 @@ brazilianportuguese.ReadyMemoPreserveNote=A configuração existente (appsetting
 ; web.config viene copiato alla prima installazione o con "Sovrascrivi web.config".
 ; ----------------------------------------------------------------------------
 [Files]
-Source: "..\publish\*";        DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "appsettings*.json,web.config"
+Source: "..\publish\*";        DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "appsettings*.json,web.config,App_Data\*,logs\*,*.bin"
 Source: "..\publish\appsettings.example.json"; DestDir: "{app}"
 Source: "..\publish\web.config";       DestDir: "{app}"; Check: ShouldCopyConfig('web.config')
 

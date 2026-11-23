@@ -32,6 +32,7 @@ builder.Services.AddSingleton<IAcmeStore, AcmeStore>();
 builder.Services.AddSingleton<IAcmeValidationService, AcmeValidationService>();
 builder.Services.AddSingleton<IAcmeService, AcmeService>();
 builder.Services.AddSingleton<CsrfTokenService>();
+builder.Services.AddSingleton<IMigrationService, MigrationService>();
 
 // Supporto file statici e routing
 builder.Services.AddEndpointsApiExplorer();
@@ -1213,6 +1214,95 @@ admin.MapPost("/crl/publish", async (HttpContext ctx, IAdcsService adcsService, 
     });
 }).RequireRateLimiting("portal-submit");
 
+// POST /api/admin/migration/export - Esporta pacchetto cifrato per backup/migrazione (v2.7.0)
+admin.MapPost("/migration/export", async (HttpContext ctx, IMigrationService migrationService, [FromBody] MigrationExportRequestBody? body) =>
+{
+    if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
+        return Results.Challenge();
+
+    if (!IsServerAdmin(ctx))
+        return Results.Forbid();
+
+    if (!HasValidCsrf(ctx))
+        return CsrfDenied();
+
+    string? passphrase = body?.Passphrase;
+    if (string.IsNullOrWhiteSpace(passphrase) || passphrase.Length < 12)
+    {
+        return Results.BadRequest(new { message = "La passphrase di cifratura deve contenere almeno 12 caratteri." });
+    }
+
+    string adminUser = ctx.User.Identity.Name ?? "Admin";
+    try
+    {
+        var packageBytes = await migrationService.CreateExportPackageAsync(passphrase, adminUser);
+        string filename = $"pkiportal-backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}.pkibak";
+        return Results.File(packageBytes, "application/octet-stream", filename);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Errore durante la creazione del pacchetto di migrazione/backup.");
+        return Results.Problem("Impossibile generare il pacchetto di backup: " + ex.Message, statusCode: 500);
+    }
+}).RequireRateLimiting("portal-submit");
+
+// POST /api/admin/migration/import - Importa e ricifra pacchetto di migrazione (v2.7.0)
+admin.MapPost("/migration/import", async (HttpRequest request, HttpContext ctx, IMigrationService migrationService) =>
+{
+    if (ctx.User.Identity == null || !ctx.User.Identity.IsAuthenticated)
+        return Results.Challenge();
+
+    if (!IsServerAdmin(ctx))
+        return Results.Forbid();
+
+    if (!HasValidCsrf(ctx))
+        return CsrfDenied();
+
+    if (!request.HasFormContentType)
+    {
+        return Results.BadRequest(new { message = "Richiesta non valida: Content-Type deve essere multipart/form-data." });
+    }
+
+    var form = await request.ReadFormAsync();
+    var file = form.Files["file"] ?? form.Files.FirstOrDefault();
+    if (file == null || file.Length == 0)
+    {
+        return Results.BadRequest(new { message = "Nessun file di backup fornito per l'importazione." });
+    }
+
+    if (file.Length > 100 * 1024 * 1024) // Limite max 100MB
+    {
+        return Results.BadRequest(new { message = "Dimensione del file di backup superiore al limite consentito (100MB)." });
+    }
+
+    string? passphrase = form["passphrase"].ToString();
+    if (string.IsNullOrWhiteSpace(passphrase))
+    {
+        return Results.BadRequest(new { message = "La passphrase è obbligatoria per decifrare il file di backup." });
+    }
+
+    string mergeStr = form["merge"].ToString();
+    bool merge = !string.Equals(mergeStr, "false", StringComparison.OrdinalIgnoreCase);
+
+    string adminUser = ctx.User.Identity.Name ?? "Admin";
+    try
+    {
+        using var stream = file.OpenReadStream();
+        var result = await migrationService.ImportPackageAsync(stream, passphrase, adminUser, merge);
+        if (!result.Success)
+        {
+            return Results.BadRequest(new { message = result.Message });
+        }
+
+        return Results.Ok(result);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Errore imprevisto durante l'importazione del pacchetto di migrazione.");
+        return Results.Problem("Errore durante l'elaborazione del pacchetto: " + ex.Message, statusCode: 500);
+    }
+}).RequireRateLimiting("portal-submit");
+
 // GET /api/certificates/held/{holdId} - Endpoint utente per recuperare un certificato approvato (con controllo di proprietà)
 api.MapGet("/certificates/held/{holdId}", async (string holdId, IHeldRequestStore holdStore, HttpContext ctx) =>
 {
@@ -1576,3 +1666,6 @@ public record RevokeHeldRequestBody(string? Reason);
 
 // DTO per il body della pubblicazione CRL (v2.6.0)
 public record CrlPublishRequestBody(string? CaId);
+
+// DTO per il body dell'esportazione migrazione/backup (v2.7.0)
+public record MigrationExportRequestBody(string? Passphrase);

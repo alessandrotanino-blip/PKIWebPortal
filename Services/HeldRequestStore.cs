@@ -553,6 +553,43 @@ public class HeldRequestStore : IHeldRequestStore
         return request;
     }
 
+    public async Task<(int totalImported, int privateKeysImported)> ImportRequestsAsync(IEnumerable<HeldCertificateRequest> requests, bool merge)
+    {
+        int total = 0;
+        int keys = 0;
+        lock (_stateLock)
+        {
+            if (!merge)
+            {
+                _store.Clear();
+            }
+
+            foreach (var req in requests)
+            {
+                if (string.IsNullOrEmpty(req.HoldId)) continue;
+
+                // Se in modalità merge il record locale possiede già la chiave privata e l'import non la contiene, preserva la chiave locale
+                if (merge && _store.TryGetValue(req.HoldId, out var existing) && string.IsNullOrEmpty(req.PrivateKeyPem) && !string.IsNullOrEmpty(existing.PrivateKeyPem))
+                {
+                    req.PrivateKeyPem = existing.PrivateKeyPem;
+                }
+
+                // Salva in memoria la richiesta (con PrivateKeyPem in chiaro)
+                _store[req.HoldId] = req;
+                total++;
+                if (!string.IsNullOrEmpty(req.PrivateKeyPem))
+                {
+                    keys++;
+                }
+            }
+        }
+
+        // Salva su disco ricifrando a riposo ciascuna private key tramite CloneForPersistence/EncryptAtRest
+        await SaveToDiskAsync();
+        _logger.LogInformation("Importazione richieste completata: {Total} richieste ({Keys} con chiave privata) persistite e ricifrate per questo ambiente.", total, keys);
+        return (total, keys);
+    }
+
     #region Persistenza su disco
 
     private void LoadFromDisk()
@@ -577,6 +614,7 @@ public class HeldRequestStore : IHeldRequestStore
             if (items != null)
             {
                 bool legacyUnencryptedFound = false;
+                bool decryptFailureFound = false;
                 foreach (var item in items)
                 {
                     if (string.IsNullOrWhiteSpace(item.RequesterUser) && item.RequesterComments?.StartsWith("ACME order", StringComparison.OrdinalIgnoreCase) == true)
@@ -600,12 +638,24 @@ public class HeldRequestStore : IHeldRequestStore
                             // Il fallimento di decifrazione non deve far perdere l'intera
                             // richiesta: la richiesta resta disponibile, senza la chiave.
                             _logger.LogError(ex, "Impossibile decifrare la private key della richiesta {HoldId}: la richiesta resta disponibile senza chiave.", item.HoldId);
+                            decryptFailureFound = true;
                             item.PrivateKeyPem = null;
                         }
                     }
                     _store[item.HoldId] = item;
                 }
                 _logger.LogInformation("Caricate {Count} richieste trattenute dal file di persistenza ({Path}).", items.Count, path);
+
+                if (decryptFailureFound)
+                {
+                    try
+                    {
+                        var safetyBackup = $"{path}.pre-decrypt-failure-{DateTime.UtcNow:yyyyMMddHHmmss}";
+                        File.Copy(path, safetyBackup, overwrite: true);
+                        _logger.LogWarning("Creato backup di sicurezza del file di persistenza originale con chiavi cifrate in {SafetyBackup}.", safetyBackup);
+                    }
+                    catch { }
+                }
 
                 if (legacyUnencryptedFound)
                 {

@@ -26,4 +26,14 @@ public interface IAcmeStore
     /// thumbprint specificato (per la revoca ACME, RFC 8555 Sez. 7.6).
     /// </summary>
     Task<AcmeOrder?> FindOrderByCertificateThumbprintAsync(string thumbprint);
+
+    /// <summary>
+    /// Esporta tutti i dati ACME (account, ordini, autorizzazioni, challenge) in JSON per migrazione/backup (v2.7.0).
+    /// </summary>
+    Task<string> ExportDataJsonAsync();
+
+    /// <summary>
+    /// Importa i dati ACME da JSON (migrazione/backup) e li persiste su disco (v2.7.0).
+    /// </summary>
+    Task<int> ImportDataJsonAsync(string json, bool merge);
 }

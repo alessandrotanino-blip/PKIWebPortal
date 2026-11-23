@@ -58,4 +58,10 @@ public interface IHeldRequestStore
     /// Revoca una richiesta: cambia lo stato a Revoked (v2.6.0).
     /// </summary>
     Task<HeldCertificateRequest?> RevokeRequestAsync(string holdId, string revokedBy, string? reason);
+
+    /// <summary>
+    /// Importa un insieme di richieste da un pacchetto di migrazione/backup (v2.7.0).
+    /// Salva su disco ricifrando tutte le private key con il provider crittografico del server corrente.
+    /// </summary>
+    Task<(int totalImported, int privateKeysImported)> ImportRequestsAsync(IEnumerable<HeldCertificateRequest> requests, bool merge);
 }
