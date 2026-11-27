@@ -188,7 +188,7 @@ The `Install-PkiPortal.ps1` script installs the portal as a **separate IIS websi
 
 ### 📦 Graphical Setup Installer (Inno Setup)
 
-A compiled graphical setup wizard is also available (`build\PkiPortal-Setup-2.5.1.exe`) with multi-language support:
+A compiled graphical setup wizard is also available (`build\PkiPortal-Setup-2.7.0.exe`) with multi-language support:
 - Bundles precompiled binaries (no .NET SDK required on the target server).
 - **Automatic upgrade detection**: if a previous installation is detected, offers **Quick Upgrade (recommended)** which preserves site, port, SSL certificate bindings, AppPool identity & credentials, and `appsettings.json` without asking for any parameter.
 - Includes a custom installation option if you need to alter paths or parameters.
@@ -334,7 +334,11 @@ Then open a browser at:
 * **ESC8 Hardening**: This portal does not expose the traditional `certsrv` endpoint.
 * **Separation from certsrv**: The portal uses a completely separate IIS website and Application Pool, ensuring that an issue with the portal does not affect certsrv, and vice versa.
 
-### Hardening & Features (v2.1.0 - v2.5.2)
+### Hardening & Features (v2.1.0 - v2.7.0)
+
+* **Encrypted Backup, Server Migration & Disaster Recovery (v2.7.0)**: Secure `.pkibak` export/import protected with **PBKDF2-HMAC-SHA256 (600,000 iterations)** and **AES-256-GCM**, zero-disk cleartext, and automatic local DPAPI re-encryption on the target server (see section below).
+* **Full Multi-Language Localization (v2.6.1)**: Complete localization of the user portal ACME automation tab (including dynamic win-acme, Certbot, and PowerShell snippets) and the entire admin panel (`admin.js` / `admin.html`) with rich HTML translation support across all 7 languages.
+* **Certificate Revocation & Synchronous CRL Publishing (v2.6.0)**: Real-time revocation on AD CS via `certutil -revoke`, automatic revocation on reject for approval-gated templates, and synchronous CRL publishing via `certutil -CRL`.
 
 * **Interactive Dynamic ACME Guide ("Automation & win-acme") (v2.5.2)**: Overhauled the user portal automation tab with step-by-step setups for win-acme (Windows/IIS) and Certbot (Linux). All endpoints and syntax dynamically bind to the current portal deployment/host and selected Sub-CA.
 * **Automatic CA Detection in Configuration (v2.5.0)**: Streamlined CA configuration in the administration panel by eliminating redundant manual fields. New *🔍 Detect CAs* button to discover available Certification Authorities by specifying only the AD Forest/Domain (or CA Server), querying the Active Directory Configuration partition via LDAP/LDAPS (`pKIEnrollmentService` objects and standard `dNSHostName` attribute) with no need for HTTP/HTTPS ports 80/443. Selecting a CA automatically fills both CA Name and CA Server, computing `Config String` and `Credential Target`.

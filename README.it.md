@@ -189,7 +189,7 @@ dove è attivo Microsoft Web Enrollment (certsrv), **senza modificare né interr
 
 ### 📦 Setup Installer grafico (Inno Setup)
 
-È disponibile anche l'installer grafico compilato (`build\PkiPortal-Setup-2.5.1.exe`) con supporto multilingua:
+È disponibile anche l'installer grafico compilato (`build\PkiPortal-Setup-2.7.0.exe`) con supporto multilingua:
 - Include i binari precompilati (non richiede .NET SDK sul server).
 - **Rilevamento automatico upgrade**: se rileva una versione precedente, propone l'**Aggiornamento rapido (consigliato)** che preserva sito, porte, certificati SSL, credenziali dell'AppPool e `appsettings.json` senza richiedere alcun parametro.
 - Include l'opzione di installazione personalizzata per modificare parametri o percorsi.
@@ -328,7 +328,11 @@ Quindi aprire il browser all'indirizzo **`http://127.0.0.1:5055`**.
 * **Service Account**: L'Application Pool di IIS deve eseguire con un account che abbia i permessi *Request Certificates* (Enroll) sui template ADCS desiderati. Per la modalità Standalone all'interno della foresta, `NetworkService` o un Managed Service Account è sufficiente.
 * **Separazione da certsrv**: Il portale utilizza un sito IIS e un Application Pool completamente separati, garantendo che un problema sul portale non impatti certsrv e viceversa.
 
-### Hardening e Novità (v2.1.0 - v2.5.2)
+### Hardening e Novità (v2.1.0 - v2.7.0)
+
+* **Backup Cifrato, Migrazione Server & Disaster Recovery (v2.7.0)**: Esportazione/importazione sicura in formato `.pkibak` protetta con **PBKDF2-HMAC-SHA256 (600.000 iterazioni)** e **AES-256-GCM**, zero cleartext su disco e ricifratura DPAPI locale automatica sul server di destinazione (vedi sezione dedicata).
+* **Internazionalizzazione Completa (v2.6.1)**: Traduzione completa della scheda automazione ACME nel portale utente (inclusi snippet dinamici win-acme, Certbot e PowerShell) e dell'intero pannello admin (`admin.js` / `admin.html`) con supporto HTML rich per tutte le 7 lingue.
+* **Revoca Certificati e Pubblicazione Sincrona CRL (v2.6.0)**: Revoca in tempo reale su AD CS tramite `certutil -revoke`, auto-revoca su rifiuto per template con approvazione e pubblicazione sincrona CRL tramite `certutil -CRL`.
 
 * **Guida Interattiva ACME Dinamica ("Automazione & win-acme") (v2.5.2)**: Riscritta la scheda di automazione del portale utente con configurazioni guidate passo-passo per win-acme (Windows/IIS) e Certbot (Linux). Tutti i comandi e gli endpoint si aggiornano in tempo reale in base all'installazione corrente del portale (host/schema effettivo) e alla Sub-CA attiva.
 * **Rilevamento Automatico CA nella Configurazione (v2.5.0)**: Semplificazione della configurazione delle CA nel pannello di amministrazione con eliminazione dei campi ridondanti. Pulsante *🔍 Rileva CA* per identificare automaticamente le Certification Authority disponibili specificando solo la Foresta/Dominio AD (o il Server CA), interrogando direttamente il partizionamento Configuration di Active Directory via LDAP/LDAPS (oggetti `pKIEnrollmentService` e attributo standard `dNSHostName`), senza alcuna necessità di porte HTTP/HTTPS 80/443. La selezione della CA compila automaticamente sia il Nome CA che il Server CA, calcolando `Config String` e `Credential Target`.
